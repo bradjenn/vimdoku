@@ -95,6 +95,7 @@ import {
 import { ConvexBridge, type CloudProfile, type CloudStats } from './ConvexBridge';
 import { hasConvexBackend } from './convexClient';
 import { getOrCreateGuestId, shortGuestId } from './identity';
+import { PublicProfilePanel } from './PublicProfilePanel';
 import {
   PLAY_MODES,
   modeLabel,
@@ -312,6 +313,7 @@ function App() {
   });
   const routeModal = modalFromPath(pathname);
   const activePage = pageFromPath(pathname);
+  const publicFriendCode = useMemo(() => publicFriendCodeFromPath(pathname), [pathname]);
   const dailyRoute = useMemo(() => parseDailyRoute(pathname), [pathname]);
   const routeChallengeId = useMemo(() => challengeIdFromPath(pathname), [pathname]);
   const showDashboard = activePage === 'dashboard';
@@ -459,6 +461,15 @@ function App() {
     setStatusLine('Opened profile.');
     void navigate({ to: '/profile' });
   }, [navigate]);
+
+  const openPublicProfile = useCallback(
+    (friendCode: string) => {
+      const compactCode = compactFriendCode(friendCode);
+      setStatusLine(`Opened ${compactCode} profile.`);
+      void navigate({ to: `/u/${encodeURIComponent(compactCode)}` });
+    },
+    [navigate],
+  );
 
   const navigateToPage = useCallback(
     (page: PageRoute) => {
@@ -2368,21 +2379,39 @@ function App() {
         <AppPageFrame
           activePage="profile"
           onNavigate={navigateToPage}
-          subtitle="identity · progress · sync"
-          title="Profile"
+          subtitle={
+            publicFriendCode ? 'public stats · recent solves' : 'identity · progress · sync'
+          }
+          title={publicFriendCode ? 'Player Profile' : 'Profile'}
         >
-          <ProfilePanel
-            cloudProfile={cloudProfile}
-            cloudStats={cloudStats}
-            guestId={guestId}
-            localStats={localProfileStats}
-            onChallengeFriend={(friend) => {
-              setChallengeStatus(`Create a race link for ${friend.name}.`);
-              navigateToPage('challenge');
-            }}
-            onNameChange={updatePlayerName}
-            playerName={playerName}
-          />
+          {publicFriendCode ? (
+            hasConvexBackend() ? (
+              <PublicProfilePanel
+                friendCode={publicFriendCode}
+                onBack={goToProfile}
+                onChallenge={(profile) => {
+                  setChallengeStatus(`Create a race link for ${profile.name}.`);
+                  navigateToPage('challenge');
+                }}
+              />
+            ) : (
+              <PublicProfileOffline onBack={goToProfile} />
+            )
+          ) : (
+            <ProfilePanel
+              cloudProfile={cloudProfile}
+              cloudStats={cloudStats}
+              guestId={guestId}
+              localStats={localProfileStats}
+              onChallengeFriend={(friend) => {
+                setChallengeStatus(`Create a race link for ${friend.name}.`);
+                navigateToPage('challenge');
+              }}
+              onNameChange={updatePlayerName}
+              onViewFriendProfile={(friend) => openPublicProfile(friend.friendCode)}
+              playerName={playerName}
+            />
+          )}
         </AppPageFrame>
       )}
 
@@ -5083,6 +5112,7 @@ function ProfilePanel({
   localStats,
   onChallengeFriend,
   onNameChange,
+  onViewFriendProfile,
   playerName,
 }: {
   cloudProfile: CloudProfile | null;
@@ -5091,6 +5121,7 @@ function ProfilePanel({
   localStats: ProfileStats;
   onChallengeFriend: (friend: FriendSummary) => void;
   onNameChange: (value: string) => void;
+  onViewFriendProfile: (friend: FriendSummary) => void;
   playerName: string;
 }) {
   const isCloud = Boolean(cloudStats);
@@ -5180,6 +5211,7 @@ function ProfilePanel({
           <FriendsPanel
             friendCode={cloudProfile?.friendCode ?? ''}
             onChallengeFriend={onChallengeFriend}
+            onViewProfile={onViewFriendProfile}
           />
         ) : (
           <section className="border border-[var(--border)] bg-[var(--input-bg)] p-4">
@@ -5194,6 +5226,27 @@ function ProfilePanel({
         )}
       </div>
     </div>
+  );
+}
+
+function PublicProfileOffline({ onBack }: { onBack: () => void }) {
+  return (
+    <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
+      <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+        [public profile offline]
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+        Public profiles use the Convex backend so stats and recent solves can sync
+        between players.
+      </p>
+      <button
+        type="button"
+        className="mt-4 border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-text)] hover:border-[var(--accent)]"
+        onClick={onBack}
+      >
+        back
+      </button>
+    </section>
   );
 }
 
@@ -5519,7 +5572,21 @@ function pageFromPath(pathname: string): PageRoute {
   if (pathname === '/challenge') return 'challenge';
   if (challengeIdFromPath(pathname)) return 'challenge';
   if (pathname === '/profile') return 'profile';
+  if (publicFriendCodeFromPath(pathname)) return 'profile';
   return 'play';
+}
+
+function publicFriendCodeFromPath(pathname: string) {
+  const match = pathname.match(/^\/u\/([^/]+)$/);
+  if (!match) return null;
+  return compactFriendCode(decodeURIComponent(match[1]));
+}
+
+function compactFriendCode(value: string) {
+  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return compact.startsWith('VIM')
+    ? `VIM-${compact.slice(3, 9)}`
+    : `VIM-${compact.slice(0, 6)}`;
 }
 
 function hintText(hint: Hint, mode: HintMode) {

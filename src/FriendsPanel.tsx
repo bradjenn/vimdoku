@@ -46,9 +46,11 @@ const removeFriendRef = makeFunctionReference<
 export function FriendsPanel({
   friendCode,
   onChallengeFriend,
+  onViewProfile,
 }: {
   friendCode: string;
   onChallengeFriend: (friend: FriendSummary) => void;
+  onViewProfile: (friend: FriendSummary) => void;
 }) {
   const anonId = useMemo(() => getOrCreateGuestId(), []);
   const [codeInput, setCodeInput] = useState('');
@@ -182,6 +184,7 @@ export function FriendsPanel({
             empty="No friends yet. Share your code or add someone else's."
             onChallengeFriend={onChallengeFriend}
             onRemove={(id) => void remove(id)}
+            onViewProfile={onViewProfile}
             rows={friends}
             title="friends"
           />
@@ -209,6 +212,7 @@ function FriendList({
   onAccept,
   onChallengeFriend,
   onRemove,
+  onViewProfile,
   rows,
   title,
 }: {
@@ -216,6 +220,7 @@ function FriendList({
   onAccept?: (friendshipId: string) => void;
   onChallengeFriend?: (friend: FriendSummary) => void;
   onRemove: (friendshipId: string) => void;
+  onViewProfile?: (friend: FriendSummary) => void;
   rows: FriendshipRow[];
   title: string;
 }) {
@@ -234,14 +239,33 @@ function FriendList({
               className="grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
               <div className="min-w-0">
-                <p className="truncate font-mono text-sm font-black text-[var(--app-text)]">
-                  {row.friend.name}
-                </p>
+                {onViewProfile ? (
+                  <button
+                    type="button"
+                    className="max-w-full truncate font-mono text-sm font-black text-[var(--app-text)] hover:text-[var(--accent)]"
+                    onClick={() => onViewProfile(row.friend)}
+                  >
+                    {row.friend.name}
+                  </button>
+                ) : (
+                  <p className="truncate font-mono text-sm font-black text-[var(--app-text)]">
+                    {row.friend.name}
+                  </p>
+                )}
                 <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
                   {row.friend.friendCode || 'friend code pending'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-1.5">
+                {onViewProfile && (
+                  <button
+                    type="button"
+                    className="border border-[var(--border)] px-2.5 py-1.5 font-mono text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--app-text)] hover:border-[var(--accent)]"
+                    onClick={() => onViewProfile(row.friend)}
+                  >
+                    profile
+                  </button>
+                )}
                 {onChallengeFriend && (
                   <button
                     type="button"

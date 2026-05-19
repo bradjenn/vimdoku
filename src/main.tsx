@@ -105,6 +105,12 @@ const profileRoute = createRoute({
   component: () => null,
 })
 
+const publicProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/u/$friendCode',
+  component: () => null,
+})
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -133,6 +139,7 @@ const routeTree = rootRoute.addChildren([
   challengeSetupRoute,
   challengeRoute,
   profileRoute,
+  publicProfileRoute,
   settingsRoute,
   commandsRoute,
 ])
