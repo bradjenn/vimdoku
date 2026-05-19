@@ -50,6 +50,7 @@ export const current = query({
 export const publicByFriendCode = query({
   args: {
     friendCode: v.string(),
+    viewerAnonId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const friendCode = cleanFriendCode(args.friendCode);
@@ -99,6 +100,11 @@ export const publicByFriendCode = query({
       createdAt: profile.createdAt,
       friendCode: profile.friendCode ?? friendCode,
       friends: publicFriends.filter((friend) => friend !== null),
+      friendshipStatus: await friendshipStatusFor(
+        ctx,
+        args.viewerAnonId,
+        profile.anonId,
+      ),
       name: profile.name,
       stats: {
         averageElapsedMs:
@@ -162,6 +168,37 @@ async function publicStatsFor(ctx: QueryCtx, anonId: string) {
     bestElapsedMs,
     completedCount: completed.length,
   };
+}
+
+async function friendshipStatusFor(
+  ctx: QueryCtx,
+  viewerAnonId: string | undefined,
+  profileAnonId: string,
+) {
+  if (!viewerAnonId) return 'none';
+  if (viewerAnonId === profileAnonId) return 'self';
+
+  const outgoing = await ctx.db
+    .query('friendships')
+    .withIndex('by_requesterAnonId', (q) => q.eq('requesterAnonId', viewerAnonId))
+    .collect();
+  const outgoingMatch = outgoing.find(
+    (friendship) => friendship.recipientAnonId === profileAnonId,
+  );
+  if (outgoingMatch?.status === 'accepted') return 'accepted';
+  if (outgoingMatch?.status === 'pending') return 'outgoing';
+
+  const incoming = await ctx.db
+    .query('friendships')
+    .withIndex('by_recipientAnonId', (q) => q.eq('recipientAnonId', viewerAnonId))
+    .collect();
+  const incomingMatch = incoming.find(
+    (friendship) => friendship.requesterAnonId === profileAnonId,
+  );
+  if (incomingMatch?.status === 'accepted') return 'accepted';
+  if (incomingMatch?.status === 'pending') return 'incoming';
+
+  return 'none';
 }
 
 function cleanFriendCode(value: string) {

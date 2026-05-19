@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
+import { getOrCreateGuestId } from './identity';
 
 export type PublicProfile = {
   createdAt: string;
   friendCode: string;
   friends: PublicProfileFriend[];
+  friendshipStatus: FriendshipStatus;
   name: string;
   recentCompleted: PublicProfileCompletion[];
   stats: {
@@ -38,11 +40,19 @@ type PublicProfileFriend = {
   };
 };
 
+type FriendshipStatus = 'none' | 'incoming' | 'outgoing' | 'accepted' | 'self';
+
 const publicProfileRef = makeFunctionReference<
   'query',
-  { friendCode: string },
+  { friendCode: string; viewerAnonId: string },
   PublicProfile | null
 >('profiles:publicByFriendCode');
+
+const requestFriendRef = makeFunctionReference<
+  'mutation',
+  { friendCode: string; requesterAnonId: string },
+  string
+>('friends:request');
 
 export function PublicProfilePanel({
   friendCode,
@@ -53,10 +63,17 @@ export function PublicProfilePanel({
   onBack: () => void;
   onChallenge: (profile: PublicProfile) => void;
 }) {
+  const viewerAnonId = useMemo(() => getOrCreateGuestId(), []);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  const [friendStatus, setFriendStatus] = useState('');
+  const [isUpdatingFriend, setIsUpdatingFriend] = useState(false);
   const profile = useQuery(publicProfileRef as FunctionReference<'query'>, {
     friendCode,
+    viewerAnonId,
   }) as PublicProfile | null | undefined;
+  const requestFriend = useMutation(
+    requestFriendRef as FunctionReference<'mutation'>,
+  ) as (args: { friendCode: string; requesterAnonId: string }) => Promise<string>;
   const profileUrl = useMemo(
     () => `${window.location.origin}/u/${encodeURIComponent(friendCode)}`,
     [friendCode],
@@ -66,6 +83,32 @@ export function PublicProfilePanel({
     await navigator.clipboard?.writeText(profileUrl).catch(() => undefined);
     setCopyState('copied');
     window.setTimeout(() => setCopyState('idle'), 1600);
+  }
+
+  async function addFriend(profile: PublicProfile) {
+    setIsUpdatingFriend(true);
+    setFriendStatus(
+      profile.friendshipStatus === 'incoming'
+        ? 'Accepting friend request...'
+        : 'Sending friend request...',
+    );
+    try {
+      await requestFriend({
+        friendCode: profile.friendCode,
+        requesterAnonId: viewerAnonId,
+      });
+      setFriendStatus(
+        profile.friendshipStatus === 'incoming'
+          ? 'Friend added.'
+          : 'Friend request sent.',
+      );
+    } catch (error) {
+      setFriendStatus(
+        error instanceof Error ? error.message : 'Could not update friendship.',
+      );
+    } finally {
+      setIsUpdatingFriend(false);
+    }
   }
 
   if (profile === undefined) {
@@ -110,6 +153,11 @@ export function PublicProfilePanel({
           <ProfileMeta label="friend code" value={profile.friendCode} />
           <ProfileMeta label="joined" value={formatDate(profile.createdAt)} />
           <div className="grid gap-2">
+            <FriendActionButton
+              busy={isUpdatingFriend}
+              status={profile.friendshipStatus}
+              onClick={() => void addFriend(profile)}
+            />
             <button
               type="button"
               className="border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)]"
@@ -125,6 +173,11 @@ export function PublicProfilePanel({
               {copyState === 'copied' ? 'copied link' : 'copy profile link'}
             </button>
           </div>
+          {friendStatus && (
+            <p className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-[var(--accent)]">
+              {friendStatus}
+            </p>
+          )}
         </div>
       </section>
 
@@ -272,6 +325,46 @@ function PublicProfileShell({
       </p>
       {action && <div className="mt-4">{action}</div>}
     </section>
+  );
+}
+
+function FriendActionButton({
+  busy,
+  onClick,
+  status,
+}: {
+  busy: boolean;
+  onClick: () => void;
+  status: FriendshipStatus;
+}) {
+  const disabled =
+    busy || status === 'accepted' || status === 'outgoing' || status === 'self';
+  const label =
+    busy
+      ? 'updating'
+      : status === 'accepted'
+      ? 'friends'
+      : status === 'outgoing'
+        ? 'request sent'
+        : status === 'incoming'
+          ? 'accept friend'
+          : status === 'self'
+            ? 'your profile'
+            : 'add friend';
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      className={`border px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] transition disabled:cursor-default ${
+        disabled
+          ? 'border-[var(--border)] bg-[var(--status-bg)] text-[var(--muted)]'
+          : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)] active:translate-y-px'
+      }`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }
 
