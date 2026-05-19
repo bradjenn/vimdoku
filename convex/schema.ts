@@ -18,6 +18,7 @@ export default defineSchema({
     givens: v.array(v.boolean()),
     grid: v.array(v.number()),
     notes: v.array(v.array(v.number())),
+    playMode: v.optional(v.string()),
     puzzle: v.string(),
     puzzleSize: v.optional(v.string()),
     recordId: v.string(),
@@ -35,13 +36,16 @@ export default defineSchema({
     createdAt: v.string(),
     difficulty: v.optional(v.string()),
     elapsedMs: v.number(),
+    leaderboardKey: v.optional(v.string()),
     player: v.string(),
+    playMode: v.optional(v.string()),
     puzzle: v.string(),
     puzzleSize: v.optional(v.string()),
     recordId: v.string(),
     source: v.string(),
   })
     .index('by_elapsedMs', ['elapsedMs'])
+    .index('by_leaderboardKey_and_elapsedMs', ['leaderboardKey', 'elapsedMs'])
     .index('by_puzzleSize_elapsedMs', ['puzzleSize', 'elapsedMs'])
     .index('by_puzzle_elapsedMs', ['puzzle', 'elapsedMs'])
     .index('by_recordId', ['recordId']),

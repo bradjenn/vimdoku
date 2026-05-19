@@ -1,5 +1,6 @@
 export type Grid = number[];
 export type Notes = number[][];
+export type PlayMode = 'classic' | 'speedrun' | 'zen' | 'no-check';
 export type PuzzleDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 export type PuzzleSize = '6x6' | '9x9';
 

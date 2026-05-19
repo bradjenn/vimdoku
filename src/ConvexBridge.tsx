@@ -4,7 +4,7 @@ import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
 import type { LeaderboardEntry } from './leaderboard';
 import type { GameRecord } from './storage';
-import type { PuzzleSize } from './sudoku';
+import type { PlayMode, PuzzleSize } from './sudoku';
 import { getOrCreateGuestId } from './identity';
 
 export type CloudProfile = {
@@ -30,6 +30,7 @@ type SubmitScoreArgs = {
   difficulty?: string;
   elapsedMs: number;
   player: string;
+  playMode?: PlayMode;
   puzzle: string;
   puzzleSize?: PuzzleSize;
   recordId: string;
@@ -45,6 +46,7 @@ type UpsertGameArgs = {
   givens: boolean[];
   grid: number[];
   notes: number[][];
+  playMode?: PlayMode;
   puzzle: string;
   puzzleSize?: PuzzleSize;
   recordId: string;
@@ -55,7 +57,7 @@ type UpsertGameArgs = {
 
 const topScoresRef = makeFunctionReference<
   'query',
-  { limit?: number; puzzleSize?: PuzzleSize },
+  { limit?: number; playMode?: PlayMode; puzzleSize?: PuzzleSize },
   LeaderboardEntry[]
 >('leaderboards:top');
 
@@ -87,6 +89,7 @@ export function ConvexBridge({
   currentRecord,
   gameRecords,
   leaderboardOpen,
+  leaderboardMode,
   leaderboardSize,
   onProfile,
   onScores,
@@ -99,6 +102,7 @@ export function ConvexBridge({
   currentRecord: GameRecord;
   gameRecords: GameRecord[];
   leaderboardOpen: boolean;
+  leaderboardMode: PlayMode;
   leaderboardSize: PuzzleSize;
   onProfile: (profile: CloudProfile | null) => void;
   onScores: (scores: LeaderboardEntry[]) => void;
@@ -114,7 +118,9 @@ export function ConvexBridge({
   const lastGameSyncAt = useRef(0);
   const topScores = useQuery(
     topScoresRef as FunctionReference<'query'>,
-    leaderboardOpen ? { limit: 50, puzzleSize: leaderboardSize } : 'skip',
+    leaderboardOpen
+      ? { limit: 50, playMode: leaderboardMode, puzzleSize: leaderboardSize }
+      : 'skip',
   ) as LeaderboardEntry[] | undefined;
   const profile = useQuery(
     currentProfileRef as FunctionReference<'query'>,
@@ -219,6 +225,7 @@ function toGameArgs(record: GameRecord, anonId: string): UpsertGameArgs {
     givens: record.givens,
     grid: record.grid,
     notes: record.notes,
+    playMode: record.playMode,
     puzzle: record.puzzle,
     puzzleSize: record.puzzleSize,
     recordId: record.id,
@@ -239,6 +246,7 @@ function toScoreArgs(
     difficulty: record.difficulty,
     elapsedMs: record.elapsedMs,
     player: playerName,
+    playMode: record.playMode,
     puzzle: record.puzzle,
     puzzleSize: record.puzzleSize,
     recordId: record.id,

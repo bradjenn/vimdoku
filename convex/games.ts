@@ -10,6 +10,7 @@ const snapshotArgs = {
   givens: v.array(v.boolean()),
   grid: v.array(v.number()),
   notes: v.array(v.array(v.number())),
+  playMode: v.optional(v.string()),
   puzzle: v.string(),
   puzzleSize: v.optional(v.string()),
   recordId: v.string(),
@@ -37,6 +38,7 @@ export const upsert = mutation({
       notes: args.notes
         .slice(0, args.puzzleSize === '6x6' ? 36 : 81)
         .map((note) => note.slice(0, args.puzzleSize === '6x6' ? 6 : 9)),
+      playMode: cleanPlayMode(args.playMode),
       puzzle: args.puzzle,
       puzzleSize: args.puzzleSize ?? '9x9',
       recordId: args.recordId,
@@ -119,4 +121,10 @@ function countStreak(values: string[]) {
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return streak;
+}
+
+function cleanPlayMode(value: string | undefined) {
+  return value === 'speedrun' || value === 'zen' || value === 'no-check'
+    ? value
+    : 'classic';
 }

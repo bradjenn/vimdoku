@@ -8,6 +8,7 @@ export const submitScore = mutation({
     difficulty: v.optional(v.string()),
     elapsedMs: v.number(),
     player: v.string(),
+    playMode: v.optional(v.string()),
     puzzle: v.string(),
     puzzleSize: v.optional(v.string()),
     recordId: v.string(),
@@ -16,6 +17,9 @@ export const submitScore = mutation({
   handler: async (ctx, args) => {
     const elapsedMs = Math.max(0, Math.floor(args.elapsedMs));
     const player = cleanName(args.player);
+    const puzzleSize = cleanPuzzleSize(args.puzzleSize);
+    const playMode = cleanPlayMode(args.playMode);
+    const leaderboardKey = makeLeaderboardKey(puzzleSize, playMode);
     const existing = await ctx.db
       .query('scores')
       .withIndex('by_recordId', (q) => q.eq('recordId', args.recordId))
@@ -27,8 +31,10 @@ export const submitScore = mutation({
         completedAt: args.completedAt,
         difficulty: args.difficulty,
         elapsedMs,
+        leaderboardKey,
         player,
-        puzzleSize: cleanPuzzleSize(args.puzzleSize),
+        playMode,
+        puzzleSize,
         source: args.source,
       });
       return existing._id;
@@ -40,9 +46,11 @@ export const submitScore = mutation({
       createdAt: new Date().toISOString(),
       difficulty: args.difficulty,
       elapsedMs,
+      leaderboardKey,
       player,
+      playMode,
       puzzle: args.puzzle,
-      puzzleSize: cleanPuzzleSize(args.puzzleSize),
+      puzzleSize,
       recordId: args.recordId,
       source: args.source,
     });
@@ -52,6 +60,7 @@ export const submitScore = mutation({
 export const top = query({
   args: {
     limit: v.optional(v.number()),
+    playMode: v.optional(v.string()),
     puzzle: v.optional(v.string()),
     puzzleSize: v.optional(v.string()),
   },
@@ -63,6 +72,20 @@ export const top = query({
           .withIndex('by_puzzle_elapsedMs', (q) => q.eq('puzzle', args.puzzle ?? ''))
           .order('asc')
           .take(limit)
+      : args.puzzleSize && args.playMode
+        ? await ctx.db
+            .query('scores')
+            .withIndex('by_leaderboardKey_and_elapsedMs', (q) =>
+              q.eq(
+                'leaderboardKey',
+                makeLeaderboardKey(
+                  cleanPuzzleSize(args.puzzleSize),
+                  cleanPlayMode(args.playMode),
+                ),
+              ),
+            )
+            .order('asc')
+            .take(limit)
       : args.puzzleSize
         ? await ctx.db
             .query('scores')
@@ -79,6 +102,7 @@ export const top = query({
       elapsedMs: score.elapsedMs,
       id: score.recordId,
       player: score.player,
+      playMode: score.playMode ?? 'classic',
       puzzle: score.puzzle,
       puzzleSize: score.puzzleSize ?? '9x9',
       source: score.source,
@@ -93,4 +117,14 @@ function cleanName(value: string) {
 
 function cleanPuzzleSize(value: string | undefined) {
   return value === '6x6' ? '6x6' : '9x9';
+}
+
+function cleanPlayMode(value: string | undefined) {
+  return value === 'speedrun' || value === 'zen' || value === 'no-check'
+    ? value
+    : 'classic';
+}
+
+function makeLeaderboardKey(puzzleSize: string, playMode: string) {
+  return `${puzzleSize}:${playMode}`;
 }

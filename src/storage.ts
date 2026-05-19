@@ -8,6 +8,7 @@ import {
   puzzleSizeFromGrid,
   type Grid,
   type Notes,
+  type PlayMode,
   type PuzzleDifficulty,
   type PuzzleSize,
 } from './sudoku';
@@ -20,6 +21,7 @@ export type Snapshot = {
 
 export type GameMeta = {
   id: string;
+  playMode: PlayMode;
   puzzle: string;
   puzzleSize: PuzzleSize;
   source: string;
@@ -75,11 +77,13 @@ export function createGameMeta(
   source: string,
   difficulty?: PuzzleDifficulty | 'custom',
   puzzleSize: PuzzleSize = puzzleSizeFromGrid(puzzleGrid),
+  playMode: PlayMode = 'classic',
 ): GameMeta {
   const now = new Date().toISOString();
   const puzzle = gridToString(puzzleGrid, puzzleSize);
   return {
-    id: `${hashString(`${puzzle}:${source}:${now}`).toString(36)}-${Date.now().toString(36)}`,
+    id: `${hashString(`${puzzle}:${source}:${puzzleSize}:${playMode}:${now}`).toString(36)}-${Date.now().toString(36)}`,
+    playMode,
     puzzle,
     puzzleSize,
     source,
@@ -288,6 +292,7 @@ function sanitizeGameMeta(meta: GameMeta): GameMeta | null {
       : puzzleSizeFromGrid(String(meta.puzzle));
   return {
     id: String(meta.id),
+    playMode: sanitizePlayMode(meta.playMode),
     puzzle: gridToString(parseGrid(meta.puzzle, puzzleSize), puzzleSize),
     puzzleSize,
     source: String(meta.source),
@@ -319,6 +324,7 @@ function sanitizeGameRecord(record: GameRecord): GameRecord | null {
 
   return {
     id: String(record.id),
+    playMode: sanitizePlayMode(record.playMode),
     puzzle: gridToString(parseGrid(record.puzzle ?? fallbackPuzzle, puzzleSize), puzzleSize),
     puzzleSize,
     source: String(record.source ?? 'unknown'),
@@ -339,6 +345,12 @@ function sanitizeGameRecord(record: GameRecord): GameRecord | null {
 
 function isGameRecord(record: GameRecord | null): record is GameRecord {
   return record !== null;
+}
+
+function sanitizePlayMode(value: unknown): PlayMode {
+  return value === 'speedrun' || value === 'zen' || value === 'no-check'
+    ? value
+    : 'classic';
 }
 
 function hashString(value: string) {

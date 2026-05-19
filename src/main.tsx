@@ -39,6 +39,12 @@ const sizedDailyPlayRoute = createRoute({
   component: () => null,
 })
 
+const modeDailyPlayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/play/daily/$size/$mode/$difficulty/$date',
+  component: () => null,
+})
+
 const shortDailyPlayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play/$difficulty/$date',
@@ -48,6 +54,12 @@ const shortDailyPlayRoute = createRoute({
 const sizedShortDailyPlayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play/$size/$difficulty/$date',
+  component: () => null,
+})
+
+const modeShortDailyPlayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/play/$size/$mode/$difficulty/$date',
   component: () => null,
 })
 
@@ -98,8 +110,10 @@ const routeTree = rootRoute.addChildren([
   playRoute,
   dailyPlayRoute,
   sizedDailyPlayRoute,
+  modeDailyPlayRoute,
   shortDailyPlayRoute,
   sizedShortDailyPlayRoute,
+  modeShortDailyPlayRoute,
   menuRoute,
   newRoute,
   gamesRoute,

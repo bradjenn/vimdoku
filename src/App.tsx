@@ -33,6 +33,7 @@ import {
   type Grid,
   type Hint,
   type Notes,
+  type PlayMode,
   type PuzzleDifficulty,
   type PuzzleSize,
   candidatesAsNotes,
@@ -86,6 +87,7 @@ type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
 type DailyRoute = {
   dateKey: string;
   difficulty: PuzzleDifficulty;
+  playMode: PlayMode;
   puzzleSize: PuzzleSize;
 };
 type ThemeId = (typeof DARK_THEMES)[number]['id'];
@@ -94,6 +96,7 @@ const THEME_KEY = 'vimdoku-theme-v1';
 const TIMER_PAUSED_GAME_KEY = 'vimdoku-paused-game-v1';
 const NEW_GAME_DIFFICULTIES: PuzzleDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
 const PUZZLE_SIZES: PuzzleSize[] = ['9x9', '6x6'];
+const PLAY_MODES: PlayMode[] = ['classic', 'speedrun', 'zen', 'no-check'];
 
 // Single source of truth for the Space-leader menu — drives both the
 // which-key popup and the keydown resolution below.
@@ -327,11 +330,14 @@ function App() {
   const [storageReady, setStorageReady] = useState(false);
   const [newGameDifficulty, setNewGameDifficulty] =
     useState<PuzzleDifficulty>('medium');
+  const [newGameMode, setNewGameMode] = useState<PlayMode>('classic');
   const [newGameSize, setNewGameSize] = useState<PuzzleSize>('9x9');
   const [dailyDateKey, setDailyDateKey] = useState(() => todayDateKey());
   const [dashboardDifficulty, setDashboardDifficulty] =
     useState<PuzzleDifficulty>('easy');
+  const [dashboardMode, setDashboardMode] = useState<PlayMode>('classic');
   const [dashboardSize, setDashboardSize] = useState<PuzzleSize>('9x9');
+  const [leaderboardMode, setLeaderboardMode] = useState<PlayMode>('classic');
   const [leaderboardSize, setLeaderboardSize] = useState<PuzzleSize>('9x9');
   const [solvedDismissed, setSolvedDismissed] = useState(false);
   const [newPuzzleText, setNewPuzzleText] = useState('');
@@ -352,9 +358,15 @@ function App() {
   const activeMenuModal = routeModal ?? menuModal;
   const hasCustomPlayerName = isCustomPlayerName(playerName);
   const activeSize = activeGame.puzzleSize ?? puzzleSizeFromGrid(grid);
+  const activeMode = activeGame.playMode ?? 'classic';
   const activeConfig = boardConfigFor(activeSize);
   const activeDigits = activeConfig.digits;
   const activeCellCount = activeConfig.cellCount;
+  const notesEnabled = activeMode !== 'speedrun';
+  const hintsEnabled = activeMode !== 'speedrun';
+  const pauseEnabled = activeMode !== 'speedrun';
+  const timerEnabled = activeMode !== 'zen';
+  const scoreEnabled = activeMode !== 'zen';
 
   const updatePlayerName = useCallback((value: string) => {
     setPlayerName(value);
@@ -373,20 +385,28 @@ function App() {
       difficulty: PuzzleDifficulty,
       dateKey = todayDateKey(),
       puzzleSize: PuzzleSize = newGameSize,
+      playMode: PlayMode = newGameMode,
     ) => {
-      if (puzzleSize === '9x9') {
+      if (puzzleSize === '9x9' && playMode === 'classic') {
         void navigate({
           to: '/play/daily/$difficulty/$date',
           params: { date: dateKey, difficulty },
         });
         return;
       }
+      if (playMode === 'classic') {
+        void navigate({
+          to: '/play/daily/$size/$difficulty/$date',
+          params: { date: dateKey, difficulty, size: puzzleSize },
+        });
+        return;
+      }
       void navigate({
-        to: '/play/daily/$size/$difficulty/$date',
-        params: { date: dateKey, difficulty, size: puzzleSize },
+        to: '/play/daily/$size/$mode/$difficulty/$date',
+        params: { date: dateKey, difficulty, mode: playMode, size: puzzleSize },
       });
     },
-    [navigate, newGameSize],
+    [navigate, newGameMode, newGameSize],
   );
 
   const goToProfile = useCallback(() => {
@@ -446,6 +466,7 @@ function App() {
   }, [goToPlay, routeModal]);
 
   const conflicts = useMemo(() => findConflicts(grid, activeSize), [activeSize, grid]);
+  const visibleConflicts = activeMode === 'no-check' ? new Set<number>() : conflicts;
   const solved = useMemo(() => solveGrid(grid, activeSize), [activeSize, grid]);
   const completion = grid.filter(Boolean).length;
   const isSolved = Boolean(
@@ -487,10 +508,11 @@ function App() {
     () =>
       completedGames
         .filter((record) => record.puzzleSize === leaderboardSize)
+        .filter((record) => record.playMode === leaderboardMode)
         .filter((record) => record.elapsedMs > 0)
         .sort((a, b) => a.elapsedMs - b.elapsedMs)
         .slice(0, 25),
-    [completedGames, leaderboardSize],
+    [completedGames, leaderboardMode, leaderboardSize],
   );
   const localProfileStats = useMemo(
     () => buildLocalStats(trackedGameRecords),
@@ -517,7 +539,7 @@ function App() {
   const editorMode: EditorMode =
     visualAnchor !== null
       ? 'visual'
-      : shiftHeld || noteMode
+      : notesEnabled && (shiftHeld || noteMode)
         ? 'annotate'
         : 'normal';
 
@@ -528,13 +550,21 @@ function App() {
   }, [isSolved, timerPaused]);
 
   const toggleTimerPaused = useCallback(() => {
+    if (!timerEnabled) {
+      setStatusLine('Zen mode does not track time.');
+      return;
+    }
+    if (!pauseEnabled) {
+      setStatusLine('Timer pause is disabled in speedrun.');
+      return;
+    }
     if (isSolved) {
       setStatusLine('Solved puzzles keep their final time.');
       return;
     }
     setTimerPaused((current) => !current);
     setStatusLine(timerPaused ? 'Timer resumed.' : 'Timer paused.');
-  }, [isSolved, timerPaused]);
+  }, [isSolved, pauseEnabled, timerEnabled, timerPaused]);
 
   useEffect(() => {
     if (previousPageRef.current !== activePage && activePage === 'play') {
@@ -625,6 +655,7 @@ function App() {
       activeMenuModal ||
       commandMode ||
       gamePickerOpen ||
+      !timerEnabled ||
       timerPaused ||
       isSolved ||
       review
@@ -650,6 +681,7 @@ function App() {
     isSolved,
     review,
     storageReady,
+    timerEnabled,
     timerPaused,
   ]);
 
@@ -658,7 +690,7 @@ function App() {
     if (hasConvexBackend()) return;
     if (!hasGlobalLeaderboard()) return;
 
-    void fetchGlobalLeaderboard(leaderboardSize)
+    void fetchGlobalLeaderboard(leaderboardSize, leaderboardMode)
       .then((scores) => {
         setGlobalScores(scores);
         setLeaderboardStatus('');
@@ -666,18 +698,19 @@ function App() {
       .catch(() => {
         setLeaderboardStatus('Could not load global leaderboard.');
       });
-  }, [activePage, leaderboardSize]);
+  }, [activePage, leaderboardMode, leaderboardSize]);
 
   useEffect(() => {
     if (!showSolved || !currentRecord.completedAt) return;
     if (hasConvexBackend()) return;
     if (!hasCustomPlayerName) return;
+    if (!scoreEnabled) return;
     if (submittedScoreIdsRef.current.has(currentRecord.id)) return;
     submittedScoreIdsRef.current.add(currentRecord.id);
     void submitGlobalScore(currentRecord).catch(() => {
       setLeaderboardStatus('Could not submit global score.');
     });
-  }, [currentRecord, hasCustomPlayerName, showSolved]);
+  }, [currentRecord, hasCustomPlayerName, scoreEnabled, showSolved]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 640px)');
@@ -763,6 +796,10 @@ function App() {
 
   const toggleNote = useCallback(
     (value: number) => {
+      if (!notesEnabled) {
+        setStatusLine('Notes are disabled in speedrun.');
+        return;
+      }
       if (givens[selected] || grid[selected] !== 0) return;
       resumeTimerFromActivity();
       pushHistory();
@@ -775,11 +812,15 @@ function App() {
       });
       setHint(null);
     },
-    [givens, grid, pushHistory, resumeTimerFromActivity, selected],
+    [givens, grid, notesEnabled, pushHistory, resumeTimerFromActivity, selected],
   );
 
   const toggleNoteAcrossBlock = useCallback(
     (value: number) => {
+      if (!notesEnabled) {
+        setStatusLine('Notes are disabled in speedrun.');
+        return;
+      }
       if (!visualCells) return;
       resumeTimerFromActivity();
       // Notes only live on empty, non-given cells.
@@ -811,10 +852,11 @@ function App() {
         } ${eligible.length} cell${eligible.length === 1 ? '' : 's'}.`,
       );
     },
-    [givens, grid, notes, pushHistory, resumeTimerFromActivity, visualCells],
+    [givens, grid, notes, notesEnabled, pushHistory, resumeTimerFromActivity, visualCells],
   );
 
   const clearNotesAcrossBlock = useCallback(() => {
+    if (!notesEnabled) return;
     if (!visualCells) return;
     resumeTimerFromActivity();
     pushHistory();
@@ -825,7 +867,7 @@ function App() {
     });
     setHint(null);
     setStatusLine(`Cleared notes in ${visualCells.size} cells.`);
-  }, [pushHistory, resumeTimerFromActivity, visualCells]);
+  }, [notesEnabled, pushHistory, resumeTimerFromActivity, visualCells]);
 
   const undo = useCallback(() => {
     if (!history.length) {
@@ -860,11 +902,15 @@ function App() {
   }, [future, givens, grid, notes, resumeTimerFromActivity]);
 
   const askForHint = useCallback((mode: HintMode = hintMode) => {
+    if (!hintsEnabled) {
+      setStatusLine('Hints are disabled in speedrun.');
+      return;
+    }
     const next = nextHint(grid, activeSize);
     setHintMode(mode);
     setHint(next);
     if ('cell' in next && mode !== 'nudge') setSelected(next.cell);
-  }, [activeSize, grid, hintMode]);
+  }, [activeSize, grid, hintMode, hintsEnabled]);
 
   const clearHintState = useCallback((closeRail = false) => {
     setHint(null);
@@ -903,9 +949,9 @@ function App() {
     setHint(null);
     setElapsedMs(0);
     setTimerPaused(false);
-    setActiveGame(createGameMeta(emptyGrid(activeSize), 'blank', 'custom', activeSize));
+    setActiveGame(createGameMeta(emptyGrid(activeSize), 'blank', 'custom', activeSize, activeMode));
     goToPlay();
-  }, [activeCellCount, activeSize, currentRecord, goToPlay, pushHistory]);
+  }, [activeCellCount, activeMode, activeSize, currentRecord, goToPlay, pushHistory]);
 
   const startNewPuzzle = useCallback((
     nextGrid: Grid,
@@ -913,7 +959,8 @@ function App() {
     source = 'custom',
     difficulty?: PuzzleDifficulty | 'custom',
     puzzleSize: PuzzleSize = puzzleSizeFromGrid(nextGrid),
-    meta = createGameMeta(nextGrid, source, difficulty, puzzleSize),
+    playMode: PlayMode = newGameMode,
+    meta = createGameMeta(nextGrid, source, difficulty, puzzleSize, playMode),
     navigateToPlay = true,
   ) => {
     setGameRecords((current) => upsertGameRecord(current, currentRecord));
@@ -927,12 +974,13 @@ function App() {
     setHighlightDigit(null);
     setElapsedMs(0);
     setTimerPaused(false);
+    setNoteMode(false);
     setActiveGame(meta);
     const firstEmpty = nextGrid.findIndex((value) => value === 0);
     setSelected(firstEmpty >= 0 ? firstEmpty : 0);
     setStatusLine(message);
     if (navigateToPlay) goToPlay();
-  }, [currentRecord, goToPlay]);
+  }, [currentRecord, goToPlay, newGameMode]);
 
   const loadGameRecord = useCallback((
     record: GameRecord,
@@ -951,6 +999,7 @@ function App() {
       difficulty: record.difficulty,
       startedAt: record.startedAt,
       puzzleSize: record.puzzleSize,
+      playMode: record.playMode,
     });
     setHistory([]);
     setFuture([]);
@@ -961,6 +1010,7 @@ function App() {
     setGameQuery('');
     setGameCursor(0);
     setTimerPaused(false);
+    setNoteMode(false);
     const firstEmpty = record.grid.findIndex((value) => value === 0);
     setSelected(firstEmpty >= 0 ? firstEmpty : 0);
     setStatusLine(message);
@@ -972,9 +1022,10 @@ function App() {
       difficulty = newGameDifficulty,
       daily = false,
       puzzleSize: PuzzleSize = newGameSize,
+      playMode: PlayMode = newGameMode,
     ) => {
       if (daily) {
-        openDailyPuzzle(difficulty, todayDateKey(), puzzleSize);
+        openDailyPuzzle(difficulty, todayDateKey(), puzzleSize, playMode);
         closeMenuModal();
         setNewGameStatus('');
         return;
@@ -983,15 +1034,16 @@ function App() {
       const nextPuzzle = generatePuzzle(difficulty, seed, puzzleSize);
       startNewPuzzle(
         nextPuzzle,
-        `Generated a ${puzzleSize} ${difficulty} puzzle.`,
+        `Generated a ${puzzleSize} ${playMode} ${difficulty} puzzle.`,
         'local generated',
         difficulty,
         puzzleSize,
+        playMode,
       );
       closeMenuModal();
       setNewGameStatus('');
     },
-    [closeMenuModal, newGameDifficulty, newGameSize, openDailyPuzzle, startNewPuzzle],
+    [closeMenuModal, newGameDifficulty, newGameMode, newGameSize, openDailyPuzzle, startNewPuzzle],
   );
 
   const fetchSudokuMountainPuzzle = useCallback(
@@ -999,7 +1051,9 @@ function App() {
       if (newGameSize === '6x6') {
         const nextPuzzle = generatePuzzle(
           newGameDifficulty,
-          daily ? dailySeed(newGameDifficulty, 'vimdoku', todayDateKey(), '6x6') : Date.now(),
+          daily
+            ? dailySeed(newGameDifficulty, 'vimdoku', todayDateKey(), '6x6', newGameMode)
+            : Date.now(),
           '6x6',
         );
         startNewPuzzle(
@@ -1010,6 +1064,7 @@ function App() {
           daily ? 'vimdoku daily' : 'local generated',
           newGameDifficulty,
           '6x6',
+          newGameMode,
         );
         closeMenuModal();
         setNewGameStatus('');
@@ -1024,7 +1079,9 @@ function App() {
           mode: 'classic',
           difficulty: newGameDifficulty,
         });
-        if (daily) params.set('seed', String(dailySeed(newGameDifficulty, 'mountain')));
+        if (daily) {
+          params.set('seed', String(dailySeed(newGameDifficulty, 'mountain', todayDateKey(), '9x9', newGameMode)));
+        }
 
         const response = await fetch(
           `https://api.sudokumountain.com/v1/generate?${params.toString()}`,
@@ -1044,16 +1101,22 @@ function App() {
           daily ? 'sudoku mountain daily' : 'sudoku mountain',
           newGameDifficulty,
           '9x9',
+          newGameMode,
         );
         closeMenuModal();
         setNewGameStatus('');
       } catch {
         startNewPuzzle(
-          generatePuzzle(newGameDifficulty, daily ? dailySeed(newGameDifficulty) : Date.now(), '9x9'),
+          generatePuzzle(
+            newGameDifficulty,
+            daily ? dailySeed(newGameDifficulty, 'vimdoku', todayDateKey(), '9x9', newGameMode) : Date.now(),
+            '9x9',
+          ),
           'Could not reach Sudoku Mountain. Generated a local puzzle instead.',
           'local generated',
           newGameDifficulty,
           '9x9',
+          newGameMode,
         );
         closeMenuModal();
         setNewGameStatus('');
@@ -1061,7 +1124,7 @@ function App() {
         setIsFetchingPuzzle(false);
       }
     },
-    [closeMenuModal, newGameDifficulty, newGameSize, startNewPuzzle],
+    [closeMenuModal, newGameDifficulty, newGameMode, newGameSize, startNewPuzzle],
   );
 
   const startPastedPuzzle = useCallback(() => {
@@ -1079,11 +1142,18 @@ function App() {
       return;
     }
 
-    startNewPuzzle(nextPuzzle, `Loaded pasted ${pastedSize} puzzle.`, 'pasted grid', 'custom', pastedSize);
+    startNewPuzzle(
+      nextPuzzle,
+      `Loaded pasted ${pastedSize} ${newGameMode} puzzle.`,
+      'pasted grid',
+      'custom',
+      pastedSize,
+      newGameMode,
+    );
     setNewPuzzleText('');
     setNewGameStatus('');
     closeMenuModal();
-  }, [closeMenuModal, newPuzzleText, startNewPuzzle]);
+  }, [closeMenuModal, newGameMode, newPuzzleText, startNewPuzzle]);
 
   const resumeGame = useCallback((record: GameRecord) => {
     closeMenuModal();
@@ -1095,14 +1165,14 @@ function App() {
 
   useEffect(() => {
     if (!storageReady || !dailyRoute) return;
-    if (pathname !== dailyPath(dailyRoute)) {
-      if (dailyRoute.puzzleSize === '9x9') {
+      if (pathname !== dailyPath(dailyRoute)) {
+      if (dailyRoute.puzzleSize === '9x9' && dailyRoute.playMode === 'classic') {
         void navigate({
           to: '/play/daily/$difficulty/$date',
           params: { date: dailyRoute.dateKey, difficulty: dailyRoute.difficulty },
           replace: true,
         });
-      } else {
+      } else if (dailyRoute.playMode === 'classic') {
         void navigate({
           to: '/play/daily/$size/$difficulty/$date',
           params: {
@@ -1112,12 +1182,29 @@ function App() {
           },
           replace: true,
         });
+      } else {
+        void navigate({
+          to: '/play/daily/$size/$mode/$difficulty/$date',
+          params: {
+            date: dailyRoute.dateKey,
+            difficulty: dailyRoute.difficulty,
+            mode: dailyRoute.playMode,
+            size: dailyRoute.puzzleSize,
+          },
+          replace: true,
+        });
       }
     }
 
     const nextPuzzle = generatePuzzle(
       dailyRoute.difficulty,
-      dailySeed(dailyRoute.difficulty, 'vimdoku', dailyRoute.dateKey, dailyRoute.puzzleSize),
+      dailySeed(
+        dailyRoute.difficulty,
+        'vimdoku',
+        dailyRoute.dateKey,
+        dailyRoute.puzzleSize,
+        dailyRoute.playMode,
+      ),
       dailyRoute.puzzleSize,
     );
     const dailyMeta = createDailyGameMeta(
@@ -1125,13 +1212,14 @@ function App() {
       dailyRoute.difficulty,
       dailyRoute.dateKey,
       dailyRoute.puzzleSize,
+      dailyRoute.playMode,
     );
     if (activeGame.id === dailyMeta.id) return;
 
     const savedDaily = trackedGameRecords.find(
       (record) => record.id === dailyMeta.id,
     );
-    const label = `${dailyRoute.dateKey} ${dailyRoute.difficulty} daily`;
+    const label = `${dailyRoute.dateKey} ${dailyRoute.puzzleSize} ${dailyRoute.playMode} ${dailyRoute.difficulty} daily`;
 
     const timer = window.setTimeout(() => {
       if (savedDaily) {
@@ -1145,6 +1233,7 @@ function App() {
         'vimdoku daily',
         dailyRoute.difficulty,
         dailyRoute.puzzleSize,
+        dailyRoute.playMode,
         dailyMeta,
         false,
       );
@@ -1244,18 +1333,26 @@ function App() {
   );
 
   const fillAllCandidates = useCallback(() => {
+    if (!notesEnabled) {
+      setStatusLine('Notes are disabled in speedrun.');
+      return;
+    }
     resumeTimerFromActivity();
     pushHistory();
     setNotes(candidatesAsNotes(grid, activeSize));
     setStatusLine('Annotated every empty cell with current candidates.');
-  }, [activeSize, grid, pushHistory, resumeTimerFromActivity]);
+  }, [activeSize, grid, notesEnabled, pushHistory, resumeTimerFromActivity]);
 
   const pruneNotes = useCallback(() => {
+    if (!notesEnabled) {
+      setStatusLine('Notes are disabled in speedrun.');
+      return;
+    }
     resumeTimerFromActivity();
     pushHistory();
     setNotes((current) => pruneImpossibleNotes(grid, current, activeSize));
     setStatusLine('Removed impossible annotations.');
-  }, [activeSize, grid, pushHistory, resumeTimerFromActivity]);
+  }, [activeSize, grid, notesEnabled, pushHistory, resumeTimerFromActivity]);
 
   const clearNotes = useCallback(() => {
     resumeTimerFromActivity();
@@ -1316,11 +1413,11 @@ function App() {
       } else if (['new', 'new-game'].includes(command)) {
         openNewGame();
       } else if (['daily', 'today'].includes(command)) {
-        openDailyPuzzle(newGameDifficulty, todayDateKey(), newGameSize);
-        setStatusLine(`Opening today's ${newGameSize} ${newGameDifficulty} daily.`);
+        openDailyPuzzle(newGameDifficulty, todayDateKey(), newGameSize, newGameMode);
+        setStatusLine(`Opening today's ${newGameSize} ${newGameMode} ${newGameDifficulty} daily.`);
       } else if (['yesterday', 'daily-yesterday'].includes(command)) {
-        openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize);
-        setStatusLine(`Opening yesterday's ${newGameSize} ${newGameDifficulty} daily.`);
+        openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize, newGameMode);
+        setStatusLine(`Opening yesterday's ${newGameSize} ${newGameMode} ${newGameDifficulty} daily.`);
       } else if (['games', 'history', 'ls'].includes(command)) {
         openGameLibrary();
       } else if (['leaderboard', 'leaderboards', 'scores', 'lb'].includes(command)) {
@@ -1356,6 +1453,7 @@ function App() {
       goToProfile,
       jumpToDigit,
       newGameDifficulty,
+      newGameMode,
       newGameSize,
       openGameLibrary,
       openLeaderboards,
@@ -1382,7 +1480,7 @@ function App() {
       }
       if (key === 'enter') {
         event.preventDefault();
-        startGeneratedPuzzle(dashboardDifficulty, true, dashboardSize);
+        startGeneratedPuzzle(dashboardDifficulty, true, dashboardSize, dashboardMode);
         return;
       }
       if (key === '1' || key === '2' || key === '3') {
@@ -1407,6 +1505,7 @@ function App() {
     return () => window.removeEventListener('keydown', onDashboardKeyDown);
   }, [
     dashboardDifficulty,
+    dashboardMode,
     dashboardSize,
     dashboardSelect,
     goToPlay,
@@ -1683,14 +1782,19 @@ function App() {
         setCell(0);
       } else if (key === 'n') {
         event.preventDefault();
-        setNoteMode((current) => !current);
+        if (notesEnabled) setNoteMode((current) => !current);
+        else setStatusLine('Notes are disabled in speedrun.');
       } else if (key === 'u') {
         event.preventDefault();
         undo();
       } else if (key === '?') {
         event.preventDefault();
-        setHintRailOpen(true);
-        askForHint();
+        if (hintsEnabled) {
+          setHintRailOpen(true);
+          askForHint();
+        } else {
+          setStatusLine('Hints are disabled in speedrun.');
+        }
       } else if (key === 'w') {
         event.preventDefault();
         pendingKeyRef.current = '';
@@ -1734,12 +1838,14 @@ function App() {
     commandMode,
     closeGamePicker,
     gamePickerOpen,
+    hintsEnabled,
     jumpToDigit,
     jumpToNextEmpty,
     goToProfile,
     activeMenuModal,
     moveBox,
     moveSelection,
+    notesEnabled,
     noteMode,
     openGamePicker,
     openLeaderboards,
@@ -1831,7 +1937,14 @@ function App() {
 
   function acceptReview() {
     if (!review) return;
-    startNewPuzzle(review.map((cell) => cell.value), 'Loaded image import.', 'image import', 'custom');
+    startNewPuzzle(
+      review.map((cell) => cell.value),
+      'Loaded image import.',
+      'image import',
+      'custom',
+      '9x9',
+      newGameMode,
+    );
     setReview(null);
     setImageUrl(null);
   }
@@ -1849,6 +1962,7 @@ function App() {
         <ConvexBridge
           currentRecord={currentRecord}
           gameRecords={trackedGameRecords}
+          leaderboardMode={leaderboardMode}
           leaderboardOpen={activePage === 'leaderboards'}
           leaderboardSize={leaderboardSize}
           onProfile={setCloudProfile}
@@ -1857,15 +1971,19 @@ function App() {
           onStatus={setLeaderboardStatus}
           playerName={playerName}
           scoreRecordId={showSolved ? currentRecord.id : null}
-          scoreSubmissionsEnabled={hasCustomPlayerName}
+          scoreSubmissionsEnabled={hasCustomPlayerName && scoreEnabled}
         />
       )}
       {showDashboard && (
         <DashboardPage
           difficulty={dashboardDifficulty}
+          mode={dashboardMode}
+          onModeChange={setDashboardMode}
           onSizeChange={setDashboardSize}
           onDifficultyChange={setDashboardDifficulty}
-          onPlay={() => startGeneratedPuzzle(dashboardDifficulty, true, dashboardSize)}
+          onPlay={() =>
+            startGeneratedPuzzle(dashboardDifficulty, true, dashboardSize, dashboardMode)
+          }
           onSelect={dashboardSelect}
           puzzleSize={dashboardSize}
         />
@@ -1907,28 +2025,33 @@ function App() {
               newGameDifficulty,
               dailyDateKey,
               newGameSize,
+              newGameMode,
             )}
             dateKey={dailyDateKey}
             difficulty={newGameDifficulty}
             isFetchingPuzzle={isFetchingPuzzle}
+            mode={newGameMode}
             onDateChange={setDailyDateKey}
             onDifficultyChange={setNewGameDifficulty}
+            onModeChange={setNewGameMode}
             onSizeChange={setNewGameSize}
             onImage={() => fileInputRef.current?.click()}
             onLoadPasted={startPastedPuzzle}
-            onLocal={() => startGeneratedPuzzle(newGameDifficulty, false)}
+            onLocal={() =>
+              startGeneratedPuzzle(newGameDifficulty, false, newGameSize, newGameMode)
+            }
             onMountain={() => void fetchSudokuMountainPuzzle(false)}
             onMountainDaily={() => void fetchSudokuMountainPuzzle(true)}
             onPuzzleTextChange={setNewPuzzleText}
             onOpenDaily={(selectedDateKey) => {
-              openDailyPuzzle(newGameDifficulty, selectedDateKey, newGameSize);
+              openDailyPuzzle(newGameDifficulty, selectedDateKey, newGameSize, newGameMode);
               closeMenuModal();
               setNewGameStatus('');
             }}
             onToday={() => setDailyDateKey(todayDateKey())}
             onYesterday={() => {
               setDailyDateKey(offsetDateKey(-1));
-              openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize);
+              openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize, newGameMode);
               closeMenuModal();
               setNewGameStatus('');
             }}
@@ -1953,7 +2076,9 @@ function App() {
           <Leaderboards
             globalScores={globalScores}
             localScores={localLeaderboard}
+            onModeChange={setLeaderboardMode}
             onSizeChange={setLeaderboardSize}
+            playMode={leaderboardMode}
             puzzleSize={leaderboardSize}
             status={leaderboardStatus}
           />
@@ -2005,12 +2130,14 @@ function App() {
               <button
                 type="button"
                 aria-label="Hint"
+                disabled={!hintsEnabled}
                 onClick={() => {
+                  if (!hintsEnabled) return;
                   resumeTimerFromActivity();
                   setHintRailOpen(true);
                   askForHint();
                 }}
-                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] active:translate-y-px"
+                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ?
               </button>
@@ -2047,7 +2174,7 @@ function App() {
                       selected,
                       grid,
                       givens,
-                      conflicts,
+                      visibleConflicts,
                       hint,
                       highlightDigit,
                       visualCells,
@@ -2080,10 +2207,11 @@ function App() {
 
           <NumberPad
             digits={activeDigits}
+            notesEnabled={notesEnabled}
             noteMode={noteMode}
             onDigit={(digit) => {
               resumeTimerFromActivity();
-              if (noteMode) toggleNote(digit);
+              if (noteMode && notesEnabled) toggleNote(digit);
               else setCell(digit);
             }}
             onErase={() => {
@@ -2092,7 +2220,7 @@ function App() {
             }}
             onToggleNotes={() => {
               resumeTimerFromActivity();
-              setNoteMode((current) => !current);
+              if (notesEnabled) setNoteMode((current) => !current);
             }}
           />
 
@@ -2112,6 +2240,7 @@ function App() {
               setNoteMode((current) => !current);
             }}
             onToggleTimer={toggleTimerPaused}
+            timerEnabled={timerEnabled}
             timerPaused={timerPaused}
           />
 
@@ -2178,6 +2307,7 @@ function App() {
               <SessionMeta label="cell" value={labelCell(selected, activeSize)} />
               <SessionMeta label="filled" value={`${completion}/${activeCellCount}`} />
               <SessionMeta label="grid" value={activeSize} />
+              <SessionMeta label="rules" value={modeLabel(activeMode)} accent={activeMode !== 'classic'} />
               <SessionMeta label="mode" value={editorMode} accent={editorMode !== 'normal'} />
               <SessionMeta
                 label="timer"
@@ -2195,8 +2325,8 @@ function App() {
               </div>
               <div className="mt-1 flex items-center justify-between gap-3">
                 <span className="text-[var(--muted)]">conflicts</span>
-                <span className={conflicts.size > 0 ? 'text-[var(--danger)]' : 'text-[var(--app-text)]'}>
-                  {conflicts.size}
+                <span className={visibleConflicts.size > 0 ? 'text-[var(--danger)]' : 'text-[var(--app-text)]'}>
+                  {activeMode === 'no-check' ? 'hidden' : visibleConflicts.size}
                 </span>
               </div>
             </div>
@@ -2241,7 +2371,7 @@ function App() {
               applyHint={applyHint}
               askForHint={askForHint}
               clearHints={clearHintState}
-              conflicts={conflicts.size}
+              conflicts={visibleConflicts.size}
               hint={hint}
               hintMode={hintMode}
               onClose={() => setHintRailOpen(false)}
@@ -2571,28 +2701,33 @@ function App() {
                 newGameDifficulty,
                 dailyDateKey,
                 newGameSize,
+                newGameMode,
               )}
             dateKey={dailyDateKey}
             difficulty={newGameDifficulty}
             isFetchingPuzzle={isFetchingPuzzle}
+            mode={newGameMode}
             onDateChange={setDailyDateKey}
             onDifficultyChange={setNewGameDifficulty}
+            onModeChange={setNewGameMode}
             onSizeChange={setNewGameSize}
               onImage={() => fileInputRef.current?.click()}
               onLoadPasted={startPastedPuzzle}
-              onLocal={() => startGeneratedPuzzle(newGameDifficulty, false)}
+              onLocal={() =>
+                startGeneratedPuzzle(newGameDifficulty, false, newGameSize, newGameMode)
+              }
               onMountain={() => void fetchSudokuMountainPuzzle(false)}
               onMountainDaily={() => void fetchSudokuMountainPuzzle(true)}
               onPuzzleTextChange={setNewPuzzleText}
               onOpenDaily={(selectedDateKey) => {
-                openDailyPuzzle(newGameDifficulty, selectedDateKey, newGameSize);
+                openDailyPuzzle(newGameDifficulty, selectedDateKey, newGameSize, newGameMode);
                 closeMenuModal();
                 setNewGameStatus('');
               }}
               onToday={() => setDailyDateKey(todayDateKey())}
               onYesterday={() => {
                 setDailyDateKey(offsetDateKey(-1));
-                openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize);
+                openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize, newGameMode);
                 closeMenuModal();
                 setNewGameStatus('');
               }}
@@ -2730,7 +2865,7 @@ function App() {
         <SolvedModal
           difficulty={activeGame.difficulty}
           elapsedMs={elapsedMs}
-          needsName={!hasCustomPlayerName}
+          needsName={scoreEnabled && !hasCustomPlayerName}
           onNameChange={updatePlayerName}
           source={activeGame.source}
           playerName={playerName}
@@ -2757,12 +2892,14 @@ function App() {
 // Touch number entry — mobile/tablet only; desktop uses the keyboard.
 function NumberPad({
   digits,
+  notesEnabled,
   noteMode,
   onDigit,
   onErase,
   onToggleNotes,
 }: {
   digits: number[];
+  notesEnabled: boolean;
   noteMode: boolean;
   onDigit: (digit: number) => void;
   onErase: () => void;
@@ -2788,9 +2925,12 @@ function NumberPad({
       <div className="mt-1 grid grid-cols-2 gap-1">
         <button
           type="button"
+          disabled={!notesEnabled}
           onClick={onToggleNotes}
           className={`border px-3 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.16em] transition active:translate-y-px ${
-            noteMode
+            !notesEnabled
+              ? 'cursor-not-allowed border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] opacity-50'
+              : noteMode
               ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
               : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)]'
           }`}
@@ -2905,8 +3045,10 @@ function NewGamePanel({
   dateKey,
   difficulty,
   isFetchingPuzzle,
+  mode,
   onDateChange,
   onDifficultyChange,
+  onModeChange,
   onImage,
   onLoadPasted,
   onLocal,
@@ -2925,8 +3067,10 @@ function NewGamePanel({
   dateKey: string;
   difficulty: PuzzleDifficulty;
   isFetchingPuzzle: boolean;
+  mode: PlayMode;
   onDateChange: (dateKey: string) => void;
   onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
+  onModeChange: (mode: PlayMode) => void;
   onImage: () => void;
   onLoadPasted: () => void;
   onLocal: () => void;
@@ -2945,10 +3089,10 @@ function NewGamePanel({
     () =>
       generatePuzzle(
         difficulty,
-        dailySeed(difficulty, 'vimdoku', dateKey, puzzleSize),
+        dailySeed(difficulty, 'vimdoku', dateKey, puzzleSize, mode),
         puzzleSize,
       ),
-    [dateKey, difficulty, puzzleSize],
+    [dateKey, difficulty, mode, puzzleSize],
   );
   const dateLabel = formatDailyDate(dateKey);
   const canGoNext = dateKey < todayDateKey();
@@ -2990,6 +3134,22 @@ function NewGamePanel({
                 onClick={() => onSizeChange(option)}
               >
                 {option}
+              </button>
+            ))}
+          </div>
+          <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {PLAY_MODES.map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
+                  mode === option
+                    ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                    : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                }`}
+                onClick={() => onModeChange(option)}
+              >
+                {modeLabel(option)}
               </button>
             ))}
           </div>
@@ -3053,7 +3213,7 @@ function NewGamePanel({
           </div>
 
           <div className="mt-3 grid gap-2 border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs uppercase tracking-[0.14em] sm:grid-cols-3">
-            <DailyMeta label="daily" value={`${puzzleSize} / ${difficulty} / ${dateLabel}`} />
+            <DailyMeta label="daily" value={`${puzzleSize} / ${modeLabel(mode)} / ${difficulty} / ${dateLabel}`} />
             <DailyMeta
               label="status"
               value={
@@ -3228,14 +3388,18 @@ function DailyMeta({
 
 function DashboardPage({
   difficulty,
+  mode,
   onDifficultyChange,
+  onModeChange,
   onPlay,
   onSelect,
   onSizeChange,
   puzzleSize,
 }: {
   difficulty: PuzzleDifficulty;
+  mode: PlayMode;
   onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
+  onModeChange: (mode: PlayMode) => void;
   onPlay: () => void;
   onSelect: (key: string) => void;
   onSizeChange: (puzzleSize: PuzzleSize) => void;
@@ -3248,13 +3412,13 @@ function DashboardPage({
   useEffect(() => {
     const timer = setTimeout(() => {
       setDailyGrids({
-        easy: generatePuzzle('easy', dailySeed('easy', 'vimdoku', todayDateKey(), puzzleSize), puzzleSize),
-        medium: generatePuzzle('medium', dailySeed('medium', 'vimdoku', todayDateKey(), puzzleSize), puzzleSize),
-        hard: generatePuzzle('hard', dailySeed('hard', 'vimdoku', todayDateKey(), puzzleSize), puzzleSize),
+        easy: generatePuzzle('easy', dailySeed('easy', 'vimdoku', todayDateKey(), puzzleSize, mode), puzzleSize),
+        medium: generatePuzzle('medium', dailySeed('medium', 'vimdoku', todayDateKey(), puzzleSize, mode), puzzleSize),
+        hard: generatePuzzle('hard', dailySeed('hard', 'vimdoku', todayDateKey(), puzzleSize, mode), puzzleSize),
       });
     }, 0);
     return () => clearTimeout(timer);
-  }, [puzzleSize]);
+  }, [mode, puzzleSize]);
 
   const grid = dailyGrids?.[difficulty] ?? emptyGrid(puzzleSize);
 
@@ -3287,6 +3451,22 @@ function DashboardPage({
                     }`}
                   >
                     {option}
+                  </button>
+                ))}
+              </div>
+              <div className="mb-2 grid grid-cols-2 gap-1.5">
+                {PLAY_MODES.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    onClick={() => onModeChange(option)}
+                    className={`border px-2 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] transition ${
+                      mode === option
+                        ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                        : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]'
+                    }`}
+                  >
+                    {modeLabel(option)}
                   </button>
                 ))}
               </div>
@@ -3326,8 +3506,8 @@ function DashboardPage({
                 />
               </button>
               <p className="mt-3 text-center text-[0.7rem] uppercase tracking-[0.14em] text-[var(--muted)]">
-                <span className="text-[var(--accent)]">↵</span> play {difficulty}{' '}
-                daily
+                <span className="text-[var(--accent)]">↵</span> play{' '}
+                {modeLabel(mode)} {difficulty} daily
               </p>
             </div>
 
@@ -3673,6 +3853,7 @@ function GameLibrary({
                     <h2 className="truncate font-mono text-sm font-bold uppercase tracking-[0.14em] text-[var(--app-text)]">
                       {record.source}
                       {` / ${record.puzzleSize}`}
+                      {` / ${modeLabel(record.playMode)}`}
                       {record.difficulty ? ` / ${record.difficulty}` : ''}
                     </h2>
                     <span
@@ -3852,6 +4033,7 @@ function GameFinder({
                   <span className="min-w-0 truncate text-xs uppercase tracking-[0.16em]">
                     {record.source}
                     {` / ${record.puzzleSize}`}
+                    {` / ${modeLabel(record.playMode)}`}
                     {record.difficulty ? ` / ${record.difficulty}` : ''}
                     {isCurrent ? ' / current' : ''}
                   </span>
@@ -3882,6 +4064,7 @@ function GameFinder({
               <dl className="flex-1 space-y-1.5 overflow-y-auto p-3 font-mono text-xs">
                 <PreviewRow label="source" value={selectedRecord.source} />
                 <PreviewRow label="size" value={selectedRecord.puzzleSize} />
+                <PreviewRow label="mode" value={modeLabel(selectedRecord.playMode)} />
                 {selectedRecord.difficulty && (
                   <PreviewRow
                     label="difficulty"
@@ -3941,13 +4124,17 @@ function GameFinder({
 function Leaderboards({
   globalScores,
   localScores,
+  onModeChange,
   onSizeChange,
+  playMode,
   puzzleSize,
   status,
 }: {
   globalScores: LeaderboardEntry[];
   localScores: GameRecord[];
+  onModeChange: (mode: PlayMode) => void;
   onSizeChange: (puzzleSize: PuzzleSize) => void;
+  playMode: PlayMode;
   puzzleSize: PuzzleSize;
   status: string;
 }) {
@@ -3973,9 +4160,28 @@ function Leaderboards({
             </button>
           ))}
         </div>
+        <div className="flex flex-wrap gap-1">
+          {PLAY_MODES.map((option) => (
+            <button
+              type="button"
+              key={option}
+              className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] ${
+                playMode === option
+                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                  : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]'
+              }`}
+              onClick={() => onModeChange(option)}
+            >
+              {modeLabel(option)}
+            </button>
+          ))}
+        </div>
       </section>
       <div className="grid gap-3 lg:grid-cols-2">
-        <LeaderboardPanel title={`local best / ${puzzleSize}`} empty={`No completed ${puzzleSize} local games yet.`}>
+        <LeaderboardPanel
+          title={`local best / ${puzzleSize} / ${modeLabel(playMode)}`}
+          empty={`No completed ${puzzleSize} ${modeLabel(playMode)} local games yet.`}
+        >
           {localScores.map((record, index) => (
             <LeaderboardRow
               key={record.id}
@@ -3988,8 +4194,8 @@ function Leaderboards({
         </LeaderboardPanel>
 
         <LeaderboardPanel
-          title={`global best / ${puzzleSize}`}
-          empty={status || `No global ${puzzleSize} scores loaded.`}
+          title={`global best / ${puzzleSize} / ${modeLabel(playMode)}`}
+          empty={status || `No global ${puzzleSize} ${modeLabel(playMode)} scores loaded.`}
         >
           {globalScores.map((score, index) => (
             <LeaderboardRow
@@ -4348,6 +4554,7 @@ function StatusLine({
   noteMode,
   onToggleNotes,
   onToggleTimer,
+  timerEnabled,
   timerPaused,
 }: {
   cellLabel: string;
@@ -4360,6 +4567,7 @@ function StatusLine({
   noteMode: boolean;
   onToggleNotes: () => void;
   onToggleTimer: () => void;
+  timerEnabled: boolean;
   timerPaused: boolean;
 }) {
   const percent = Math.round((completion / cellCount) * 100);
@@ -4428,14 +4636,19 @@ function StatusLine({
         {!compact && <span>{completion}/{cellCount}</span>}
         <button
           type="button"
-          title={timerPaused ? 'Resume timer' : 'Pause timer'}
+          title={timerEnabled ? (timerPaused ? 'Resume timer' : 'Pause timer') : 'Zen mode does not track time'}
           onClick={onToggleTimer}
+          disabled={!timerEnabled}
           className={`inline-flex items-center gap-1.5 uppercase tracking-[0.14em] transition hover:brightness-150 ${
-            timerPaused ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
+            !timerEnabled
+              ? 'cursor-not-allowed text-[var(--muted)] opacity-60'
+              : timerPaused
+                ? 'text-[var(--accent)]'
+                : 'text-[var(--muted)]'
           }`}
         >
-          {timerPaused ? <Play size={13} /> : <Pause size={13} />}
-          <span>{formatDuration(elapsedMs)}</span>
+          {timerEnabled && (timerPaused ? <Play size={13} /> : <Pause size={13} />)}
+          <span>{timerEnabled ? formatDuration(elapsedMs) : 'zen'}</span>
         </button>
       </div>
       <Wedge direction="left" tip="var(--accent)" field="var(--panel-soft)" />
@@ -4580,6 +4793,7 @@ function filterGameRecords(records: GameRecord[], query: string) {
     const haystack = [
       record.source,
       record.puzzleSize,
+      record.playMode,
       record.difficulty,
       record.status,
       `${record.completion}/${cellCountFor(record)}`,
@@ -4596,6 +4810,10 @@ function filterGameRecords(records: GameRecord[], query: string) {
 
 function cellCountFor(record: GameRecord) {
   return boardConfigFor(record.puzzleSize).cellCount;
+}
+
+function modeLabel(mode: PlayMode) {
+  return mode === 'no-check' ? 'no-check' : mode;
 }
 
 function buildLocalStats(records: GameRecord[]): ProfileStats {
@@ -4676,8 +4894,9 @@ function dailySeed(
   source = 'vimdoku',
   dateKey = todayDateKey(),
   puzzleSize: PuzzleSize = '9x9',
+  playMode: PlayMode = 'classic',
 ) {
-  return hashString(`${source}:${puzzleSize}:${difficulty}:${dateKey}`);
+  return hashString(`${source}:${puzzleSize}:${playMode}:${difficulty}:${dateKey}`);
 }
 
 function createDailyGameMeta(
@@ -4685,13 +4904,15 @@ function createDailyGameMeta(
   difficulty: PuzzleDifficulty,
   dateKey: string,
   puzzleSize: PuzzleSize = '9x9',
+  playMode: PlayMode = 'classic',
 ): GameMeta {
   return {
     difficulty,
-    id: dailyGameId(difficulty, dateKey, puzzleSize),
+    id: dailyGameId(difficulty, dateKey, puzzleSize, playMode),
+    playMode,
     puzzle: gridToPuzzleString(puzzleGrid, puzzleSize),
     puzzleSize,
-    source: `vimdoku ${puzzleSize} daily ${dateKey}`,
+    source: `vimdoku ${puzzleSize} ${modeLabel(playMode)} daily ${dateKey}`,
     startedAt: `${dateKey}T00:00:00.000Z`,
   };
 }
@@ -4700,10 +4921,14 @@ function dailyGameId(
   difficulty: PuzzleDifficulty,
   dateKey: string,
   puzzleSize: PuzzleSize,
+  playMode: PlayMode,
 ) {
-  return puzzleSize === '9x9'
-    ? `daily-vimdoku-${difficulty}-${dateKey}`
-    : `daily-vimdoku-${puzzleSize}-${difficulty}-${dateKey}`;
+  if (puzzleSize === '9x9' && playMode === 'classic') {
+    return `daily-vimdoku-${difficulty}-${dateKey}`;
+  }
+  return playMode === 'classic'
+    ? `daily-vimdoku-${puzzleSize}-${difficulty}-${dateKey}`
+    : `daily-vimdoku-${puzzleSize}-${playMode}-${difficulty}-${dateKey}`;
 }
 
 function findDailyRecord(
@@ -4711,12 +4936,26 @@ function findDailyRecord(
   difficulty: PuzzleDifficulty,
   dateKey: string,
   puzzleSize: PuzzleSize = '9x9',
+  playMode: PlayMode = 'classic',
 ) {
-  const id = dailyGameId(difficulty, dateKey, puzzleSize);
+  const id = dailyGameId(difficulty, dateKey, puzzleSize, playMode);
   return records.find((record) => record.id === id) ?? null;
 }
 
 function parseDailyRoute(pathname: string): DailyRoute | null {
+  const modeCanonical = pathname.match(
+    /^\/play\/daily\/(6x6|9x9)\/(classic|speedrun|zen|no-check)\/(easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
+  );
+  if (modeCanonical) {
+    if (!isValidDateKey(modeCanonical[4])) return null;
+    return {
+      dateKey: modeCanonical[4],
+      difficulty: modeCanonical[3] as PuzzleDifficulty,
+      playMode: modeCanonical[2] as PlayMode,
+      puzzleSize: modeCanonical[1] as PuzzleSize,
+    };
+  }
+
   const sizedCanonical = pathname.match(
     /^\/play\/daily\/(6x6|9x9)\/(easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
   );
@@ -4725,6 +4964,7 @@ function parseDailyRoute(pathname: string): DailyRoute | null {
     return {
       dateKey: sizedCanonical[3],
       difficulty: sizedCanonical[2] as PuzzleDifficulty,
+      playMode: 'classic',
       puzzleSize: sizedCanonical[1] as PuzzleSize,
     };
   }
@@ -4737,7 +4977,21 @@ function parseDailyRoute(pathname: string): DailyRoute | null {
     return {
       difficulty: canonical[1] as PuzzleDifficulty,
       dateKey: canonical[2],
+      playMode: 'classic',
       puzzleSize: '9x9',
+    };
+  }
+
+  const modeShort = pathname.match(
+    /^\/play\/(6x6|9x9|6|9)\/(classic|speedrun|zen|no-check)\/([emhx]|easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
+  );
+  if (modeShort) {
+    if (!isValidDateKey(modeShort[4])) return null;
+    return {
+      dateKey: modeShort[4],
+      difficulty: expandDifficultySlug(modeShort[3]),
+      playMode: modeShort[2] as PlayMode,
+      puzzleSize: expandSizeSlug(modeShort[1]),
     };
   }
 
@@ -4749,6 +5003,7 @@ function parseDailyRoute(pathname: string): DailyRoute | null {
     return {
       dateKey: sizedShort[3],
       difficulty: expandDifficultySlug(sizedShort[2]),
+      playMode: 'classic',
       puzzleSize: expandSizeSlug(sizedShort[1]),
     };
   }
@@ -4761,6 +5016,7 @@ function parseDailyRoute(pathname: string): DailyRoute | null {
   return {
     difficulty: expandDifficultySlug(short[1]),
     dateKey: short[2],
+    playMode: 'classic',
     puzzleSize: '9x9',
   };
 }
@@ -4783,10 +5039,13 @@ function expandSizeSlug(slug: string): PuzzleSize {
 }
 
 function dailyPath(route: DailyRoute) {
-  if (route.puzzleSize === '9x9') {
+  if (route.puzzleSize === '9x9' && route.playMode === 'classic') {
     return `/play/daily/${route.difficulty}/${route.dateKey}`;
   }
-  return `/play/daily/${route.puzzleSize}/${route.difficulty}/${route.dateKey}`;
+  if (route.playMode === 'classic') {
+    return `/play/daily/${route.puzzleSize}/${route.difficulty}/${route.dateKey}`;
+  }
+  return `/play/daily/${route.puzzleSize}/${route.playMode}/${route.difficulty}/${route.dateKey}`;
 }
 
 function todayDateKey() {
