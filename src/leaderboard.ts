@@ -1,5 +1,6 @@
+import { sanitizePlayMode, type PlayMode } from './playModes';
 import type { GameRecord } from './storage';
-import type { PlayMode, PuzzleSize } from './sudoku';
+import type { PuzzleSize } from './sudoku';
 
 export const PLAYER_NAME_KEY = 'vimdoku-player-name-v1';
 
@@ -77,15 +78,9 @@ function normalizeEntry(entry: LeaderboardEntry): LeaderboardEntry | null {
     elapsedMs: Math.max(0, Math.floor(entry.elapsedMs)),
     id: String(entry.id),
     player: String(entry.player || 'anonymous'),
-    playMode: normalizePlayMode(entry.playMode),
+    playMode: sanitizePlayMode(entry.playMode),
     puzzle: String(entry.puzzle),
     puzzleSize: entry.puzzleSize === '6x6' ? '6x6' : '9x9',
     source: String(entry.source || 'unknown'),
   };
-}
-
-function normalizePlayMode(value: unknown): PlayMode {
-  return value === 'speedrun' || value === 'zen' || value === 'no-check'
-    ? value
-    : 'classic';
 }

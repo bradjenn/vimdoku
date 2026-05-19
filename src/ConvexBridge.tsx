@@ -3,8 +3,9 @@ import { useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
 import type { LeaderboardEntry } from './leaderboard';
+import type { PlayMode } from './playModes';
 import type { GameRecord } from './storage';
-import type { PlayMode, PuzzleSize } from './sudoku';
+import type { PuzzleSize } from './sudoku';
 import { getOrCreateGuestId } from './identity';
 
 export type CloudProfile = {

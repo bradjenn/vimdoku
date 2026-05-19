@@ -1,6 +1,5 @@
 export type Grid = number[];
 export type Notes = number[][];
-export type PlayMode = 'classic' | 'speedrun' | 'zen' | 'no-check';
 export type PuzzleDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 export type PuzzleSize = '6x6' | '9x9';
 
@@ -422,7 +421,7 @@ export function nextHint(
     };
   }
 
-  const cell = grid.findIndex((value) => value === 0);
+  const cell = grid.indexOf(0);
   return {
     kind: 'solution',
     technique: 'Solver nudge',

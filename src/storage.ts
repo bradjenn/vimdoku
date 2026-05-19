@@ -8,10 +8,10 @@ import {
   puzzleSizeFromGrid,
   type Grid,
   type Notes,
-  type PlayMode,
   type PuzzleDifficulty,
   type PuzzleSize,
 } from './sudoku';
+import { sanitizePlayMode, type PlayMode } from './playModes';
 
 export type Snapshot = {
   grid: Grid;
@@ -345,12 +345,6 @@ function sanitizeGameRecord(record: GameRecord): GameRecord | null {
 
 function isGameRecord(record: GameRecord | null): record is GameRecord {
   return record !== null;
-}
-
-function sanitizePlayMode(value: unknown): PlayMode {
-  return value === 'speedrun' || value === 'zen' || value === 'no-check'
-    ? value
-    : 'classic';
 }
 
 function hashString(value: string) {

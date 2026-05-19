@@ -33,7 +33,6 @@ import {
   type Grid,
   type Hint,
   type Notes,
-  type PlayMode,
   type PuzzleDifficulty,
   type PuzzleSize,
   candidatesAsNotes,
@@ -48,6 +47,18 @@ import {
   removeRelatedNotes,
   solveGrid,
 } from './sudoku';
+import {
+  createDailyGameMeta,
+  dailyPath,
+  dailySeed,
+  findDailyRecord,
+  formatDailyDate,
+  isValidDateKey,
+  offsetDateKey,
+  parseDailyRoute,
+  shiftDateKey,
+  todayDateKey,
+} from './daily';
 import {
   createGameMeta,
   createGameRecord,
@@ -71,6 +82,12 @@ import {
 import { ConvexBridge, type CloudProfile, type CloudStats } from './ConvexBridge';
 import { hasConvexBackend } from './convexClient';
 import { getOrCreateGuestId, shortGuestId } from './identity';
+import {
+  PLAY_MODES,
+  modeLabel,
+  modePolicy,
+  type PlayMode,
+} from './playModes';
 
 type ReviewCell = {
   value: number;
@@ -84,19 +101,12 @@ type MenuModal = 'menu' | 'settings' | 'commands' | 'new' | null;
 type RouteModal = 'menu' | 'settings' | 'commands';
 type PageRoute = 'dashboard' | 'play' | 'new' | 'games' | 'leaderboards' | 'profile';
 type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
-type DailyRoute = {
-  dateKey: string;
-  difficulty: PuzzleDifficulty;
-  playMode: PlayMode;
-  puzzleSize: PuzzleSize;
-};
 type ThemeId = (typeof DARK_THEMES)[number]['id'];
 
 const THEME_KEY = 'vimdoku-theme-v1';
 const TIMER_PAUSED_GAME_KEY = 'vimdoku-paused-game-v1';
 const NEW_GAME_DIFFICULTIES: PuzzleDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
 const PUZZLE_SIZES: PuzzleSize[] = ['9x9', '6x6'];
-const PLAY_MODES: PlayMode[] = ['classic', 'speedrun', 'zen', 'no-check'];
 
 // Single source of truth for the Space-leader menu — drives both the
 // which-key popup and the keydown resolution below.
@@ -362,11 +372,8 @@ function App() {
   const activeConfig = boardConfigFor(activeSize);
   const activeDigits = activeConfig.digits;
   const activeCellCount = activeConfig.cellCount;
-  const notesEnabled = activeMode !== 'speedrun';
-  const hintsEnabled = activeMode !== 'speedrun';
-  const pauseEnabled = activeMode !== 'speedrun';
-  const timerEnabled = activeMode !== 'zen';
-  const scoreEnabled = activeMode !== 'zen';
+  const policy = useMemo(() => modePolicy(activeMode), [activeMode]);
+  const { notesEnabled, hintsEnabled, pauseEnabled, timerEnabled, scoreEnabled } = policy;
 
   const updatePlayerName = useCallback((value: string) => {
     setPlayerName(value);
@@ -466,7 +473,7 @@ function App() {
   }, [goToPlay, routeModal]);
 
   const conflicts = useMemo(() => findConflicts(grid, activeSize), [activeSize, grid]);
-  const visibleConflicts = activeMode === 'no-check' ? new Set<number>() : conflicts;
+  const visibleConflicts = policy.hidesConflicts ? new Set<number>() : conflicts;
   const solved = useMemo(() => solveGrid(grid, activeSize), [activeSize, grid]);
   const completion = grid.filter(Boolean).length;
   const isSolved = Boolean(
@@ -976,7 +983,7 @@ function App() {
     setTimerPaused(false);
     setNoteMode(false);
     setActiveGame(meta);
-    const firstEmpty = nextGrid.findIndex((value) => value === 0);
+    const firstEmpty = nextGrid.indexOf(0);
     setSelected(firstEmpty >= 0 ? firstEmpty : 0);
     setStatusLine(message);
     if (navigateToPlay) goToPlay();
@@ -1011,7 +1018,7 @@ function App() {
     setGameCursor(0);
     setTimerPaused(false);
     setNoteMode(false);
-    const firstEmpty = record.grid.findIndex((value) => value === 0);
+    const firstEmpty = record.grid.indexOf(0);
     setSelected(firstEmpty >= 0 ? firstEmpty : 0);
     setStatusLine(message);
     if (navigateToPlay) goToPlay();
@@ -2154,16 +2161,15 @@ function App() {
 
           <div className="grid min-h-0 place-items-center px-3 py-3 sm:px-5 lg:flex-1 lg:px-8 lg:py-4">
             <div className="w-full max-w-[min(76vh,calc(100vh-176px),820px,100%)]">
-              <div
+              <section
                 className="board-settle grid aspect-square border-4 border-[var(--grid-line)] bg-[var(--grid-line)]"
                 style={{ gridTemplateColumns: `repeat(${activeConfig.size}, minmax(0, 1fr))` }}
-                role="grid"
                 aria-label={`${activeSize} Sudoku board`}
               >
                 {grid.map((value, index) => (
                   <button
                     type="button"
-                    key={index}
+                    key={labelCell(index, activeSize)}
                     aria-label={`${labelCell(index, activeSize)} ${value || 'empty'}`}
                     onClick={() => {
                       resumeTimerFromActivity();
@@ -2201,7 +2207,7 @@ function App() {
                     )}
                   </button>
                 ))}
-              </div>
+              </section>
             </div>
           </div>
 
@@ -2389,7 +2395,7 @@ function App() {
                 {review.map((cell, index) => (
                   <button
                     type="button"
-                    key={index}
+                    key={labelCell(index)}
                     onClick={() => setReviewSelected(index)}
                     className={`relative grid aspect-square place-items-center border border-[var(--grid-line)] text-2xl font-black ${
                       reviewSelected === index
@@ -2475,7 +2481,9 @@ function App() {
       )}
 
       {commandMode && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop closes the modal when clicking outside the dialog.
         <div
+          role="presentation"
           className="fixed inset-0 z-30 flex justify-center bg-black/70 px-4 pt-[16vh]"
           onMouseDown={(event) => {
             if (event.target !== event.currentTarget) return;
@@ -2553,7 +2561,9 @@ function App() {
       )}
 
       {gamePickerOpen && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop closes the picker when clicking outside the dialog.
         <div
+          role="presentation"
           className="fixed inset-0 z-30 flex justify-center bg-black/70 px-4 pt-[10vh]"
           onMouseDown={(event) => {
             if (event.target !== event.currentTarget) return;
@@ -2980,7 +2990,9 @@ function SolvedModal({
   ];
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop returns to review when clicking outside the solved dialog.
     <div
+      role="presentation"
       className="fixed inset-0 z-40 grid place-items-center bg-black/80 p-4 font-mono"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onReview();
@@ -3976,6 +3988,8 @@ function GameFinder({
 
   return (
     <div
+      role="listbox"
+      tabIndex={-1}
       className="space-y-3"
       onKeyDown={(event) => {
         if (event.key === 'j' || event.key === 'ArrowDown') {
@@ -4441,7 +4455,7 @@ function PuzzlePreview({
         const col = index % config.size;
         return (
           <div
-            key={index}
+            key={labelCell(index, config.puzzleSize)}
             className={[
               'grid aspect-square place-items-center border border-[var(--grid-line)] bg-[var(--cell-bg)] font-bold leading-none',
               config.size === 6 ? 'text-[8cqw]' : 'text-[6.5cqw]',
@@ -4812,10 +4826,6 @@ function cellCountFor(record: GameRecord) {
   return boardConfigFor(record.puzzleSize).cellCount;
 }
 
-function modeLabel(mode: PlayMode) {
-  return mode === 'no-check' ? 'no-check' : mode;
-}
-
 function buildLocalStats(records: GameRecord[]): ProfileStats {
   const completed = records.filter((record) => record.status === 'completed');
   const timed = completed.filter((record) => record.elapsedMs > 0);
@@ -4887,218 +4897,6 @@ function loadTheme(): ThemeId {
 
 function loadPausedGameId() {
   return localStorage.getItem(TIMER_PAUSED_GAME_KEY);
-}
-
-function dailySeed(
-  difficulty: PuzzleDifficulty,
-  source = 'vimdoku',
-  dateKey = todayDateKey(),
-  puzzleSize: PuzzleSize = '9x9',
-  playMode: PlayMode = 'classic',
-) {
-  return hashString(`${source}:${puzzleSize}:${playMode}:${difficulty}:${dateKey}`);
-}
-
-function createDailyGameMeta(
-  puzzleGrid: Grid,
-  difficulty: PuzzleDifficulty,
-  dateKey: string,
-  puzzleSize: PuzzleSize = '9x9',
-  playMode: PlayMode = 'classic',
-): GameMeta {
-  return {
-    difficulty,
-    id: dailyGameId(difficulty, dateKey, puzzleSize, playMode),
-    playMode,
-    puzzle: gridToPuzzleString(puzzleGrid, puzzleSize),
-    puzzleSize,
-    source: `vimdoku ${puzzleSize} ${modeLabel(playMode)} daily ${dateKey}`,
-    startedAt: `${dateKey}T00:00:00.000Z`,
-  };
-}
-
-function dailyGameId(
-  difficulty: PuzzleDifficulty,
-  dateKey: string,
-  puzzleSize: PuzzleSize,
-  playMode: PlayMode,
-) {
-  if (puzzleSize === '9x9' && playMode === 'classic') {
-    return `daily-vimdoku-${difficulty}-${dateKey}`;
-  }
-  return playMode === 'classic'
-    ? `daily-vimdoku-${puzzleSize}-${difficulty}-${dateKey}`
-    : `daily-vimdoku-${puzzleSize}-${playMode}-${difficulty}-${dateKey}`;
-}
-
-function findDailyRecord(
-  records: GameRecord[],
-  difficulty: PuzzleDifficulty,
-  dateKey: string,
-  puzzleSize: PuzzleSize = '9x9',
-  playMode: PlayMode = 'classic',
-) {
-  const id = dailyGameId(difficulty, dateKey, puzzleSize, playMode);
-  return records.find((record) => record.id === id) ?? null;
-}
-
-function parseDailyRoute(pathname: string): DailyRoute | null {
-  const modeCanonical = pathname.match(
-    /^\/play\/daily\/(6x6|9x9)\/(classic|speedrun|zen|no-check)\/(easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
-  );
-  if (modeCanonical) {
-    if (!isValidDateKey(modeCanonical[4])) return null;
-    return {
-      dateKey: modeCanonical[4],
-      difficulty: modeCanonical[3] as PuzzleDifficulty,
-      playMode: modeCanonical[2] as PlayMode,
-      puzzleSize: modeCanonical[1] as PuzzleSize,
-    };
-  }
-
-  const sizedCanonical = pathname.match(
-    /^\/play\/daily\/(6x6|9x9)\/(easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
-  );
-  if (sizedCanonical) {
-    if (!isValidDateKey(sizedCanonical[3])) return null;
-    return {
-      dateKey: sizedCanonical[3],
-      difficulty: sizedCanonical[2] as PuzzleDifficulty,
-      playMode: 'classic',
-      puzzleSize: sizedCanonical[1] as PuzzleSize,
-    };
-  }
-
-  const canonical = pathname.match(
-    /^\/play\/daily\/(easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
-  );
-  if (canonical) {
-    if (!isValidDateKey(canonical[2])) return null;
-    return {
-      difficulty: canonical[1] as PuzzleDifficulty,
-      dateKey: canonical[2],
-      playMode: 'classic',
-      puzzleSize: '9x9',
-    };
-  }
-
-  const modeShort = pathname.match(
-    /^\/play\/(6x6|9x9|6|9)\/(classic|speedrun|zen|no-check)\/([emhx]|easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
-  );
-  if (modeShort) {
-    if (!isValidDateKey(modeShort[4])) return null;
-    return {
-      dateKey: modeShort[4],
-      difficulty: expandDifficultySlug(modeShort[3]),
-      playMode: modeShort[2] as PlayMode,
-      puzzleSize: expandSizeSlug(modeShort[1]),
-    };
-  }
-
-  const sizedShort = pathname.match(
-    /^\/play\/(6x6|9x9|6|9)\/([emhx]|easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
-  );
-  if (sizedShort) {
-    if (!isValidDateKey(sizedShort[3])) return null;
-    return {
-      dateKey: sizedShort[3],
-      difficulty: expandDifficultySlug(sizedShort[2]),
-      playMode: 'classic',
-      puzzleSize: expandSizeSlug(sizedShort[1]),
-    };
-  }
-
-  const short = pathname.match(
-    /^\/play\/([emhx]|easy|medium|hard|expert)\/(\d{4}-\d{2}-\d{2})$/,
-  );
-  if (!short) return null;
-  if (!isValidDateKey(short[2])) return null;
-  return {
-    difficulty: expandDifficultySlug(short[1]),
-    dateKey: short[2],
-    playMode: 'classic',
-    puzzleSize: '9x9',
-  };
-}
-
-function isValidDateKey(dateKey: string) {
-  const date = new Date(`${dateKey}T00:00:00`);
-  return !Number.isNaN(date.getTime()) && dateKeyFromDate(date) === dateKey;
-}
-
-function expandDifficultySlug(slug: string): PuzzleDifficulty {
-  if (slug === 'e') return 'easy';
-  if (slug === 'm') return 'medium';
-  if (slug === 'h') return 'hard';
-  if (slug === 'x') return 'expert';
-  return slug as PuzzleDifficulty;
-}
-
-function expandSizeSlug(slug: string): PuzzleSize {
-  return slug === '6' || slug === '6x6' ? '6x6' : '9x9';
-}
-
-function dailyPath(route: DailyRoute) {
-  if (route.puzzleSize === '9x9' && route.playMode === 'classic') {
-    return `/play/daily/${route.difficulty}/${route.dateKey}`;
-  }
-  if (route.playMode === 'classic') {
-    return `/play/daily/${route.puzzleSize}/${route.difficulty}/${route.dateKey}`;
-  }
-  return `/play/daily/${route.puzzleSize}/${route.playMode}/${route.difficulty}/${route.dateKey}`;
-}
-
-function todayDateKey() {
-  return dateKeyFromDate(new Date());
-}
-
-function offsetDateKey(offsetDays: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  return dateKeyFromDate(date);
-}
-
-function shiftDateKey(dateKey: string, offsetDays: number) {
-  const date = new Date(`${dateKey}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return todayDateKey();
-  date.setDate(date.getDate() + offsetDays);
-  const shifted = dateKeyFromDate(date);
-  return shifted > todayDateKey() ? todayDateKey() : shifted;
-}
-
-function dateKeyFromDate(date: Date) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-}
-
-function formatDailyDate(dateKey: string) {
-  const date = new Date(`${dateKey}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateKey;
-  return new Intl.DateTimeFormat(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-}
-
-function gridToPuzzleString(
-  grid: Grid,
-  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
-) {
-  const maxDigit = boardConfigFor(puzzleSize).size;
-  return grid.map((value) => (value >= 1 && value <= maxDigit ? value : 0)).join('');
-}
-
-function hashString(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
 }
 
 function isTypingTarget(target: EventTarget | null) {
