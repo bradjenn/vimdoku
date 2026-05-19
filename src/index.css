@@ -97,6 +97,46 @@ button:focus-visible {
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes modal-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.99);
+  }
+}
+
 .column-rise {
   animation: column-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -107,7 +147,9 @@ button:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .column-rise,
-  .board-settle {
+  .board-settle,
+  [data-radix-dialog-overlay],
+  [data-radix-dialog-content] {
     animation: none;
   }
 }

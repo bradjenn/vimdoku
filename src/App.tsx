@@ -101,6 +101,7 @@ import {
   modePolicy,
   type PlayMode,
 } from './playModes';
+import { TuiDialog } from './ui';
 
 type ReviewCell = {
   value: number;
@@ -5283,7 +5284,7 @@ function TuiModal({
   title,
   wide = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   footer?: string;
   narrow?: boolean;
   onClose: () => void;
@@ -5291,28 +5292,18 @@ function TuiModal({
   wide?: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-30 grid place-items-center bg-black/70 p-4">
-      <section
-        className={`w-full ${
-          wide ? 'max-w-4xl' : narrow ? 'max-w-md' : 'max-w-2xl'
-        } border border-[var(--border)] bg-[var(--panel-bg)] font-mono`}
-      >
-        <header className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-[var(--status-text)]">
-          <span className="text-xs uppercase tracking-[0.16em]">[{title}]</span>
-          <button
-            type="button"
-            className="border border-[var(--border)] px-2 py-1 text-xs hover:border-[var(--accent)]"
-            onClick={onClose}
-          >
-            esc
-          </button>
-        </header>
-        <div className="p-3">{children}</div>
-        <footer className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
-          {footer}
-        </footer>
-      </section>
-    </div>
+    <TuiDialog
+      footer={footer}
+      narrow={narrow}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      open
+      title={title}
+      wide={wide}
+    >
+      {children}
+    </TuiDialog>
   );
 }
 
