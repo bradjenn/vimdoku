@@ -89,6 +89,8 @@ export function ConvexBridge({
   onStats,
   onStatus,
   playerName,
+  scoreRecordId,
+  scoreSubmissionsEnabled,
 }: {
   currentRecord: GameRecord;
   gameRecords: GameRecord[];
@@ -98,6 +100,8 @@ export function ConvexBridge({
   onStats: (stats: CloudStats | null) => void;
   onStatus: (status: string) => void;
   playerName: string;
+  scoreRecordId: string | null;
+  scoreSubmissionsEnabled: boolean;
 }) {
   const anonId = useMemo(() => getOrCreateGuestId(), []);
   const submittedIds = useRef(new Set<string>());
@@ -173,7 +177,9 @@ export function ConvexBridge({
   }, [anonId, gameRecords, onStatus, upsertGame]);
 
   useEffect(() => {
+    if (!scoreSubmissionsEnabled) return;
     if (currentRecord.status !== 'completed') return;
+    if (scoreRecordId !== currentRecord.id) return;
     if (submittedIds.current.has(currentRecord.id)) return;
     submittedIds.current.add(currentRecord.id);
 
@@ -181,25 +187,15 @@ export function ConvexBridge({
       submittedIds.current.delete(currentRecord.id);
       onStatus('Could not submit Convex score.');
     });
-  }, [anonId, currentRecord, onStatus, playerName, submitScore]);
-
-  useEffect(() => {
-    const completedRecords = gameRecords
-      .filter(
-        (record) =>
-          record.status === 'completed' && !submittedIds.current.has(record.id),
-      )
-      .slice(0, 8);
-    if (completedRecords.length === 0) return;
-
-    for (const record of completedRecords) {
-      submittedIds.current.add(record.id);
-      void submitScore(toScoreArgs(record, anonId, playerName)).catch(() => {
-        submittedIds.current.delete(record.id);
-        onStatus('Could not backfill Convex scores.');
-      });
-    }
-  }, [anonId, gameRecords, onStatus, playerName, submitScore]);
+  }, [
+    anonId,
+    currentRecord,
+    onStatus,
+    playerName,
+    scoreRecordId,
+    scoreSubmissionsEnabled,
+    submitScore,
+  ]);
 
   return null;
 }

@@ -340,6 +340,11 @@ function App() {
   const submittedScoreIdsRef = useRef(new Set<string>());
   const previousPageRef = useRef(activePage);
   const activeMenuModal = routeModal ?? menuModal;
+  const hasCustomPlayerName = isCustomPlayerName(playerName);
+
+  const updatePlayerName = useCallback((value: string) => {
+    setPlayerName(value);
+  }, []);
 
   const goToDashboard = useCallback(() => {
     void navigate({ to: '/' });
@@ -637,14 +642,15 @@ function App() {
   }, [activePage]);
 
   useEffect(() => {
-    if (!isSolved || !currentRecord.completedAt) return;
+    if (!showSolved || !currentRecord.completedAt) return;
     if (hasConvexBackend()) return;
+    if (!hasCustomPlayerName) return;
     if (submittedScoreIdsRef.current.has(currentRecord.id)) return;
     submittedScoreIdsRef.current.add(currentRecord.id);
     void submitGlobalScore(currentRecord).catch(() => {
       setLeaderboardStatus('Could not submit global score.');
     });
-  }, [currentRecord, isSolved]);
+  }, [currentRecord, hasCustomPlayerName, showSolved]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 640px)');
@@ -1326,6 +1332,7 @@ function App() {
     if (!showSolved) return;
 
     function onSolvedKeyDown(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) return;
       const key = event.key.toLowerCase();
       if (key === 'escape' || key === 'q') {
         event.preventDefault();
@@ -1760,6 +1767,8 @@ function App() {
           onStats={setCloudStats}
           onStatus={setLeaderboardStatus}
           playerName={playerName}
+          scoreRecordId={showSolved ? currentRecord.id : null}
+          scoreSubmissionsEnabled={hasCustomPlayerName}
         />
       )}
       {showDashboard && (
@@ -1867,7 +1876,7 @@ function App() {
             cloudStats={cloudStats}
             guestId={guestId}
             localStats={localProfileStats}
-            onNameChange={setPlayerName}
+            onNameChange={updatePlayerName}
             playerName={playerName}
           />
         </AppPageFrame>
@@ -2538,7 +2547,7 @@ function App() {
                     maxLength={32}
                     placeholder="anonymous"
                     value={playerName}
-                    onChange={(event) => setPlayerName(event.target.value)}
+                    onChange={(event) => updatePlayerName(event.target.value)}
                   />
                 </label>
               </section>
@@ -2617,7 +2626,10 @@ function App() {
         <SolvedModal
           difficulty={activeGame.difficulty}
           elapsedMs={elapsedMs}
+          needsName={!hasCustomPlayerName}
+          onNameChange={updatePlayerName}
           source={activeGame.source}
+          playerName={playerName}
           onLeaderboards={() => {
             setSolvedDismissed(true);
             navigateToPage('leaderboards');
@@ -2691,18 +2703,24 @@ function NumberPad({
 function SolvedModal({
   difficulty,
   elapsedMs,
+  needsName,
   onLeaderboards,
   onNewGame,
+  onNameChange,
   onPuzzleLog,
   onReview,
+  playerName,
   source,
 }: {
   difficulty?: PuzzleDifficulty | 'custom';
   elapsedMs: number;
+  needsName: boolean;
   onLeaderboards: () => void;
   onNewGame: () => void;
+  onNameChange: (value: string) => void;
   onPuzzleLog: () => void;
   onReview: () => void;
+  playerName: string;
   source: string;
 }) {
   const actions: [key: string, label: string, run: () => void][] = [
@@ -2733,6 +2751,23 @@ function SolvedModal({
             {difficulty ? ` · ${difficulty}` : ''}
           </p>
         </div>
+        {needsName && (
+          <div className="border-b border-[var(--border)] bg-[var(--input-bg)] p-3">
+            <label className="block">
+              <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+                leaderboard handle
+              </span>
+              <input
+                autoFocus
+                className="mt-2 w-full border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+                maxLength={32}
+                placeholder="anonymous"
+                value={playerName}
+                onChange={(event) => onNameChange(event.target.value)}
+              />
+            </label>
+          </div>
+        )}
         <div className="flex flex-col p-2">
           {actions.map(([key, label, run]) => (
             <button
@@ -4559,6 +4594,11 @@ function hashString(value: string) {
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+}
+
+function isCustomPlayerName(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? '';
+  return Boolean(trimmed && trimmed.toLowerCase() !== 'anonymous');
 }
 
 function digitFromKeyEvent(event: KeyboardEvent) {
