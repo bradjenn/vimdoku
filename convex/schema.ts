@@ -66,7 +66,9 @@ export default defineSchema({
     source: v.string(),
     status: v.union(v.literal('open'), v.literal('closed')),
     title: v.string(),
-  }).index('by_challengeId', ['challengeId']),
+  })
+    .index('by_challengeId', ['challengeId'])
+    .index('by_creatorAnonId', ['creatorAnonId']),
 
   challengeAttempts: defineTable({
     anonId: v.string(),
@@ -80,6 +82,7 @@ export default defineSchema({
     status: v.union(v.literal('in-progress'), v.literal('completed')),
     updatedAt: v.string(),
   })
+    .index('by_anonId_updated', ['anonId', 'updatedAt'])
     .index('by_challengeId_and_anonId', ['challengeId', 'anonId'])
     .index('by_challengeId_and_elapsedMs', ['challengeId', 'elapsedMs'])
     .index('by_challengeId_and_updatedAt', ['challengeId', 'updatedAt']),

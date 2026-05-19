@@ -96,6 +96,85 @@ export const getRace = query({
   },
 });
 
+export const listMine = query({
+  args: {
+    anonId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const [created, attemptRows] = await Promise.all([
+      ctx.db
+        .query('challenges')
+        .withIndex('by_creatorAnonId', (q) => q.eq('creatorAnonId', args.anonId))
+        .collect(),
+      ctx.db
+        .query('challengeAttempts')
+        .withIndex('by_anonId_updated', (q) => q.eq('anonId', args.anonId))
+        .order('desc')
+        .collect(),
+    ]);
+    const createdIds = new Set(created.map((challenge) => challenge.challengeId));
+    const challengeIds = new Set([
+      ...createdIds,
+      ...attemptRows.map((attempt) => attempt.challengeId),
+    ]);
+
+    const rows = await Promise.all(
+      [...challengeIds].map(async (challengeId) => {
+        const challenge =
+          created.find((item) => item.challengeId === challengeId) ??
+          (await ctx.db
+            .query('challenges')
+            .withIndex('by_challengeId', (q) => q.eq('challengeId', challengeId))
+            .unique());
+        if (!challenge) return null;
+
+        const attempts = await ctx.db
+          .query('challengeAttempts')
+          .withIndex('by_challengeId_and_updatedAt', (q) =>
+            q.eq('challengeId', challengeId),
+          )
+          .order('desc')
+          .take(80);
+        const sortedAttempts = attempts
+          .map((attempt) => ({
+            anonId: attempt.anonId,
+            completedAt: attempt.completedAt,
+            completion: attempt.completion,
+            elapsedMs: attempt.elapsedMs,
+            player: attempt.player,
+            recordId: attempt.recordId,
+            startedAt: attempt.startedAt,
+            status: attempt.status,
+            updatedAt: attempt.updatedAt,
+          }))
+          .sort(compareAttempts);
+        const mine = sortedAttempts.find((attempt) => attempt.anonId === args.anonId);
+
+        return {
+          attempts: sortedAttempts,
+          challengeId: challenge.challengeId,
+          createdAt: challenge.createdAt,
+          creatorName: challenge.creatorName,
+          difficulty: challenge.difficulty,
+          isCreator: challenge.creatorAnonId === args.anonId,
+          myAttempt: mine,
+          playMode: challenge.playMode ?? 'classic',
+          puzzleSize: challenge.puzzleSize ?? '9x9',
+          source: challenge.source,
+          status: challenge.status,
+          title: challenge.title,
+          updatedAt: latestChallengeActivity(challenge.createdAt, sortedAttempts),
+        };
+      }),
+    );
+
+    return rows
+      .filter((row) => row !== null)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 60);
+  },
+});
+
 export const startAttempt = mutation({
   args: {
     anonId: v.string(),
@@ -207,6 +286,17 @@ function compareAttempts(
   if (a.status !== b.status) return a.status === 'completed' ? -1 : 1;
   if (a.status === 'completed') return a.elapsedMs - b.elapsedMs;
   return b.updatedAt.localeCompare(a.updatedAt);
+}
+
+function latestChallengeActivity(
+  createdAt: string,
+  attempts: Array<{ updatedAt: string }>,
+) {
+  return attempts.reduce(
+    (latest, attempt) =>
+      attempt.updatedAt.localeCompare(latest) > 0 ? attempt.updatedAt : latest,
+    createdAt,
+  );
 }
 
 function cleanChallengeId(value: string) {

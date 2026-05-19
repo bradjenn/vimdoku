@@ -82,6 +82,7 @@ import {
   type LeaderboardEntry,
 } from './leaderboard';
 import { ChallengeBridge } from './ChallengeBridge';
+import { ChallengeHistoryPanel } from './ChallengeHistoryPanel';
 import { FriendsPanel, type FriendSummary } from './FriendsPanel';
 import {
   challengeIdFromGameId,
@@ -2357,20 +2358,43 @@ function App() {
               status={challengeStatus}
             />
           ) : (
-            <ChallengeSetupPanel
-              currentGame={activeGame}
-              difficulty={challengeDifficulty}
-              mode={challengeMode}
-              onCreate={createConfiguredRaceChallenge}
-              onCreateCurrent={() => createRaceChallenge()}
-              onDifficultyChange={setChallengeDifficulty}
-              onModeChange={setChallengeMode}
-              onSizeChange={setChallengeSize}
-              onSourceChange={setChallengeSource}
-              puzzleSize={challengeSize}
-              source={challengeSource}
-              status={challengeStatus}
-            />
+            <div className="grid gap-3 xl:grid-cols-[420px_minmax(0,1fr)]">
+              <ChallengeSetupPanel
+                currentGame={activeGame}
+                difficulty={challengeDifficulty}
+                mode={challengeMode}
+                onCreate={createConfiguredRaceChallenge}
+                onCreateCurrent={() => createRaceChallenge()}
+                onDifficultyChange={setChallengeDifficulty}
+                onModeChange={setChallengeMode}
+                onSizeChange={setChallengeSize}
+                onSourceChange={setChallengeSource}
+                puzzleSize={challengeSize}
+                source={challengeSource}
+                status={challengeStatus}
+              />
+              {hasConvexBackend() ? (
+                <ChallengeHistoryPanel
+                  onCopyLink={copyChallengeLink}
+                  onOpenChallenge={(challengeId) => {
+                    void navigate({
+                      to: '/challenge/$challengeId',
+                      params: { challengeId },
+                    });
+                  }}
+                />
+              ) : (
+                <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
+                  <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
+                    my challenges offline
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+                    Challenge history uses Convex so race links and results can sync
+                    between players.
+                  </p>
+                </section>
+              )}
+            </div>
           )}
         </AppPageFrame>
       )}
