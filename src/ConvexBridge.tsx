@@ -173,23 +173,33 @@ export function ConvexBridge({
   }, [anonId, gameRecords, onStatus, upsertGame]);
 
   useEffect(() => {
-    if (currentRecord.status !== 'completed' || !currentRecord.completedAt) return;
+    if (currentRecord.status !== 'completed') return;
     if (submittedIds.current.has(currentRecord.id)) return;
     submittedIds.current.add(currentRecord.id);
 
-    void submitScore({
-      anonId,
-      completedAt: currentRecord.completedAt,
-      difficulty: currentRecord.difficulty,
-      elapsedMs: currentRecord.elapsedMs,
-      player: playerName,
-      puzzle: currentRecord.puzzle,
-      recordId: currentRecord.id,
-      source: currentRecord.source,
-    }).catch(() => {
+    void submitScore(toScoreArgs(currentRecord, anonId, playerName)).catch(() => {
+      submittedIds.current.delete(currentRecord.id);
       onStatus('Could not submit Convex score.');
     });
   }, [anonId, currentRecord, onStatus, playerName, submitScore]);
+
+  useEffect(() => {
+    const completedRecords = gameRecords
+      .filter(
+        (record) =>
+          record.status === 'completed' && !submittedIds.current.has(record.id),
+      )
+      .slice(0, 8);
+    if (completedRecords.length === 0) return;
+
+    for (const record of completedRecords) {
+      submittedIds.current.add(record.id);
+      void submitScore(toScoreArgs(record, anonId, playerName)).catch(() => {
+        submittedIds.current.delete(record.id);
+        onStatus('Could not backfill Convex scores.');
+      });
+    }
+  }, [anonId, gameRecords, onStatus, playerName, submitScore]);
 
   return null;
 }
@@ -213,5 +223,22 @@ function toGameArgs(record: GameRecord, anonId: string): UpsertGameArgs {
     source: record.source,
     status: record.status,
     updatedAt: record.updatedAt,
+  };
+}
+
+function toScoreArgs(
+  record: GameRecord,
+  anonId: string,
+  playerName: string,
+): SubmitScoreArgs {
+  return {
+    anonId,
+    completedAt: record.completedAt ?? record.updatedAt,
+    difficulty: record.difficulty,
+    elapsedMs: record.elapsedMs,
+    player: playerName,
+    puzzle: record.puzzle,
+    recordId: record.id,
+    source: record.source,
   };
 }
