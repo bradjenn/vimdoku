@@ -1920,7 +1920,7 @@ function App() {
             </div>
           </header>
 
-          <div className="grid min-h-0 flex-1 place-items-center px-3 py-3 sm:px-5 lg:px-8 lg:py-4">
+          <div className="grid min-h-0 place-items-center px-3 py-3 sm:px-5 lg:flex-1 lg:px-8 lg:py-4">
             <div className="w-full max-w-[min(76vh,calc(100vh-176px),820px,100%)]">
               <div
                 className="board-settle grid aspect-square grid-cols-9 border-4 border-[var(--grid-line)] bg-[var(--grid-line)]"
@@ -1987,6 +1987,8 @@ function App() {
               setNoteMode((current) => !current);
             }}
           />
+
+          <div className="flex-1 lg:hidden" aria-hidden="true" />
 
           <StatusLine
             cellLabel={labelCell(selected)}
