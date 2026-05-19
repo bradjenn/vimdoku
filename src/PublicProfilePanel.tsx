@@ -295,7 +295,7 @@ export function PublicProfilePanel({
                 </div>
                 <div className="flex items-center gap-3 text-[var(--muted)]">
                   <span className="text-[var(--accent)]">
-                    {formatDuration(game.elapsedMs)}
+                    {formatPublicSolveTime(game)}
                   </span>
                   <span>{formatDate(game.completedAt)}</span>
                 </div>
@@ -398,6 +398,12 @@ function formatDuration(ms: number) {
   return hours > 0
     ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}`
     : `${minutes}:${seconds}`;
+}
+
+function formatPublicSolveTime(game: PublicProfileCompletion) {
+  if (game.playMode === 'zen') return 'zen';
+  if (game.elapsedMs <= 0) return 'untimed';
+  return formatDuration(game.elapsedMs);
 }
 
 function formatDate(value: string) {
