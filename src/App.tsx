@@ -1875,7 +1875,7 @@ function App() {
 
       {showBoard && (
         <div
-        className="grid min-h-screen w-full transition-[grid-template-columns] duration-300 ease-out lg:h-screen lg:min-h-0 lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)_var(--hint-rail-width)]"
+        className="grid min-h-screen w-full grid-cols-1 transition-[grid-template-columns] duration-300 ease-out lg:h-screen lg:min-h-0 lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)_var(--hint-rail-width)]"
         style={
           {
             '--sidebar-width': sidebarOpen ? '340px' : '0px',
@@ -1887,6 +1887,39 @@ function App() {
           className="column-rise order-2 flex min-h-screen flex-col justify-between border-[var(--border)] bg-[var(--workspace-bg)] lg:min-h-0 lg:border-l"
           style={{ animationDelay: '80ms' }}
         >
+          <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2.5 lg:hidden">
+            <div className="flex min-w-0 items-baseline gap-2 font-mono">
+              <span className="shrink-0 text-sm font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
+                vimdoku
+              </span>
+              <span className="truncate text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
+                {labelCell(selected)} · {completion}/81
+              </span>
+            </div>
+            <div className="flex shrink-0 gap-1.5">
+              <button
+                type="button"
+                aria-label="Hint"
+                onClick={() => {
+                  resumeTimerFromActivity();
+                  setHintRailOpen(true);
+                  askForHint();
+                }}
+                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] active:translate-y-px"
+              >
+                ?
+              </button>
+              <button
+                type="button"
+                aria-label="Open menu"
+                onClick={() => openModalRoute('menu')}
+                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] active:translate-y-px"
+              >
+                <Menu size={18} />
+              </button>
+            </div>
+          </header>
+
           <div className="grid min-h-0 flex-1 place-items-center px-3 py-3 sm:px-5 lg:px-8 lg:py-4">
             <div className="w-full max-w-[min(76vh,calc(100vh-176px),820px,100%)]">
               <div
@@ -1938,6 +1971,23 @@ function App() {
             </div>
           </div>
 
+          <NumberPad
+            noteMode={noteMode}
+            onDigit={(digit) => {
+              resumeTimerFromActivity();
+              if (noteMode) toggleNote(digit);
+              else setCell(digit);
+            }}
+            onErase={() => {
+              resumeTimerFromActivity();
+              setCell(0);
+            }}
+            onToggleNotes={() => {
+              resumeTimerFromActivity();
+              setNoteMode((current) => !current);
+            }}
+          />
+
           <StatusLine
             cellLabel={labelCell(selected)}
             compact={compactStatus}
@@ -1958,7 +2008,7 @@ function App() {
 
         <aside
           aria-hidden={!sidebarOpen}
-          className={`column-rise order-1 min-h-0 overflow-hidden border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 lg:h-screen ${
+          className={`column-rise order-1 hidden min-h-0 overflow-hidden border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 lg:block lg:h-screen ${
             sidebarOpen ? 'opacity-100' : 'lg:pointer-events-none lg:opacity-0'
           }`}
         >
@@ -2067,12 +2117,14 @@ function App() {
 
         <aside
           aria-hidden={!hintRailOpen}
-          className={`column-rise order-3 min-h-0 overflow-hidden border-l border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 lg:h-screen ${
-            hintRailOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          className={`column-rise order-3 border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:max-h-[80vh] max-lg:border-t lg:h-screen lg:min-h-0 lg:overflow-hidden lg:border-l ${
+            hintRailOpen
+              ? 'opacity-100'
+              : 'pointer-events-none opacity-0 max-lg:hidden'
           }`}
           style={{ animationDelay: '160ms' }}
         >
-          <div className="h-full w-[360px]">
+          <div className="h-full w-full lg:w-[360px]">
             <HintRail
               applyHint={applyHint}
               askForHint={askForHint}
@@ -2581,6 +2633,56 @@ function App() {
       )}
 
     </main>
+  );
+}
+
+// Touch number entry — mobile/tablet only; desktop uses the keyboard.
+function NumberPad({
+  noteMode,
+  onDigit,
+  onErase,
+  onToggleNotes,
+}: {
+  noteMode: boolean;
+  onDigit: (digit: number) => void;
+  onErase: () => void;
+  onToggleNotes: () => void;
+}) {
+  return (
+    <div className="shrink-0 border-t border-[var(--border)] bg-[var(--status-bg)] p-2 lg:hidden">
+      <div className="grid grid-cols-9 gap-1">
+        {Array.from({ length: 9 }, (_, index) => index + 1).map((digit) => (
+          <button
+            type="button"
+            key={digit}
+            onClick={() => onDigit(digit)}
+            className="grid aspect-square place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-lg font-bold text-[var(--app-text)] transition active:translate-y-px active:bg-[var(--panel-soft)]"
+          >
+            {digit}
+          </button>
+        ))}
+      </div>
+      <div className="mt-1 grid grid-cols-2 gap-1">
+        <button
+          type="button"
+          onClick={onToggleNotes}
+          className={`border px-3 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.16em] transition active:translate-y-px ${
+            noteMode
+              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+              : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)]'
+          }`}
+        >
+          notes {noteMode ? 'on' : 'off'}
+        </button>
+        <button
+          type="button"
+          onClick={onErase}
+          className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-text)] transition active:translate-y-px"
+        >
+          erase
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -3325,7 +3427,7 @@ function GameLibrary({
 
   return (
     <div className="space-y-3">
-      <section className="grid gap-px border border-[var(--border)] bg-[var(--border)] sm:grid-cols-3">
+      <section className="grid grid-cols-3 gap-px border border-[var(--border)] bg-[var(--border)]">
         <ArchiveStat label="total" value={String(totalCount)} />
         <ArchiveStat label="in progress" value={String(inProgressCount)} />
         <ArchiveStat label="completed" value={String(completedCount)} />
@@ -3806,7 +3908,7 @@ function ProfilePanel({
         <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
           [personal stats]
         </header>
-        <div className="grid gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-px bg-[var(--border)] lg:grid-cols-3">
           <ProfileStat label="completed" value={String(completedCount)} />
           <ProfileStat label="in progress" value={String(localStats.inProgressCount)} />
           <ProfileStat label="streak" value={`${localStats.currentStreak}d`} />
