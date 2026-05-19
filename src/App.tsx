@@ -69,6 +69,7 @@ import {
   loadStoredState,
   saveStoredState,
   upsertGameRecord,
+  gridToString,
   type GameMeta,
   type GameRecord,
   type Snapshot,
@@ -119,6 +120,7 @@ type PageRoute =
   | 'challenge'
   | 'profile';
 type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
+type ChallengePuzzleSource = 'daily' | 'generated' | 'current';
 type ThemeId = (typeof DARK_THEMES)[number]['id'];
 
 const THEME_KEY = 'vimdoku-theme-v1';
@@ -372,6 +374,12 @@ function App() {
     useState<PuzzleDifficulty>('easy');
   const [dashboardMode, setDashboardMode] = useState<PlayMode>('classic');
   const [dashboardSize, setDashboardSize] = useState<PuzzleSize>('9x9');
+  const [challengeDifficulty, setChallengeDifficulty] =
+    useState<PuzzleDifficulty>('medium');
+  const [challengeMode, setChallengeMode] = useState<PlayMode>('classic');
+  const [challengeSize, setChallengeSize] = useState<PuzzleSize>('9x9');
+  const [challengeSource, setChallengeSource] =
+    useState<ChallengePuzzleSource>('daily');
   const [leaderboardMode, setLeaderboardMode] = useState<PlayMode>('classic');
   const [leaderboardSize, setLeaderboardSize] = useState<PuzzleSize>('9x9');
   const [solvedDismissed, setSolvedDismissed] = useState(false);
@@ -463,7 +471,7 @@ function App() {
               : page === 'challenge'
                 ? routeChallengeId
                   ? challengePath(routeChallengeId)
-                  : '/new'
+                  : '/challenge'
                 : '/profile';
       void navigate({ to: path });
     },
@@ -1347,29 +1355,78 @@ function App() {
     return url;
   }, []);
 
-  const createRaceChallenge = useCallback(() => {
+  const createRaceChallenge = useCallback((template?: {
+    difficulty?: PuzzleDifficulty | 'custom';
+    playMode: PlayMode;
+    puzzle: string;
+    puzzleSize: PuzzleSize;
+    source: string;
+  }) => {
     if (!hasConvexBackend()) {
       setChallengeStatus('Challenge links need the Convex backend.');
       setStatusLine('Challenge links need the Convex backend.');
       return;
     }
 
-    const challengeId = makeChallengeId();
-    const request: ChallengeCreateRequest = {
-      challengeId,
-      creatorName: playerName,
+    const raceTemplate = template ?? {
       difficulty: activeGame.difficulty,
       playMode: activeMode,
       puzzle: activeGame.puzzle,
       puzzleSize: activeSize,
-      requestId: `${challengeId}-${Date.now().toString(36)}`,
       source: activeGame.source,
+    };
+    const challengeId = makeChallengeId();
+    const request: ChallengeCreateRequest = {
+      challengeId,
+      creatorName: playerName,
+      difficulty: raceTemplate.difficulty,
+      playMode: raceTemplate.playMode,
+      puzzle: raceTemplate.puzzle,
+      puzzleSize: raceTemplate.puzzleSize,
+      requestId: `${challengeId}-${Date.now().toString(36)}`,
+      source: raceTemplate.source,
     };
     setChallengeCreateRequest(request);
     setChallengeStatus('Creating race link...');
     closeMenuModal();
     void navigate({ to: '/challenge/$challengeId', params: { challengeId } });
   }, [activeGame, activeMode, activeSize, closeMenuModal, navigate, playerName]);
+
+  const createConfiguredRaceChallenge = useCallback(() => {
+    if (challengeSource === 'current') {
+      createRaceChallenge();
+      return;
+    }
+
+    const dateKey = todayDateKey();
+    const seed =
+      challengeSource === 'daily'
+        ? dailySeed(
+            challengeDifficulty,
+            'vimdoku',
+            dateKey,
+            challengeSize,
+            challengeMode,
+          )
+        : Date.now();
+    const puzzleGrid = generatePuzzle(challengeDifficulty, seed, challengeSize);
+    createRaceChallenge({
+      difficulty: challengeDifficulty,
+      playMode: challengeMode,
+      puzzle: gridToString(puzzleGrid, challengeSize),
+      puzzleSize: challengeSize,
+      source:
+        challengeSource === 'daily'
+          ? `vimdoku ${challengeSize} ${modeLabel(challengeMode)} daily ${dateKey}`
+          : `generated ${challengeSize} ${modeLabel(challengeMode)} ${challengeDifficulty} challenge`,
+    });
+  }, [
+    challengeDifficulty,
+    challengeMode,
+    challengeSize,
+    challengeSource,
+    createRaceChallenge,
+  ]);
 
   const handleChallengeCreated = useCallback(
     (challengeId: string, requestId: string) => {
@@ -1401,15 +1458,15 @@ function App() {
       if (key === 'n') openNewGame();
       else if (key === 'g') openGameLibrary();
       else if (key === 'l') openLeaderboards();
-      else if (key === 'r') createRaceChallenge();
+      else if (key === 'r') navigateToPage('challenge');
       else if (key === 'p') goToProfile();
       else if (key === 's') openModalRoute('settings');
       else goToPlay();
     },
     [
-      createRaceChallenge,
       goToPlay,
       goToProfile,
+      navigateToPage,
       openGameLibrary,
       openLeaderboards,
       openModalRoute,
@@ -1535,7 +1592,7 @@ function App() {
       } else if (['leaderboard', 'leaderboards', 'scores', 'lb'].includes(command)) {
         openLeaderboards();
       } else if (['challenge', 'race', 'versus', 'vs'].includes(command)) {
-        createRaceChallenge();
+        navigateToPage('challenge');
       } else if (['profile', 'me', 'account'].includes(command)) {
         goToProfile();
       } else if (['clear', 'blank'].includes(command)) {
@@ -1562,11 +1619,11 @@ function App() {
       clearAll,
       clearHintState,
       clearNotes,
-      createRaceChallenge,
       fillAllCandidates,
       goToDashboard,
       goToProfile,
       jumpToDigit,
+      navigateToPage,
       newGameDifficulty,
       newGameMode,
       newGameSize,
@@ -2225,25 +2282,46 @@ function App() {
         <AppPageFrame
           activePage="challenge"
           onNavigate={navigateToPage}
-          subtitle="share link · same puzzle · fastest solve wins"
+          subtitle={
+            routeChallengeId
+              ? 'share link · same puzzle · fastest solve wins'
+              : 'choose rules · create link · race friends'
+          }
           title="Challenge Race"
         >
-          <ChallengeRacePanel
-            activeChallengeId={activeChallengeId}
-            challenge={challengeRace}
-            challengeId={routeChallengeId}
-            isCurrentSolved={
-              Boolean(activeChallengeId && activeChallengeId === routeChallengeId) &&
-              currentRecord.status === 'completed'
-            }
-            onContinue={goToPlay}
-            onCopyLink={() => {
-              if (routeChallengeId) copyChallengeLink(routeChallengeId);
-            }}
-            onStart={startChallengeRace}
-            shareUrl={challengeShareUrl}
-            status={challengeStatus}
-          />
+          {routeChallengeId ? (
+            <ChallengeRacePanel
+              activeChallengeId={activeChallengeId}
+              challenge={challengeRace}
+              challengeId={routeChallengeId}
+              isCurrentSolved={
+                Boolean(activeChallengeId && activeChallengeId === routeChallengeId) &&
+                currentRecord.status === 'completed'
+              }
+              onContinue={goToPlay}
+              onCopyLink={() => {
+                if (routeChallengeId) copyChallengeLink(routeChallengeId);
+              }}
+              onStart={startChallengeRace}
+              shareUrl={challengeShareUrl}
+              status={challengeStatus}
+            />
+          ) : (
+            <ChallengeSetupPanel
+              currentGame={activeGame}
+              difficulty={challengeDifficulty}
+              mode={challengeMode}
+              onCreate={createConfiguredRaceChallenge}
+              onCreateCurrent={() => createRaceChallenge()}
+              onDifficultyChange={setChallengeDifficulty}
+              onModeChange={setChallengeMode}
+              onSizeChange={setChallengeSize}
+              onSourceChange={setChallengeSource}
+              puzzleSize={challengeSize}
+              source={challengeSource}
+              status={challengeStatus}
+            />
+          )}
         </AppPageFrame>
       )}
 
@@ -3795,6 +3873,7 @@ function AppPageFrame({
     ['play', 'play'],
     ['games', 'puzzles'],
     ['leaderboards', 'scores'],
+    ['challenge', 'race'],
     ['profile', 'profile'],
   ];
 
@@ -4438,6 +4517,211 @@ function Leaderboards({
           ))}
         </LeaderboardPanel>
       </div>
+    </div>
+  );
+}
+
+function ChallengeSetupPanel({
+  currentGame,
+  difficulty,
+  mode,
+  onCreate,
+  onCreateCurrent,
+  onDifficultyChange,
+  onModeChange,
+  onSizeChange,
+  onSourceChange,
+  puzzleSize,
+  source,
+  status,
+}: {
+  currentGame: GameMeta;
+  difficulty: PuzzleDifficulty;
+  mode: PlayMode;
+  onCreate: () => void;
+  onCreateCurrent: () => void;
+  onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
+  onModeChange: (mode: PlayMode) => void;
+  onSizeChange: (puzzleSize: PuzzleSize) => void;
+  onSourceChange: (source: ChallengePuzzleSource) => void;
+  puzzleSize: PuzzleSize;
+  source: ChallengePuzzleSource;
+  status: string;
+}) {
+  const previewGrid = useMemo(() => {
+    if (source === 'current') {
+      return parseGrid(currentGame.puzzle, currentGame.puzzleSize);
+    }
+    return generatePuzzle(
+      difficulty,
+      dailySeed(
+        difficulty,
+        source === 'daily' ? 'vimdoku-preview' : 'generated-preview',
+        todayDateKey(),
+        puzzleSize,
+        mode,
+      ),
+      puzzleSize,
+    );
+  }, [currentGame, difficulty, mode, puzzleSize, source]);
+  const activeSize = source === 'current' ? currentGame.puzzleSize : puzzleSize;
+  const activeMode = source === 'current' ? currentGame.playMode : mode;
+  const activeDifficulty =
+    source === 'current' ? currentGame.difficulty ?? 'custom' : difficulty;
+  const sources: [ChallengePuzzleSource, string, string][] = [
+    ['daily', 'daily', 'stable puzzle for today'],
+    ['generated', 'generated', 'fresh random puzzle'],
+    ['current', 'current', 'use loaded board'],
+  ];
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="border border-[var(--border)] bg-[var(--input-bg)]">
+        <header className="border-b border-[var(--border)] bg-[var(--status-bg)] p-3">
+          <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
+            race setup
+          </p>
+          <h2 className="mt-1 font-mono text-xl font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
+            create a challenge link
+          </h2>
+        </header>
+        <div className="space-y-4 p-3">
+          <NewGameField label="puzzle source">
+            <div className="grid gap-2 md:grid-cols-3">
+              {sources.map(([sourceId, label, description]) => (
+                <button
+                  type="button"
+                  key={sourceId}
+                  className={`border p-3 text-left font-mono transition ${
+                    source === sourceId
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
+                  }`}
+                  onClick={() => onSourceChange(sourceId)}
+                >
+                  <span className="block text-xs font-black uppercase tracking-[0.16em]">
+                    {label}
+                  </span>
+                  <span
+                    className={`mt-2 block text-xs leading-relaxed ${
+                      source === sourceId
+                        ? 'text-[var(--app-bg)] opacity-80'
+                        : 'text-[var(--muted)]'
+                    }`}
+                  >
+                    {description}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </NewGameField>
+
+          {source !== 'current' && (
+            <>
+              <NewGameField label="board">
+                <div className="grid grid-cols-2 gap-2">
+                  {PUZZLE_SIZES.map((option) => (
+                    <button
+                      type="button"
+                      key={option}
+                      className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
+                        puzzleSize === option
+                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                      }`}
+                      onClick={() => onSizeChange(option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </NewGameField>
+
+              <NewGameField label="mode">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {PLAY_MODES.map((option) => (
+                    <button
+                      type="button"
+                      key={option}
+                      className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
+                        mode === option
+                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                      }`}
+                      onClick={() => onModeChange(option)}
+                    >
+                      {modeLabel(option)}
+                    </button>
+                  ))}
+                </div>
+              </NewGameField>
+
+              <NewGameField label="difficulty">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {NEW_GAME_DIFFICULTIES.map((option) => (
+                    <button
+                      type="button"
+                      key={option}
+                      className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
+                        difficulty === option
+                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                      }`}
+                      onClick={() => onDifficultyChange(option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </NewGameField>
+            </>
+          )}
+
+          {status && (
+            <p className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--accent)]">
+              {status}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="border border-[var(--border)] bg-[var(--input-bg)]">
+        <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+          [race-preview]
+        </header>
+        <div className="space-y-3 p-3">
+          <PuzzlePreview
+            grid={previewGrid}
+            givens={previewGrid.map((value) => value !== 0)}
+          />
+          <div className="grid gap-2">
+            <ChallengeMeta label="source" value={source} />
+            <ChallengeMeta label="grid" value={activeSize} />
+            <ChallengeMeta label="rules" value={modeLabel(activeMode)} />
+            <ChallengeMeta label="difficulty" value={activeDifficulty} />
+            <ChallengeMeta
+              label="filled"
+              value={`${previewGrid.filter(Boolean).length}/${boardConfigFor(activeSize).cellCount}`}
+            />
+          </div>
+          <button
+            type="button"
+            className="w-full border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)]"
+            onClick={onCreate}
+          >
+            create race link
+          </button>
+          {source !== 'current' && (
+            <button
+              type="button"
+              className="w-full border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]"
+              onClick={onCreateCurrent}
+            >
+              challenge current puzzle
+            </button>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -5127,6 +5411,7 @@ function pageFromPath(pathname: string): PageRoute {
   if (pathname === '/new') return 'new';
   if (pathname === '/games') return 'games';
   if (pathname === '/leaderboards') return 'leaderboards';
+  if (pathname === '/challenge') return 'challenge';
   if (challengeIdFromPath(pathname)) return 'challenge';
   if (pathname === '/profile') return 'profile';
   return 'play';
