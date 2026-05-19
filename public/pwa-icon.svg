@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Vimdoku app icon</title>
+  <desc id="desc">A terminal-inspired Sudoku app icon with the Vimdoku lightning mark.</desc>
+  <rect width="512" height="512" rx="92" fill="#0c0e14"/>
+  <path fill="#171923" d="M50 50h412v412H50z"/>
+  <path fill="#242633" d="M84 84h328v328H84z"/>
+  <path fill="#0c0e14" d="M190 84h18v328h-18zM303 84h18v328h-18zM84 190h328v18H84zM84 303h328v18H84z"/>
+  <path fill="#a6c779" d="M187 358c-7 9-22 4-22-8v-82a12 12 0 0 0-12-12H95c-10 0-16-12-10-20l66-92c6-8 0-20-10-20H91c-10 0-16-12-10-20l43-60c2-3 6-5 10-5h210c10 0 16 12 10 20l-66 92c-6 8 0 20 10 20h87c10 0 16 12 10 20L187 358z"/>
+  <path fill="#d7f78a" d="M166 68h152c8 0 13 9 8 16L222 229c-6 8 0 20 10 20h65c10 0 16 12 10 20L185 440c-7 9-22 4-22-8v-78c0-7-5-12-12-12H90c-10 0-16-12-10-20l61-86c6-8 0-20-10-20H83c-10 0-16-12-10-20l83-118c2-3 6-5 10-5z" opacity=".34"/>
+  <path fill="#7dd6e6" d="M347 63h69v69h-69zM375 347h69v69h-69z" opacity=".78"/>
+  <path fill="#0c0e14" d="M112 112h48v48h-48zM240 112h48v48h-48zM112 240h48v48h-48zM240 240h48v48h-48zM368 240h48v48h-48zM112 368h48v48h-48zM240 368h48v48h-48z"/>
+</svg>
