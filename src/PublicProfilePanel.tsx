@@ -7,6 +7,7 @@ import type { FunctionReference } from 'convex/server';
 export type PublicProfile = {
   createdAt: string;
   friendCode: string;
+  friends: PublicProfileFriend[];
   name: string;
   recentCompleted: PublicProfileCompletion[];
   stats: {
@@ -26,6 +27,15 @@ type PublicProfileCompletion = {
   playMode: string;
   puzzleSize: string;
   source: string;
+};
+
+type PublicProfileFriend = {
+  friendCode: string;
+  name: string;
+  stats: {
+    bestElapsedMs?: number;
+    completedCount: number;
+  };
 };
 
 const publicProfileRef = makeFunctionReference<
@@ -153,6 +163,57 @@ export function PublicProfilePanel({
               : 'none yet'}
           </span>
         </div>
+      </section>
+
+      <section className="border border-[var(--border)] bg-[var(--input-bg)] lg:col-span-2">
+        <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+          [public friends]
+        </header>
+        {profile.friends.length === 0 ? (
+          <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
+            No public friends yet.
+          </p>
+        ) : (
+          <div className="grid gap-px bg-[var(--border)] md:grid-cols-2">
+            {profile.friends.map((friend) => (
+              <a
+                key={friend.friendCode}
+                className="group block bg-[var(--input-bg)] p-4 transition hover:bg-[var(--panel-soft)]"
+                href={`/u/${encodeURIComponent(friend.friendCode)}`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center border border-[var(--accent)] bg-[var(--status-bg)] font-mono text-sm font-black text-[var(--accent)]">
+                    {friend.name.trim().slice(0, 1).toUpperCase() || 'A'}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-sm font-black text-[var(--app-text)] group-hover:text-[var(--accent)]">
+                      {friend.name}
+                    </span>
+                    <span className="mt-1 block font-mono text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+                      {friend.friendCode}
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-[0.65rem] uppercase tracking-[0.14em]">
+                  <span className="border border-[var(--border)] bg-[var(--status-bg)] px-2 py-1 text-[var(--muted)]">
+                    completed{' '}
+                    <span className="text-[var(--app-text)]">
+                      {friend.stats.completedCount}
+                    </span>
+                  </span>
+                  <span className="border border-[var(--border)] bg-[var(--status-bg)] px-2 py-1 text-[var(--muted)]">
+                    best{' '}
+                    <span className="text-[var(--app-text)]">
+                      {friend.stats.bestElapsedMs
+                        ? formatDuration(friend.stats.bestElapsedMs)
+                        : '--'}
+                    </span>
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="border border-[var(--border)] bg-[var(--input-bg)] lg:col-span-2">

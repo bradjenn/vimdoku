@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutationGeneric as mutation, queryGeneric as query } from 'convex/server';
+import type { QueryCtx } from './_generated/server';
 
 export const upsert = mutation({
   args: {
@@ -71,10 +72,33 @@ export const publicByFriendCode = query({
       timed.length > 0
         ? Math.min(...timed.map((game) => game.elapsedMs))
         : undefined;
+    const friendships = await acceptedFriendshipsFor(ctx, profile.anonId);
+    const publicFriends = await Promise.all(
+      friendships.slice(0, 24).map(async (friendship) => {
+        const friendAnonId =
+          friendship.requesterAnonId === profile.anonId
+            ? friendship.recipientAnonId
+            : friendship.requesterAnonId;
+        const friendProfile = await ctx.db
+          .query('profiles')
+          .withIndex('by_anonId', (q) => q.eq('anonId', friendAnonId))
+          .unique();
+
+        if (!friendProfile?.friendCode) return null;
+
+        const friendStats = await publicStatsFor(ctx, friendAnonId);
+        return {
+          friendCode: friendProfile.friendCode,
+          name: friendProfile.name,
+          stats: friendStats,
+        };
+      }),
+    );
 
     return {
       createdAt: profile.createdAt,
       friendCode: profile.friendCode ?? friendCode,
+      friends: publicFriends.filter((friend) => friend !== null),
       name: profile.name,
       stats: {
         averageElapsedMs:
@@ -102,6 +126,42 @@ export const publicByFriendCode = query({
 function cleanName(value: string) {
   const trimmed = value.trim().slice(0, 32);
   return trimmed || 'anonymous';
+}
+
+async function acceptedFriendshipsFor(ctx: QueryCtx, anonId: string) {
+  const [outgoing, incoming] = await Promise.all([
+    ctx.db
+      .query('friendships')
+      .withIndex('by_requesterAnonId', (q) => q.eq('requesterAnonId', anonId))
+      .collect(),
+    ctx.db
+      .query('friendships')
+      .withIndex('by_recipientAnonId', (q) => q.eq('recipientAnonId', anonId))
+      .collect(),
+  ]);
+
+  return [...outgoing, ...incoming]
+    .filter((friendship) => friendship.status === 'accepted')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+async function publicStatsFor(ctx: QueryCtx, anonId: string) {
+  const games = await ctx.db
+    .query('games')
+    .withIndex('by_anonId_updated', (q) => q.eq('anonId', anonId))
+    .order('desc')
+    .take(200);
+  const completed = games.filter((game) => game.status === 'completed');
+  const timed = completed.filter((game) => game.elapsedMs > 0);
+  const bestElapsedMs =
+    timed.length > 0
+      ? Math.min(...timed.map((game) => game.elapsedMs))
+      : undefined;
+
+  return {
+    bestElapsedMs,
+    completedCount: completed.length,
+  };
 }
 
 function cleanFriendCode(value: string) {
