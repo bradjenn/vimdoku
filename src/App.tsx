@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Search,
   Settings,
+  Swords,
   Terminal,
   Trophy,
   Undo2,
@@ -79,6 +80,16 @@ import {
   submitGlobalScore,
   type LeaderboardEntry,
 } from './leaderboard';
+import { ChallengeBridge } from './ChallengeBridge';
+import {
+  challengeIdFromGameId,
+  challengeIdFromPath,
+  challengePath,
+  createChallengeGameMeta,
+  makeChallengeId,
+  type ChallengeCreateRequest,
+  type ChallengeRace,
+} from './challenges';
 import { ConvexBridge, type CloudProfile, type CloudStats } from './ConvexBridge';
 import { hasConvexBackend } from './convexClient';
 import { getOrCreateGuestId, shortGuestId } from './identity';
@@ -99,7 +110,14 @@ type HintMode = 'nudge' | 'explain' | 'show';
 type CommandMode = 'command' | 'search';
 type MenuModal = 'menu' | 'settings' | 'commands' | 'new' | null;
 type RouteModal = 'menu' | 'settings' | 'commands';
-type PageRoute = 'dashboard' | 'play' | 'new' | 'games' | 'leaderboards' | 'profile';
+type PageRoute =
+  | 'dashboard'
+  | 'play'
+  | 'new'
+  | 'games'
+  | 'leaderboards'
+  | 'challenge'
+  | 'profile';
 type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
 type ThemeId = (typeof DARK_THEMES)[number]['id'];
 
@@ -290,6 +308,7 @@ function App() {
   const routeModal = modalFromPath(pathname);
   const activePage = pageFromPath(pathname);
   const dailyRoute = useMemo(() => parseDailyRoute(pathname), [pathname]);
+  const routeChallengeId = useMemo(() => challengeIdFromPath(pathname), [pathname]);
   const showDashboard = activePage === 'dashboard';
   const showBoard = activePage === 'play';
   const [grid, setGrid] = useState<Grid>(() => loadLegacySnapshot()?.grid ?? STARTER_GRID);
@@ -331,6 +350,11 @@ function App() {
   );
   const [globalScores, setGlobalScores] = useState<LeaderboardEntry[]>([]);
   const [leaderboardStatus, setLeaderboardStatus] = useState('');
+  const [challengeRace, setChallengeRace] = useState<ChallengeRace | null>(null);
+  const [challengeStatus, setChallengeStatus] = useState('');
+  const [challengeShareUrl, setChallengeShareUrl] = useState('');
+  const [challengeCreateRequest, setChallengeCreateRequest] =
+    useState<ChallengeCreateRequest | null>(null);
   const [cloudProfile, setCloudProfile] = useState<CloudProfile | null>(null);
   const [cloudStats, setCloudStats] = useState<CloudStats | null>(null);
   const [guestId] = useState(() => getOrCreateGuestId());
@@ -369,6 +393,7 @@ function App() {
   const hasCustomPlayerName = isCustomPlayerName(playerName);
   const activeSize = activeGame.puzzleSize ?? puzzleSizeFromGrid(grid);
   const activeMode = activeGame.playMode ?? 'classic';
+  const activeChallengeId = challengeIdFromGameId(activeGame.id);
   const activeConfig = boardConfigFor(activeSize);
   const activeDigits = activeConfig.digits;
   const activeCellCount = activeConfig.cellCount;
@@ -430,14 +455,18 @@ function App() {
             ? '/play'
             : page === 'new'
               ? '/new'
-            : page === 'games'
-              ? '/games'
+              : page === 'games'
+                ? '/games'
               : page === 'leaderboards'
                 ? '/leaderboards'
+              : page === 'challenge'
+                ? routeChallengeId
+                  ? challengePath(routeChallengeId)
+                  : '/new'
                 : '/profile';
       void navigate({ to: path });
     },
-    [navigate],
+    [navigate, routeChallengeId],
   );
 
   const openModalRoute = useCallback(
@@ -706,6 +735,13 @@ function App() {
         setLeaderboardStatus('Could not load global leaderboard.');
       });
   }, [activePage, leaderboardMode, leaderboardSize]);
+
+  useEffect(() => {
+    if (!routeChallengeId) return;
+    setChallengeRace(null);
+    setChallengeShareUrl(`${window.location.origin}${challengePath(routeChallengeId)}`);
+    setChallengeStatus('Loading challenge race...');
+  }, [routeChallengeId]);
 
   useEffect(() => {
     if (!showSolved || !currentRecord.completedAt) return;
@@ -1300,6 +1336,65 @@ function App() {
     setStatusLine('Opened leaderboards.');
   }, [navigate]);
 
+  const copyChallengeLink = useCallback((challengeId: string) => {
+    const url = `${window.location.origin}${challengePath(challengeId)}`;
+    setChallengeShareUrl(url);
+    void navigator.clipboard?.writeText(url).catch(() => {
+      setChallengeStatus('Challenge link is ready. Copy it from the lobby.');
+    });
+    setStatusLine('Challenge link copied.');
+    return url;
+  }, []);
+
+  const createRaceChallenge = useCallback(() => {
+    if (!hasConvexBackend()) {
+      setChallengeStatus('Challenge links need the Convex backend.');
+      setStatusLine('Challenge links need the Convex backend.');
+      return;
+    }
+
+    const challengeId = makeChallengeId();
+    const request: ChallengeCreateRequest = {
+      challengeId,
+      creatorName: playerName,
+      difficulty: activeGame.difficulty,
+      playMode: activeMode,
+      puzzle: activeGame.puzzle,
+      puzzleSize: activeSize,
+      requestId: `${challengeId}-${Date.now().toString(36)}`,
+      source: activeGame.source,
+    };
+    setChallengeCreateRequest(request);
+    setChallengeStatus('Creating race link...');
+    closeMenuModal();
+    void navigate({ to: '/challenge/$challengeId', params: { challengeId } });
+  }, [activeGame, activeMode, activeSize, closeMenuModal, navigate, playerName]);
+
+  const handleChallengeCreated = useCallback(
+    (challengeId: string, requestId: string) => {
+      setChallengeCreateRequest((current) =>
+        current?.requestId === requestId ? null : current,
+      );
+      copyChallengeLink(challengeId);
+      setChallengeStatus('Race link copied. Send it to a friend.');
+    },
+    [copyChallengeLink],
+  );
+
+  const startChallengeRace = useCallback((challenge: ChallengeRace) => {
+    const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize);
+    startNewPuzzle(
+      puzzleGrid,
+      `Started race ${challenge.challengeId}.`,
+      `challenge race ${challenge.challengeId}`,
+      challenge.difficulty,
+      challenge.puzzleSize,
+      challenge.playMode,
+      createChallengeGameMeta(challenge),
+    );
+    setChallengeStatus('Race started. The clock is live.');
+  }, [startNewPuzzle]);
+
   const dashboardSelect = useCallback(
     (key: string) => {
       if (key === 'n') openNewGame();
@@ -1429,6 +1524,8 @@ function App() {
         openGameLibrary();
       } else if (['leaderboard', 'leaderboards', 'scores', 'lb'].includes(command)) {
         openLeaderboards();
+      } else if (['challenge', 'race', 'versus', 'vs'].includes(command)) {
+        createRaceChallenge();
       } else if (['profile', 'me', 'account'].includes(command)) {
         goToProfile();
       } else if (['clear', 'blank'].includes(command)) {
@@ -1455,6 +1552,7 @@ function App() {
       clearAll,
       clearHintState,
       clearNotes,
+      createRaceChallenge,
       fillAllCandidates,
       goToDashboard,
       goToProfile,
@@ -1966,20 +2064,41 @@ function App() {
         className="crt-overlay pointer-events-none fixed inset-0 z-[8]"
       />
       {hasConvexBackend() && (
-        <ConvexBridge
-          currentRecord={currentRecord}
-          gameRecords={trackedGameRecords}
-          leaderboardMode={leaderboardMode}
-          leaderboardOpen={activePage === 'leaderboards'}
-          leaderboardSize={leaderboardSize}
-          onProfile={setCloudProfile}
-          onScores={setGlobalScores}
-          onStats={setCloudStats}
-          onStatus={setLeaderboardStatus}
-          playerName={playerName}
-          scoreRecordId={showSolved ? currentRecord.id : null}
-          scoreSubmissionsEnabled={hasCustomPlayerName && scoreEnabled}
-        />
+        <>
+          <ConvexBridge
+            currentRecord={currentRecord}
+            gameRecords={trackedGameRecords}
+            leaderboardMode={leaderboardMode}
+            leaderboardOpen={activePage === 'leaderboards'}
+            leaderboardSize={leaderboardSize}
+            onProfile={setCloudProfile}
+            onScores={setGlobalScores}
+            onStats={setCloudStats}
+            onStatus={setLeaderboardStatus}
+            playerName={playerName}
+            scoreRecordId={showSolved ? currentRecord.id : null}
+            scoreSubmissionsEnabled={hasCustomPlayerName && scoreEnabled}
+          />
+          <ChallengeBridge
+            activeChallengeId={activeChallengeId}
+            challengeId={routeChallengeId}
+            createRequest={challengeCreateRequest}
+            currentRecord={currentRecord}
+            onChallenge={(nextChallenge) => {
+              setChallengeRace(nextChallenge);
+              setChallengeStatus(
+                nextChallenge
+                  ? ''
+                  : routeChallengeId
+                    ? 'Challenge not found.'
+                    : '',
+              );
+            }}
+            onCreateResult={handleChallengeCreated}
+            onStatus={setChallengeStatus}
+            playerName={playerName}
+          />
+        </>
       )}
       {showDashboard && (
         <DashboardPage
@@ -2088,6 +2207,32 @@ function App() {
             playMode={leaderboardMode}
             puzzleSize={leaderboardSize}
             status={leaderboardStatus}
+          />
+        </AppPageFrame>
+      )}
+
+      {activePage === 'challenge' && (
+        <AppPageFrame
+          activePage="challenge"
+          onNavigate={navigateToPage}
+          subtitle="share link · same puzzle · fastest solve wins"
+          title="Challenge Race"
+        >
+          <ChallengeRacePanel
+            activeChallengeId={activeChallengeId}
+            challenge={challengeRace}
+            challengeId={routeChallengeId}
+            isCurrentSolved={
+              Boolean(activeChallengeId && activeChallengeId === routeChallengeId) &&
+              currentRecord.status === 'completed'
+            }
+            onContinue={goToPlay}
+            onCopyLink={() => {
+              if (routeChallengeId) copyChallengeLink(routeChallengeId);
+            }}
+            onStart={startChallengeRace}
+            shareUrl={challengeShareUrl}
+            status={challengeStatus}
           />
         </AppPageFrame>
       )}
@@ -2616,6 +2761,9 @@ function App() {
               </MenuItem>
               <MenuItem label="leaderboards" onClick={openLeaderboards}>
                 <Trophy size={15} />
+              </MenuItem>
+              <MenuItem label="challenge race" onClick={createRaceChallenge}>
+                <Swords size={15} />
               </MenuItem>
               <MenuItem label="profile" onClick={goToProfile}>
                 <UserRound size={15} />
@@ -4284,6 +4432,195 @@ function Leaderboards({
   );
 }
 
+function ChallengeRacePanel({
+  activeChallengeId,
+  challenge,
+  challengeId,
+  isCurrentSolved,
+  onContinue,
+  onCopyLink,
+  onStart,
+  shareUrl,
+  status,
+}: {
+  activeChallengeId: string | null;
+  challenge: ChallengeRace | null;
+  challengeId: string | null;
+  isCurrentSolved: boolean;
+  onContinue: () => void;
+  onCopyLink: () => void;
+  onStart: (challenge: ChallengeRace) => void;
+  shareUrl: string;
+  status: string;
+}) {
+  if (!hasConvexBackend()) {
+    return (
+      <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
+          challenge backend offline
+        </p>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
+          Challenge links use Convex so both players can see the same race lobby
+          and submit results. Set `VITE_CONVEX_URL` to enable this mode.
+        </p>
+      </section>
+    );
+  }
+
+  if (!challengeId) {
+    return (
+      <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5 text-sm text-[var(--muted)]">
+        No challenge selected.
+      </section>
+    );
+  }
+
+  if (!challenge) {
+    return (
+      <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
+          loading race
+        </p>
+        <p className="mt-3 text-sm text-[var(--muted)]">
+          {status || `Looking up ${challengeId}...`}
+        </p>
+      </section>
+    );
+  }
+
+  const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize);
+  const completedAttempts = challenge.attempts.filter(
+    (attempt) => attempt.status === 'completed',
+  );
+  const leader = completedAttempts[0] ?? null;
+  const isActiveRace = activeChallengeId === challenge.challengeId;
+  const actionLabel = isCurrentSolved
+    ? 'race submitted'
+    : isActiveRace
+      ? 'continue race'
+      : 'start race';
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="border border-[var(--border)] bg-[var(--input-bg)]">
+        <header className="grid gap-3 border-b border-[var(--border)] bg-[var(--status-bg)] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+          <div className="min-w-0">
+            <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
+              race link
+            </p>
+            <h2 className="mt-1 truncate font-mono text-xl font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
+              {challenge.challengeId}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isCurrentSolved}
+            onClick={() => {
+              if (isActiveRace) onContinue();
+              else onStart(challenge);
+            }}
+          >
+            {actionLabel}
+          </button>
+        </header>
+
+        <div className="grid gap-4 p-3 md:grid-cols-[220px_minmax(0,1fr)]">
+          <PuzzlePreview
+            grid={puzzleGrid}
+            givens={puzzleGrid.map((value) => value !== 0)}
+          />
+          <div className="min-w-0 space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <ChallengeMeta label="created by" value={challenge.creatorName} />
+              <ChallengeMeta label="grid" value={challenge.puzzleSize} />
+              <ChallengeMeta label="rules" value={modeLabel(challenge.playMode)} />
+              <ChallengeMeta
+                label="difficulty"
+                value={challenge.difficulty ?? 'custom'}
+              />
+            </div>
+            <div className="border border-[var(--border)] bg-[var(--panel-bg)] p-3">
+              <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-[var(--muted)]">
+                share
+              </p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <code className="min-w-0 truncate border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs text-[var(--app-text)]">
+                  {shareUrl || `${window.location.origin}${challengePath(challenge.challengeId)}`}
+                </code>
+                <button
+                  type="button"
+                  className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)]"
+                  onClick={onCopyLink}
+                >
+                  copy
+                </button>
+              </div>
+            </div>
+            <p className="text-sm leading-relaxed text-[var(--muted)]">
+              Both players solve this exact puzzle. The race starts when each
+              player presses start, and fastest completed time wins.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="border border-[var(--border)] bg-[var(--input-bg)]">
+        <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+          [race-board]
+        </header>
+        {challenge.attempts.length === 0 ? (
+          <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
+            No attempts yet. Start the race, then send the link.
+          </p>
+        ) : (
+          <div className="divide-y divide-[var(--border)]">
+            {challenge.attempts.map((attempt, index) => (
+              <div
+                key={`${attempt.anonId}-${attempt.recordId}`}
+                className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 font-mono"
+              >
+                <span className="text-xs font-black text-[var(--accent)]">
+                  {attempt.status === 'completed' ? index + 1 : '...'}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-[var(--app-text)]">
+                    {attempt.player}
+                    {leader?.recordId === attempt.recordId ? ' / leader' : ''}
+                  </p>
+                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+                    {attempt.status === 'completed'
+                      ? `finished ${formatGameDate(attempt.completedAt ?? attempt.updatedAt)}`
+                      : `${attempt.completion}/${boardConfigFor(challenge.puzzleSize).cellCount} filled`}
+                  </p>
+                </div>
+                <span className="text-sm font-black text-[var(--app-text)]">
+                  {attempt.status === 'completed'
+                    ? formatDuration(attempt.elapsedMs)
+                    : 'racing'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ChallengeMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-[var(--border)] bg-[var(--panel-bg)] p-3">
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </p>
+      <p className="mt-1 truncate font-mono text-sm font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function LeaderboardPanel({
   children,
   empty,
@@ -4780,6 +5117,7 @@ function pageFromPath(pathname: string): PageRoute {
   if (pathname === '/new') return 'new';
   if (pathname === '/games') return 'games';
   if (pathname === '/leaderboards') return 'leaderboards';
+  if (challengeIdFromPath(pathname)) return 'challenge';
   if (pathname === '/profile') return 'profile';
   return 'play';
 }
