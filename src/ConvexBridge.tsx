@@ -10,7 +10,9 @@ import { getOrCreateGuestId } from './identity';
 
 export type CloudProfile = {
   anonId: string;
+  authSubject?: string;
   createdAt: string;
+  friendCode?: string;
   name: string;
   updatedAt: string;
 };

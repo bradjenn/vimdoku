@@ -82,6 +82,7 @@ import {
   type LeaderboardEntry,
 } from './leaderboard';
 import { ChallengeBridge } from './ChallengeBridge';
+import { FriendsPanel, type FriendSummary } from './FriendsPanel';
 import {
   challengeIdFromGameId,
   challengeIdFromPath,
@@ -2337,6 +2338,10 @@ function App() {
             cloudStats={cloudStats}
             guestId={guestId}
             localStats={localProfileStats}
+            onChallengeFriend={(friend) => {
+              setChallengeStatus(`Create a race link for ${friend.name}.`);
+              navigateToPage('challenge');
+            }}
             onNameChange={updatePlayerName}
             playerName={playerName}
           />
@@ -5013,6 +5018,7 @@ function ProfilePanel({
   cloudStats,
   guestId,
   localStats,
+  onChallengeFriend,
   onNameChange,
   playerName,
 }: {
@@ -5020,6 +5026,7 @@ function ProfilePanel({
   cloudStats: CloudStats | null;
   guestId: string;
   localStats: ProfileStats;
+  onChallengeFriend: (friend: FriendSummary) => void;
   onNameChange: (value: string) => void;
   playerName: string;
 }) {
@@ -5053,6 +5060,7 @@ function ProfilePanel({
             />
           </label>
           <ProfileMeta label="guest id" value={shortGuestId(guestId)} />
+          <ProfileMeta label="friend code" value={cloudProfile?.friendCode ?? 'syncing'} />
           <ProfileMeta label="joined" value={joined} />
           <ProfileMeta
             label="sync"
@@ -5103,6 +5111,25 @@ function ProfilePanel({
           )}
         </div>
       </section>
+
+      <div className="lg:col-span-2">
+        {hasConvexBackend() ? (
+          <FriendsPanel
+            friendCode={cloudProfile?.friendCode ?? ''}
+            onChallengeFriend={onChallengeFriend}
+          />
+        ) : (
+          <section className="border border-[var(--border)] bg-[var(--input-bg)] p-4">
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+              [friends offline]
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+              Friends use the Convex backend so guest codes and requests can sync
+              between browsers.
+            </p>
+          </section>
+        )}
+      </div>
     </div>
   );
 }

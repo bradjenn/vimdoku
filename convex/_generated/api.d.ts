@@ -9,6 +9,7 @@
  */
 
 import type * as challenges from "../challenges.js";
+import type * as friends from "../friends.js";
 import type * as games from "../games.js";
 import type * as leaderboards from "../leaderboards.js";
 import type * as profiles from "../profiles.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   challenges: typeof challenges;
+  friends: typeof friends;
   games: typeof games;
   leaderboards: typeof leaderboards;
   profiles: typeof profiles;

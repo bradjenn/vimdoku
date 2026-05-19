@@ -4,10 +4,14 @@ import { v } from 'convex/values';
 export default defineSchema({
   profiles: defineTable({
     anonId: v.string(),
+    authSubject: v.optional(v.string()),
     createdAt: v.string(),
+    friendCode: v.optional(v.string()),
     name: v.string(),
     updatedAt: v.string(),
-  }).index('by_anonId', ['anonId']),
+  })
+    .index('by_anonId', ['anonId'])
+    .index('by_friendCode', ['friendCode']),
 
   games: defineTable({
     anonId: v.string(),
@@ -79,4 +83,15 @@ export default defineSchema({
     .index('by_challengeId_and_anonId', ['challengeId', 'anonId'])
     .index('by_challengeId_and_elapsedMs', ['challengeId', 'elapsedMs'])
     .index('by_challengeId_and_updatedAt', ['challengeId', 'updatedAt']),
+
+  friendships: defineTable({
+    createdAt: v.string(),
+    recipientAnonId: v.string(),
+    requesterAnonId: v.string(),
+    status: v.union(v.literal('pending'), v.literal('accepted')),
+    updatedAt: v.string(),
+  })
+    .index('by_requesterAnonId', ['requesterAnonId'])
+    .index('by_recipientAnonId', ['recipientAnonId'])
+    .index('by_status', ['status']),
 });
