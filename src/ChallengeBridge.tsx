@@ -11,6 +11,7 @@ import type { GameRecord } from './storage';
 
 type CreateRaceArgs = {
   challengeId: string;
+  challengeKind?: string;
   creatorAnonId: string;
   creatorName: string;
   difficulty?: string;
@@ -33,6 +34,7 @@ type SubmitAttemptArgs = {
   completedAt: string;
   completion: number;
   elapsedMs: number;
+  mistakes?: number;
   player: string;
   recordId: string;
 };
@@ -64,6 +66,7 @@ export function ChallengeBridge({
   challengeId,
   createRequest,
   currentRecord,
+  currentMistakes,
   onChallenge,
   onCreateResult,
   onStatus,
@@ -73,6 +76,7 @@ export function ChallengeBridge({
   challengeId: string | null;
   createRequest: ChallengeCreateRequest | null;
   currentRecord: GameRecord;
+  currentMistakes: number;
   onChallenge: (challenge: ChallengeRace | null) => void;
   onCreateResult: (challengeId: string, requestId: string) => void;
   onStatus: (status: string) => void;
@@ -108,6 +112,7 @@ export function ChallengeBridge({
 
     void createRace({
       challengeId: createRequest.challengeId,
+      challengeKind: createRequest.challengeKind,
       creatorAnonId: anonId,
       creatorName: createRequest.creatorName,
       difficulty: createRequest.difficulty,
@@ -137,7 +142,7 @@ export function ChallengeBridge({
       recordId: currentRecord.id,
     }).catch(() => {
       startedAttempts.current.delete(key);
-      onStatus('Could not join challenge race.');
+      onStatus('Could not join challenge.');
     });
   }, [activeChallengeId, anonId, currentRecord, onStatus, playerName, startAttempt]);
 
@@ -154,13 +159,22 @@ export function ChallengeBridge({
       completedAt: currentRecord.completedAt ?? currentRecord.updatedAt,
       completion: currentRecord.completion,
       elapsedMs: currentRecord.elapsedMs,
+      mistakes: currentMistakes,
       player: playerName,
       recordId: currentRecord.id,
     }).catch(() => {
       submittedAttempts.current.delete(key);
       onStatus('Could not submit challenge result.');
     });
-  }, [activeChallengeId, anonId, currentRecord, onStatus, playerName, submitAttempt]);
+  }, [
+    activeChallengeId,
+    anonId,
+    currentMistakes,
+    currentRecord,
+    onStatus,
+    playerName,
+    submitAttempt,
+  ]);
 
   return null;
 }

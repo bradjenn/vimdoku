@@ -56,6 +56,7 @@ export default defineSchema({
 
   challenges: defineTable({
     challengeId: v.string(),
+    challengeKind: v.optional(v.union(v.literal('race'), v.literal('streak'))),
     createdAt: v.string(),
     creatorAnonId: v.string(),
     creatorName: v.string(),
@@ -76,6 +77,7 @@ export default defineSchema({
     completedAt: v.optional(v.string()),
     completion: v.number(),
     elapsedMs: v.number(),
+    mistakes: v.optional(v.number()),
     player: v.string(),
     recordId: v.string(),
     startedAt: v.string(),

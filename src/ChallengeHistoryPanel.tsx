@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
 import { getOrCreateGuestId } from './identity';
+import { challengeKindLabel, type ChallengeKind } from './challenges';
 import { modeLabel, type PlayMode } from './playModes';
 import type { PuzzleDifficulty, PuzzleSize } from './sudoku';
 
@@ -11,6 +12,7 @@ type ChallengeAttemptSummary = {
   completedAt?: string;
   completion: number;
   elapsedMs: number;
+  mistakes: number;
   player: string;
   recordId: string;
   startedAt: string;
@@ -21,6 +23,7 @@ type ChallengeAttemptSummary = {
 type ChallengeSummary = {
   attempts: ChallengeAttemptSummary[];
   challengeId: string;
+  challengeKind: ChallengeKind;
   createdAt: string;
   creatorName: string;
   difficulty?: PuzzleDifficulty | 'custom';
@@ -64,16 +67,16 @@ export function ChallengeHistoryPanel({
       <header className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
         <span>[my challenges]</span>
         <span className="text-[var(--muted)]">
-          {challenges ? `${challenges.length} races` : 'loading'}
+          {challenges ? `${challenges.length} challenges` : 'loading'}
         </span>
       </header>
       {challenges === undefined ? (
         <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
-          Loading challenge races...
+          Loading challenges...
         </p>
       ) : challenges.length === 0 ? (
         <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
-          No challenge races yet. Create a race link, send it to a friend, and
+          No challenges yet. Create a link, send it to a friend, and
           results will collect here.
         </p>
       ) : (
@@ -119,6 +122,10 @@ export function ChallengeHistoryPanel({
                 <ChallengeFact
                   label="role"
                   value={challenge.isCreator ? 'creator' : 'racer'}
+                />
+                <ChallengeFact
+                  label="type"
+                  value={challengeKindLabel(challenge.challengeKind)}
                 />
                 <ChallengeFact
                   label="rules"
@@ -193,7 +200,9 @@ function ChallengeResults({ challenge }: { challenge: ChallengeSummary }) {
               </span>
               <span className="text-sm font-black text-[var(--app-text)]">
                 {attempt.status === 'completed'
-                  ? formatDuration(attempt.elapsedMs)
+                  ? challenge.challengeKind === 'streak'
+                    ? `${attempt.mistakes} / ${formatDuration(attempt.elapsedMs)}`
+                    : formatDuration(attempt.elapsedMs)
                   : 'racing'}
               </span>
             </div>
@@ -243,7 +252,9 @@ function attemptLabel(attempt: ChallengeAttemptSummary) {
 
 function attemptDetail(attempt: ChallengeAttemptSummary) {
   return attempt.status === 'completed'
-    ? formatDuration(attempt.elapsedMs)
+    ? attempt.mistakes > 0
+      ? `${attempt.mistakes} misses`
+      : formatDuration(attempt.elapsedMs)
     : `${attempt.completion} filled`;
 }
 

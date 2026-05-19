@@ -85,11 +85,14 @@ import { ChallengeBridge } from './ChallengeBridge';
 import { ChallengeHistoryPanel } from './ChallengeHistoryPanel';
 import { FriendsPanel, type FriendSummary } from './FriendsPanel';
 import {
+  challengeKindFromGameId,
+  challengeKindLabel,
   challengeIdFromGameId,
   challengeIdFromPath,
   challengePath,
   createChallengeGameMeta,
   makeChallengeId,
+  type ChallengeKind,
   type ChallengeCreateRequest,
   type ChallengeRace,
 } from './challenges';
@@ -161,7 +164,7 @@ const DASHBOARD_ACTIONS: [key: string, label: string][] = [
   ['c', 'continue'],
   ['g', 'puzzle log'],
   ['l', 'leaderboards'],
-  ['r', 'challenge race'],
+  ['r', 'challenge'],
   ['p', 'profile'],
   ['s', 'settings'],
 ];
@@ -361,6 +364,7 @@ function App() {
   const [challengeRace, setChallengeRace] = useState<ChallengeRace | null>(null);
   const [challengeStatus, setChallengeStatus] = useState('');
   const [challengeShareUrl, setChallengeShareUrl] = useState('');
+  const [challengeMistakes, setChallengeMistakes] = useState(0);
   const [challengeCreateRequest, setChallengeCreateRequest] =
     useState<ChallengeCreateRequest | null>(null);
   const [cloudProfile, setCloudProfile] = useState<CloudProfile | null>(null);
@@ -381,6 +385,7 @@ function App() {
   const [dashboardSize, setDashboardSize] = useState<PuzzleSize>('9x9');
   const [challengeDifficulty, setChallengeDifficulty] =
     useState<PuzzleDifficulty>('medium');
+  const [challengeKind, setChallengeKind] = useState<ChallengeKind>('race');
   const [challengeMode, setChallengeMode] = useState<PlayMode>('classic');
   const [challengeSize, setChallengeSize] = useState<PuzzleSize>('9x9');
   const [challengeSource, setChallengeSource] =
@@ -411,6 +416,7 @@ function App() {
   const activeSize = activeGame.puzzleSize ?? puzzleSizeFromGrid(grid);
   const activeMode = activeGame.playMode ?? 'classic';
   const activeChallengeId = challengeIdFromGameId(activeGame.id);
+  const activeChallengeKind = challengeKindFromGameId(activeGame.id);
   const activeConfig = boardConfigFor(activeSize);
   const activeDigits = activeConfig.digits;
   const activeCellCount = activeConfig.cellCount;
@@ -659,6 +665,14 @@ function App() {
   );
   const themeStyle = activeTheme.vars as CSSProperties;
 
+  // Mirror theme vars onto :root so Radix-portaled dialogs inherit them.
+  useEffect(() => {
+    const root = document.documentElement;
+    for (const [key, value] of Object.entries(activeTheme.vars)) {
+      root.style.setProperty(key, value);
+    }
+  }, [activeTheme]);
+
   useEffect(() => {
     localStorage.setItem(THEME_KEY, themeId);
   }, [themeId]);
@@ -769,7 +783,7 @@ function App() {
     if (!routeChallengeId) return;
     setChallengeRace(null);
     setChallengeShareUrl(`${window.location.origin}${challengePath(routeChallengeId)}`);
-    setChallengeStatus('Loading challenge race...');
+    setChallengeStatus('Loading challenge...');
   }, [routeChallengeId]);
 
   useEffect(() => {
@@ -880,6 +894,15 @@ function App() {
       if (givens[selected]) return;
       resumeTimerFromActivity();
       pushHistory();
+      if (
+        activeChallengeKind === 'streak' &&
+        value !== 0 &&
+        grid[selected] !== value &&
+        solved?.[selected] !== value
+      ) {
+        setChallengeMistakes((count) => count + 1);
+        setStatusLine('Streak battle: bad entry recorded.');
+      }
       setGrid((current) => {
         const next = [...current];
         next[selected] = value;
@@ -890,7 +913,16 @@ function App() {
       );
       setHint(null);
     },
-    [activeSize, givens, pushHistory, resumeTimerFromActivity, selected],
+    [
+      activeChallengeKind,
+      activeSize,
+      givens,
+      grid,
+      pushHistory,
+      resumeTimerFromActivity,
+      selected,
+      solved,
+    ],
   );
 
   const toggleNote = useCallback(
@@ -1048,6 +1080,7 @@ function App() {
     setHint(null);
     setElapsedMs(0);
     setTimerPaused(false);
+    setChallengeMistakes(0);
     setActiveGame(createGameMeta(emptyGrid(activeSize), 'blank', 'custom', activeSize, activeMode));
     goToPlay();
   }, [activeCellCount, activeMode, activeSize, currentRecord, goToPlay, pushHistory]);
@@ -1073,6 +1106,7 @@ function App() {
     setHighlightDigit(null);
     setElapsedMs(0);
     setTimerPaused(false);
+    setChallengeMistakes(0);
     setNoteMode(false);
     setActiveGame(meta);
     const firstEmpty = nextGrid.indexOf(0);
@@ -1091,6 +1125,7 @@ function App() {
     setNotes(record.notes);
     setGivens(record.givens);
     setElapsedMs(record.elapsedMs);
+    setChallengeMistakes(0);
     setActiveGame({
       id: record.id,
       puzzle: record.puzzle,
@@ -1403,6 +1438,7 @@ function App() {
   }, []);
 
   const createRaceChallenge = useCallback((template?: {
+    challengeKind?: ChallengeKind;
     difficulty?: PuzzleDifficulty | 'custom';
     playMode: PlayMode;
     puzzle: string;
@@ -1422,9 +1458,11 @@ function App() {
       puzzleSize: activeSize,
       source: activeGame.source,
     };
-    const challengeId = makeChallengeId();
+    const nextChallengeKind = raceTemplate.challengeKind ?? challengeKind;
+    const challengeId = makeChallengeId(nextChallengeKind);
     const request: ChallengeCreateRequest = {
       challengeId,
+      challengeKind: nextChallengeKind,
       creatorName: playerName,
       difficulty: raceTemplate.difficulty,
       playMode: raceTemplate.playMode,
@@ -1434,10 +1472,18 @@ function App() {
       source: raceTemplate.source,
     };
     setChallengeCreateRequest(request);
-    setChallengeStatus('Creating race link...');
+    setChallengeStatus(`Creating ${challengeKindLabel(nextChallengeKind)} link...`);
     closeMenuModal();
     void navigate({ to: '/challenge/$challengeId', params: { challengeId } });
-  }, [activeGame, activeMode, activeSize, closeMenuModal, navigate, playerName]);
+  }, [
+    activeGame,
+    activeMode,
+    activeSize,
+    challengeKind,
+    closeMenuModal,
+    navigate,
+    playerName,
+  ]);
 
   const createConfiguredRaceChallenge = useCallback(() => {
     if (challengeSource === 'current') {
@@ -1458,6 +1504,7 @@ function App() {
         : Date.now();
     const puzzleGrid = generatePuzzle(challengeDifficulty, seed, challengeSize);
     createRaceChallenge({
+      challengeKind,
       difficulty: challengeDifficulty,
       playMode: challengeMode,
       puzzle: gridToString(puzzleGrid, challengeSize),
@@ -1468,6 +1515,7 @@ function App() {
           : `generated ${challengeSize} ${modeLabel(challengeMode)} ${challengeDifficulty} challenge`,
     });
   }, [
+    challengeKind,
     challengeDifficulty,
     challengeMode,
     challengeSize,
@@ -1481,7 +1529,7 @@ function App() {
         current?.requestId === requestId ? null : current,
       );
       copyChallengeLink(challengeId);
-      setChallengeStatus('Race link copied. Send it to a friend.');
+      setChallengeStatus('Challenge link copied. Send it to a friend.');
     },
     [copyChallengeLink],
   );
@@ -1490,14 +1538,18 @@ function App() {
     const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize);
     startNewPuzzle(
       puzzleGrid,
-      `Started race ${challenge.challengeId}.`,
-      `challenge race ${challenge.challengeId}`,
+      `Started ${challengeKindLabel(challenge.challengeKind)} ${challenge.challengeId}.`,
+      `challenge ${challengeKindLabel(challenge.challengeKind)} ${challenge.challengeId}`,
       challenge.difficulty,
       challenge.puzzleSize,
       challenge.playMode,
       createChallengeGameMeta(challenge),
     );
-    setChallengeStatus('Race started. The clock is live.');
+    setChallengeStatus(
+      challenge.challengeKind === 'streak'
+        ? 'Streak battle started. Bad entries count against you.'
+        : 'Race started. The clock is live.',
+    );
   }, [startNewPuzzle]);
 
   const dashboardSelect = useCallback(
@@ -2202,6 +2254,7 @@ function App() {
             challengeId={routeChallengeId}
             createRequest={challengeCreateRequest}
             currentRecord={currentRecord}
+            currentMistakes={challengeMistakes}
             onChallenge={(nextChallenge) => {
               setChallengeRace(nextChallenge);
               setChallengeStatus(
@@ -2335,10 +2388,10 @@ function App() {
           onNavigate={navigateToPage}
           subtitle={
             routeChallengeId
-              ? 'share link · same puzzle · fastest solve wins'
-              : 'choose rules · create link · race friends'
+              ? 'share link · same puzzle · compare results'
+              : 'choose rules · create link · challenge friends'
           }
-          title="Challenge Race"
+          title="Challenges"
         >
           {routeChallengeId ? (
             <ChallengeRacePanel
@@ -2359,14 +2412,16 @@ function App() {
             />
           ) : (
             <div className="grid gap-3 xl:grid-cols-[420px_minmax(0,1fr)]">
-              <ChallengeSetupPanel
-                currentGame={activeGame}
-                difficulty={challengeDifficulty}
-                mode={challengeMode}
-                onCreate={createConfiguredRaceChallenge}
-                onCreateCurrent={() => createRaceChallenge()}
-                onDifficultyChange={setChallengeDifficulty}
-                onModeChange={setChallengeMode}
+                <ChallengeSetupPanel
+                  currentGame={activeGame}
+                  difficulty={challengeDifficulty}
+                  kind={challengeKind}
+                  mode={challengeMode}
+                  onCreate={createConfiguredRaceChallenge}
+                  onCreateCurrent={() => createRaceChallenge()}
+                  onDifficultyChange={setChallengeDifficulty}
+                  onKindChange={setChallengeKind}
+                  onModeChange={setChallengeMode}
                 onSizeChange={setChallengeSize}
                 onSourceChange={setChallengeSource}
                 puzzleSize={challengeSize}
@@ -2389,7 +2444,7 @@ function App() {
                     my challenges offline
                   </p>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-                    Challenge history uses Convex so race links and results can sync
+                    Challenge history uses Convex so links and results can sync
                     between players.
                   </p>
                 </section>
@@ -2414,7 +2469,7 @@ function App() {
                 friendCode={publicFriendCode}
                 onBack={goToProfile}
                 onChallenge={(profile) => {
-                  setChallengeStatus(`Create a race link for ${profile.name}.`);
+                  setChallengeStatus(`Create a challenge link for ${profile.name}.`);
                   navigateToPage('challenge');
                 }}
               />
@@ -2428,7 +2483,7 @@ function App() {
               guestId={guestId}
               localStats={localProfileStats}
               onChallengeFriend={(friend) => {
-                setChallengeStatus(`Create a race link for ${friend.name}.`);
+                setChallengeStatus(`Create a challenge link for ${friend.name}.`);
                 navigateToPage('challenge');
               }}
               onNameChange={updatePlayerName}
@@ -2563,6 +2618,9 @@ function App() {
 
           <StatusLine
             cellLabel={labelCell(selected, activeSize)}
+            challengeMistakes={
+              activeChallengeKind === 'streak' ? challengeMistakes : undefined
+            }
             compact={compactStatus}
             completion={completion}
             cellCount={activeCellCount}
@@ -2946,7 +3004,7 @@ function App() {
               <MenuItem label="leaderboards" onClick={openLeaderboards}>
                 <Trophy size={15} />
               </MenuItem>
-              <MenuItem label="challenge race" onClick={createRaceChallenge}>
+              <MenuItem label="challenge" onClick={createRaceChallenge}>
                 <Swords size={15} />
               </MenuItem>
               <MenuItem label="profile" onClick={goToProfile}>
@@ -4645,10 +4703,12 @@ function Leaderboards({
 function ChallengeSetupPanel({
   currentGame,
   difficulty,
+  kind,
   mode,
   onCreate,
   onCreateCurrent,
   onDifficultyChange,
+  onKindChange,
   onModeChange,
   onSizeChange,
   onSourceChange,
@@ -4658,10 +4718,12 @@ function ChallengeSetupPanel({
 }: {
   currentGame: GameMeta;
   difficulty: PuzzleDifficulty;
+  kind: ChallengeKind;
   mode: PlayMode;
   onCreate: () => void;
   onCreateCurrent: () => void;
   onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
+  onKindChange: (kind: ChallengeKind) => void;
   onModeChange: (mode: PlayMode) => void;
   onSizeChange: (puzzleSize: PuzzleSize) => void;
   onSourceChange: (source: ChallengePuzzleSource) => void;
@@ -4694,19 +4756,53 @@ function ChallengeSetupPanel({
     ['generated', 'generated', 'fresh random puzzle'],
     ['current', 'current', 'use loaded board'],
   ];
+  const challengeKinds: [ChallengeKind, string, string][] = [
+    ['race', 'race', 'fastest clean finish wins'],
+    ['streak', 'streak battle', 'bad entries break ties before time'],
+  ];
 
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section className="border border-[var(--border)] bg-[var(--input-bg)]">
         <header className="border-b border-[var(--border)] bg-[var(--status-bg)] p-3">
           <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
-            race setup
+            challenge setup
           </p>
           <h2 className="mt-1 font-mono text-xl font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
             create a challenge link
           </h2>
         </header>
         <div className="space-y-4 p-3">
+          <NewGameField label="challenge mode">
+            <div className="grid gap-2 md:grid-cols-2">
+              {challengeKinds.map(([kindId, label, description]) => (
+                <button
+                  type="button"
+                  key={kindId}
+                  className={`border p-3 text-left font-mono transition ${
+                    kind === kindId
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
+                  }`}
+                  onClick={() => onKindChange(kindId)}
+                >
+                  <span className="block text-xs font-black uppercase tracking-[0.16em]">
+                    {label}
+                  </span>
+                  <span
+                    className={`mt-2 block text-xs leading-relaxed ${
+                      kind === kindId
+                        ? 'text-[var(--app-bg)] opacity-80'
+                        : 'text-[var(--muted)]'
+                    }`}
+                  >
+                    {description}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </NewGameField>
+
           <NewGameField label="puzzle source">
             <div className="grid gap-2 md:grid-cols-3">
               {sources.map(([sourceId, label, description]) => (
@@ -4808,7 +4904,7 @@ function ChallengeSetupPanel({
 
       <section className="border border-[var(--border)] bg-[var(--input-bg)]">
         <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-          [race-preview]
+          [challenge-preview]
         </header>
         <div className="space-y-3 p-3">
           <PuzzlePreview
@@ -4816,8 +4912,9 @@ function ChallengeSetupPanel({
             givens={previewGrid.map((value) => value !== 0)}
           />
           <div className="grid gap-2">
-            <ChallengeMeta label="source" value={source} />
-            <ChallengeMeta label="grid" value={activeSize} />
+          <ChallengeMeta label="source" value={source} />
+          <ChallengeMeta label="mode" value={challengeKindLabel(kind)} />
+          <ChallengeMeta label="grid" value={activeSize} />
             <ChallengeMeta label="rules" value={modeLabel(activeMode)} />
             <ChallengeMeta label="difficulty" value={activeDifficulty} />
             <ChallengeMeta
@@ -4830,7 +4927,7 @@ function ChallengeSetupPanel({
             className="w-full border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)]"
             onClick={onCreate}
           >
-            create race link
+            create {challengeKindLabel(kind)} link
           </button>
           {source !== 'current' && (
             <button
@@ -4883,7 +4980,7 @@ function ChallengeRacePanel({
           challenge backend offline
         </p>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
-          Challenge links use Convex so both players can see the same race lobby
+          Challenge links use Convex so both players can see the same lobby
           and submit results. Set `VITE_CONVEX_URL` to enable this mode.
         </p>
       </section>
@@ -4902,7 +4999,7 @@ function ChallengeRacePanel({
     return (
       <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
         <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
-          loading race
+          loading challenge
         </p>
         <p className="mt-3 text-sm text-[var(--muted)]">
           {status || `Looking up ${challengeId}...`}
@@ -4916,12 +5013,13 @@ function ChallengeRacePanel({
     (attempt) => attempt.status === 'completed',
   );
   const leader = completedAttempts[0] ?? null;
+  const modeName = challengeKindLabel(challenge.challengeKind);
   const isActiveRace = activeChallengeId === challenge.challengeId;
   const actionLabel = isCurrentSolved
-    ? 'race submitted'
+    ? 'result submitted'
     : isActiveRace
-      ? 'continue race'
-      : 'start race';
+      ? `continue ${modeName}`
+      : `start ${modeName}`;
 
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -4929,7 +5027,7 @@ function ChallengeRacePanel({
         <header className="grid gap-3 border-b border-[var(--border)] bg-[var(--status-bg)] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div className="min-w-0">
             <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
-              race link
+              {modeName} link
             </p>
             <h2 className="mt-1 truncate font-mono text-xl font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
               {challenge.challengeId}
@@ -4956,6 +5054,7 @@ function ChallengeRacePanel({
           <div className="min-w-0 space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <ChallengeMeta label="created by" value={challenge.creatorName} />
+              <ChallengeMeta label="challenge" value={modeName} />
               <ChallengeMeta label="grid" value={challenge.puzzleSize} />
               <ChallengeMeta label="rules" value={modeLabel(challenge.playMode)} />
               <ChallengeMeta
@@ -4998,8 +5097,9 @@ function ChallengeRacePanel({
               </p>
             </div>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
-              Both players solve this exact puzzle. The race starts when each
-              player presses start, and fastest completed time wins.
+              {challenge.challengeKind === 'streak'
+                ? 'Both players solve this exact puzzle. Bad entries count against your streak score, then time breaks ties.'
+                : 'Both players solve this exact puzzle. The race starts when each player presses start, and fastest completed time wins.'}
             </p>
           </div>
         </div>
@@ -5007,11 +5107,11 @@ function ChallengeRacePanel({
 
       <section className="border border-[var(--border)] bg-[var(--input-bg)]">
         <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-          [race-board]
+          [{challenge.challengeKind === 'streak' ? 'streak-board' : 'race-board'}]
         </header>
         {challenge.attempts.length === 0 ? (
           <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
-            No attempts yet. Start the race, then send the link.
+            No attempts yet. Start the challenge, then send the link.
           </p>
         ) : (
           <div className="divide-y divide-[var(--border)]">
@@ -5030,7 +5130,9 @@ function ChallengeRacePanel({
                   </p>
                   <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
                     {attempt.status === 'completed'
-                      ? `finished ${formatGameDate(attempt.completedAt ?? attempt.updatedAt)}`
+                      ? challenge.challengeKind === 'streak'
+                        ? `${attempt.mistakes} misses · ${formatGameDate(attempt.completedAt ?? attempt.updatedAt)}`
+                        : `finished ${formatGameDate(attempt.completedAt ?? attempt.updatedAt)}`
                       : `${attempt.completion}/${boardConfigFor(challenge.puzzleSize).cellCount} filled`}
                   </p>
                 </div>
@@ -5431,6 +5533,7 @@ function SessionMeta({
 function StatusLine({
   cellLabel,
   cellCount,
+  challengeMistakes,
   compact,
   completion,
   elapsedMs,
@@ -5444,6 +5547,7 @@ function StatusLine({
 }: {
   cellLabel: string;
   cellCount: number;
+  challengeMistakes?: number;
   compact: boolean;
   completion: number;
   elapsedMs: number;
@@ -5519,6 +5623,9 @@ function StatusLine({
         style={{ background: 'var(--panel-soft)', color: 'var(--app-text)' }}
       >
         {!compact && <span>{completion}/{cellCount}</span>}
+        {challengeMistakes !== undefined && (
+          <span className="text-[var(--accent-2)]">{challengeMistakes} miss</span>
+        )}
         <button
           type="button"
           title={timerEnabled ? (timerPaused ? 'Resume timer' : 'Pause timer') : 'Zen mode does not track time'}

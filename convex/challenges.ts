@@ -4,6 +4,7 @@ import { v } from 'convex/values';
 export const createRace = mutation({
   args: {
     challengeId: v.string(),
+    challengeKind: v.optional(v.string()),
     creatorAnonId: v.string(),
     creatorName: v.string(),
     difficulty: v.optional(v.string()),
@@ -21,6 +22,7 @@ export const createRace = mutation({
 
     if (existing) return existing.challengeId;
 
+    const challengeKind = cleanChallengeKind(args.challengeKind);
     const puzzleSize = cleanPuzzleSize(args.puzzleSize);
     const playMode = cleanPlayMode(args.playMode);
     const source = cleanText(args.source, 80) || 'vimdoku puzzle';
@@ -31,6 +33,7 @@ export const createRace = mutation({
 
     await ctx.db.insert('challenges', {
       challengeId,
+      challengeKind,
       createdAt: new Date().toISOString(),
       creatorAnonId: args.creatorAnonId,
       creatorName: cleanName(args.creatorName),
@@ -40,7 +43,7 @@ export const createRace = mutation({
       puzzleSize,
       source,
       status: 'open',
-      title: `Race ${titleParts.join(' / ')}`,
+      title: `${challengeKind === 'streak' ? 'Streak battle' : 'Race'} ${titleParts.join(' / ')}`,
     });
 
     return challengeId;
@@ -70,6 +73,7 @@ export const getRace = query({
 
     return {
       challengeId: challenge.challengeId,
+      challengeKind: challenge.challengeKind ?? 'race',
       createdAt: challenge.createdAt,
       creatorName: challenge.creatorName,
       difficulty: challenge.difficulty,
@@ -85,13 +89,14 @@ export const getRace = query({
           completedAt: attempt.completedAt,
           completion: attempt.completion,
           elapsedMs: attempt.elapsedMs,
+          mistakes: attempt.mistakes ?? 0,
           player: attempt.player,
           recordId: attempt.recordId,
           startedAt: attempt.startedAt,
           status: attempt.status,
           updatedAt: attempt.updatedAt,
         }))
-        .sort(compareAttempts),
+        .sort(compareAttemptsFor(challenge.challengeKind ?? 'race')),
     };
   },
 });
@@ -141,18 +146,20 @@ export const listMine = query({
             completedAt: attempt.completedAt,
             completion: attempt.completion,
             elapsedMs: attempt.elapsedMs,
+            mistakes: attempt.mistakes ?? 0,
             player: attempt.player,
             recordId: attempt.recordId,
             startedAt: attempt.startedAt,
             status: attempt.status,
             updatedAt: attempt.updatedAt,
           }))
-          .sort(compareAttempts);
+          .sort(compareAttemptsFor(challenge.challengeKind ?? 'race'));
         const mine = sortedAttempts.find((attempt) => attempt.anonId === args.anonId);
 
         return {
           attempts: sortedAttempts,
           challengeId: challenge.challengeId,
+          challengeKind: challenge.challengeKind ?? 'race',
           createdAt: challenge.createdAt,
           creatorName: challenge.creatorName,
           difficulty: challenge.difficulty,
@@ -215,6 +222,7 @@ export const startAttempt = mutation({
       challengeId,
       completion: 0,
       elapsedMs: 0,
+      mistakes: 0,
       player: cleanName(args.player),
       recordId: args.recordId,
       startedAt: now,
@@ -231,6 +239,7 @@ export const submitAttempt = mutation({
     completedAt: v.string(),
     completion: v.number(),
     elapsedMs: v.number(),
+    mistakes: v.optional(v.number()),
     player: v.string(),
     recordId: v.string(),
   },
@@ -252,10 +261,12 @@ export const submitAttempt = mutation({
       existingAttempts.find((attempt) => attempt.anonId === args.anonId) ?? null;
     const elapsedMs = Math.max(0, Math.floor(args.elapsedMs));
     const completion = Math.max(0, Math.floor(args.completion));
+    const mistakes = Math.max(0, Math.floor(args.mistakes ?? 0));
     const doc = {
       completedAt: args.completedAt,
       completion,
       elapsedMs,
+      mistakes,
       player: cleanName(args.player),
       recordId: args.recordId,
       status: 'completed' as const,
@@ -279,13 +290,21 @@ export const submitAttempt = mutation({
   },
 });
 
-function compareAttempts(
-  a: { elapsedMs: number; status: string; updatedAt: string },
-  b: { elapsedMs: number; status: string; updatedAt: string },
-) {
-  if (a.status !== b.status) return a.status === 'completed' ? -1 : 1;
-  if (a.status === 'completed') return a.elapsedMs - b.elapsedMs;
-  return b.updatedAt.localeCompare(a.updatedAt);
+function compareAttemptsFor(challengeKind: string) {
+  return (
+    a: { elapsedMs: number; mistakes?: number; status: string; updatedAt: string },
+    b: { elapsedMs: number; mistakes?: number; status: string; updatedAt: string },
+  ) => {
+    if (a.status !== b.status) return a.status === 'completed' ? -1 : 1;
+    if (a.status === 'completed') {
+      if (challengeKind === 'streak') {
+        const mistakeDelta = (a.mistakes ?? 0) - (b.mistakes ?? 0);
+        if (mistakeDelta !== 0) return mistakeDelta;
+      }
+      return a.elapsedMs - b.elapsedMs;
+    }
+    return b.updatedAt.localeCompare(a.updatedAt);
+  };
 }
 
 function latestChallengeActivity(
@@ -301,6 +320,10 @@ function latestChallengeActivity(
 
 function cleanChallengeId(value: string) {
   return value.replace(/[^a-z0-9-]/gi, '').slice(0, 48) || 'race';
+}
+
+function cleanChallengeKind(value: string | undefined) {
+  return value === 'streak' ? 'streak' : 'race';
 }
 
 function cleanName(value: string) {
