@@ -9,15 +9,15 @@ npm install
 npm run dev
 ```
 
-## Cloudflare Pages
+## Cloudflare Workers
 
-The app is configured for Cloudflare Pages direct upload with Wrangler.
+The app is configured for Cloudflare Workers static assets with Wrangler.
 
 ```sh
 npm run deploy
 ```
 
-That command builds the app and uploads `dist/` to the `vimdoku` Pages project. For a preview branch:
+That command builds the app and deploys `dist/` to the `vimdoku` Worker. To upload a preview Worker version without shifting production traffic:
 
 ```sh
 npm run deploy:preview
@@ -29,13 +29,13 @@ If Wrangler is not already authenticated, create a Cloudflare API token and run 
 CLOUDFLARE_API_TOKEN=... npm run deploy
 ```
 
-Cloudflare Pages dashboard settings for a Git-connected deploy:
+Cloudflare Workers build settings for a Git-connected deploy:
 
 - Build command: `npm run build`
-- Build output directory: `dist`
+- Deploy command: `npx wrangler deploy`
 - Environment variable: `VITE_CONVEX_URL=https://compassionate-cricket-778.eu-west-1.convex.cloud`
 
-`public/_redirects` is included so deep links such as `/play/daily/easy/2026-05-19` load the React app.
+`wrangler.toml` uses Workers assets with `not_found_handling = "single-page-application"` so deep links such as `/play/daily/easy/2026-05-19` load the React app.
 
 ## Routes
 
