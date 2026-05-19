@@ -4,6 +4,7 @@ import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
 import type { LeaderboardEntry } from './leaderboard';
 import type { GameRecord } from './storage';
+import type { PuzzleSize } from './sudoku';
 import { getOrCreateGuestId } from './identity';
 
 export type CloudProfile = {
@@ -30,6 +31,7 @@ type SubmitScoreArgs = {
   elapsedMs: number;
   player: string;
   puzzle: string;
+  puzzleSize?: PuzzleSize;
   recordId: string;
   source: string;
 };
@@ -44,6 +46,7 @@ type UpsertGameArgs = {
   grid: number[];
   notes: number[][];
   puzzle: string;
+  puzzleSize?: PuzzleSize;
   recordId: string;
   source: string;
   status: 'in-progress' | 'completed';
@@ -52,7 +55,7 @@ type UpsertGameArgs = {
 
 const topScoresRef = makeFunctionReference<
   'query',
-  { limit?: number },
+  { limit?: number; puzzleSize?: PuzzleSize },
   LeaderboardEntry[]
 >('leaderboards:top');
 
@@ -84,6 +87,7 @@ export function ConvexBridge({
   currentRecord,
   gameRecords,
   leaderboardOpen,
+  leaderboardSize,
   onProfile,
   onScores,
   onStats,
@@ -95,6 +99,7 @@ export function ConvexBridge({
   currentRecord: GameRecord;
   gameRecords: GameRecord[];
   leaderboardOpen: boolean;
+  leaderboardSize: PuzzleSize;
   onProfile: (profile: CloudProfile | null) => void;
   onScores: (scores: LeaderboardEntry[]) => void;
   onStats: (stats: CloudStats | null) => void;
@@ -109,7 +114,7 @@ export function ConvexBridge({
   const lastGameSyncAt = useRef(0);
   const topScores = useQuery(
     topScoresRef as FunctionReference<'query'>,
-    leaderboardOpen ? { limit: 50 } : 'skip',
+    leaderboardOpen ? { limit: 50, puzzleSize: leaderboardSize } : 'skip',
   ) as LeaderboardEntry[] | undefined;
   const profile = useQuery(
     currentProfileRef as FunctionReference<'query'>,
@@ -215,6 +220,7 @@ function toGameArgs(record: GameRecord, anonId: string): UpsertGameArgs {
     grid: record.grid,
     notes: record.notes,
     puzzle: record.puzzle,
+    puzzleSize: record.puzzleSize,
     recordId: record.id,
     source: record.source,
     status: record.status,
@@ -234,6 +240,7 @@ function toScoreArgs(
     elapsedMs: record.elapsedMs,
     player: playerName,
     puzzle: record.puzzle,
+    puzzleSize: record.puzzleSize,
     recordId: record.id,
     source: record.source,
   };

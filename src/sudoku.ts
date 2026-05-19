@@ -1,6 +1,16 @@
 export type Grid = number[];
 export type Notes = number[][];
 export type PuzzleDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
+export type PuzzleSize = '6x6' | '9x9';
+
+export type BoardConfig = {
+  boxCols: number;
+  boxRows: number;
+  cellCount: number;
+  digits: number[];
+  puzzleSize: PuzzleSize;
+  size: number;
+};
 
 export type Hint =
   | {
@@ -30,8 +40,29 @@ export type Hint =
       message: string;
     };
 
-export const EMPTY_GRID: Grid = Array(81).fill(0);
-export const EMPTY_NOTES: Notes = Array.from({ length: 81 }, () => []);
+export const DEFAULT_PUZZLE_SIZE: PuzzleSize = '9x9';
+
+export const BOARD_CONFIGS: Record<PuzzleSize, BoardConfig> = {
+  '6x6': {
+    boxCols: 3,
+    boxRows: 2,
+    cellCount: 36,
+    digits: [1, 2, 3, 4, 5, 6],
+    puzzleSize: '6x6',
+    size: 6,
+  },
+  '9x9': {
+    boxCols: 3,
+    boxRows: 3,
+    cellCount: 81,
+    digits: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    puzzleSize: '9x9',
+    size: 9,
+  },
+};
+
+export const EMPTY_GRID: Grid = emptyGrid();
+export const EMPTY_NOTES: Notes = emptyNotes();
 
 export const STARTER_GRID: Grid = parseGrid(
   '530070000' +
@@ -45,41 +76,78 @@ export const STARTER_GRID: Grid = parseGrid(
     '000080079',
 );
 
-const DIFFICULTY_CLUES: Record<PuzzleDifficulty, number> = {
-  easy: 42,
-  medium: 36,
-  hard: 30,
-  expert: 26,
+const DIFFICULTY_CLUES: Record<PuzzleSize, Record<PuzzleDifficulty, number>> = {
+  '6x6': {
+    easy: 24,
+    medium: 20,
+    hard: 17,
+    expert: 14,
+  },
+  '9x9': {
+    easy: 42,
+    medium: 36,
+    hard: 30,
+    expert: 26,
+  },
 };
 
-export function parseGrid(input: string): Grid {
-  const cells = input
-    .replace(/[^0-9.]/g, '')
-    .slice(0, 81)
-    .padEnd(81, '0')
+export function boardConfigFor(puzzleSize: PuzzleSize = DEFAULT_PUZZLE_SIZE) {
+  return BOARD_CONFIGS[puzzleSize] ?? BOARD_CONFIGS[DEFAULT_PUZZLE_SIZE];
+}
+
+export function emptyGrid(puzzleSize: PuzzleSize = DEFAULT_PUZZLE_SIZE): Grid {
+  return Array(boardConfigFor(puzzleSize).cellCount).fill(0);
+}
+
+export function emptyNotes(puzzleSize: PuzzleSize = DEFAULT_PUZZLE_SIZE): Notes {
+  return Array.from({ length: boardConfigFor(puzzleSize).cellCount }, () => []);
+}
+
+export function puzzleSizeFromGrid(grid: Grid | string): PuzzleSize {
+  const length = typeof grid === 'string' ? normalizeGridText(grid).length : grid.length;
+  return length === BOARD_CONFIGS['6x6'].cellCount ? '6x6' : '9x9';
+}
+
+export function parseGrid(
+  input: string,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(input),
+): Grid {
+  const config = boardConfigFor(puzzleSize);
+  const cells = normalizeGridText(input)
+    .slice(0, config.cellCount)
+    .padEnd(config.cellCount, '0')
     .split('')
     .map((char) => (char === '.' ? 0 : Number(char)));
 
-  return cells.map((value) => (value >= 1 && value <= 9 ? value : 0));
+  return cells.map((value) =>
+    value >= 1 && value <= config.size ? value : 0,
+  );
 }
 
 export function generatePuzzle(
   difficulty: PuzzleDifficulty = 'medium',
   seed = Date.now(),
+  puzzleSize: PuzzleSize = DEFAULT_PUZZLE_SIZE,
 ): Grid {
-  const targetClues = DIFFICULTY_CLUES[difficulty];
-  let bestPuzzle = STARTER_GRID;
+  const config = boardConfigFor(puzzleSize);
+  const targetClues = DIFFICULTY_CLUES[puzzleSize][difficulty];
+  let bestPuzzle = makeSolvedGrid(puzzleSize, seededRandom(seed));
   let bestDistance = Number.POSITIVE_INFINITY;
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const random = seededRandom(seed + attempt * 0x9e3779b1);
-    const puzzle = makeSolvedGrid(random);
-    let clueCount = 81;
+    const puzzle = makeSolvedGrid(puzzleSize, random);
+    let clueCount = config.cellCount;
 
+    const midpoint = Math.floor(config.cellCount / 2);
     const pairs = shuffle(
-      Array.from({ length: 41 }, (_, index) => index),
+      Array.from({ length: midpoint + 1 }, (_, index) => index),
       random,
-    ).map((index) => (index === 40 ? [index] : [index, 80 - index]));
+    ).map((index) =>
+      config.cellCount % 2 === 1 && index === midpoint
+        ? [index]
+        : [index, config.cellCount - 1 - index],
+    );
 
     for (const pair of pairs) {
       if (clueCount <= targetClues) break;
@@ -90,7 +158,7 @@ export function generatePuzzle(
 
       for (const index of pair) puzzle[index] = 0;
 
-      if (countSolutions(puzzle, 2) === 1) {
+      if (countSolutions(puzzle, 2, puzzleSize) === 1) {
         clueCount -= removed;
       } else {
         pair.forEach((index, offset) => {
@@ -118,21 +186,25 @@ export function cloneNotes(notes: Notes): Notes {
   return notes.map((cell) => [...cell]);
 }
 
-export function peers(index: number): Set<number> {
-  const row = Math.floor(index / 9);
-  const col = index % 9;
-  const boxRow = Math.floor(row / 3) * 3;
-  const boxCol = Math.floor(col / 3) * 3;
+export function peers(
+  index: number,
+  puzzleSize: PuzzleSize = DEFAULT_PUZZLE_SIZE,
+): Set<number> {
+  const config = boardConfigFor(puzzleSize);
+  const row = Math.floor(index / config.size);
+  const col = index % config.size;
+  const boxRow = Math.floor(row / config.boxRows) * config.boxRows;
+  const boxCol = Math.floor(col / config.boxCols) * config.boxCols;
   const result = new Set<number>();
 
-  for (let i = 0; i < 9; i += 1) {
-    result.add(row * 9 + i);
-    result.add(i * 9 + col);
+  for (let i = 0; i < config.size; i += 1) {
+    result.add(row * config.size + i);
+    result.add(i * config.size + col);
   }
 
-  for (let r = boxRow; r < boxRow + 3; r += 1) {
-    for (let c = boxCol; c < boxCol + 3; c += 1) {
-      result.add(r * 9 + c);
+  for (let r = boxRow; r < boxRow + config.boxRows; r += 1) {
+    for (let c = boxCol; c < boxCol + config.boxCols; c += 1) {
+      result.add(r * config.size + c);
     }
   }
 
@@ -140,24 +212,32 @@ export function peers(index: number): Set<number> {
   return result;
 }
 
-export function isValidMove(grid: Grid, index: number, value: number): boolean {
+export function isValidMove(
+  grid: Grid,
+  index: number,
+  value: number,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+): boolean {
   if (value === 0) return true;
-  for (const peer of peers(index)) {
+  for (const peer of peers(index, puzzleSize)) {
     if (grid[peer] === value) return false;
   }
   return true;
 }
 
-export function findConflicts(grid: Grid): Set<number> {
+export function findConflicts(
+  grid: Grid,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+): Set<number> {
   const conflicts = new Set<number>();
 
   grid.forEach((value, index) => {
     if (value === 0) return;
     const withoutCell = [...grid];
     withoutCell[index] = 0;
-    if (!isValidMove(withoutCell, index, value)) {
+    if (!isValidMove(withoutCell, index, value, puzzleSize)) {
       conflicts.add(index);
-      for (const peer of peers(index)) {
+      for (const peer of peers(index, puzzleSize)) {
         if (grid[peer] === value) conflicts.add(peer);
       }
     }
@@ -166,35 +246,52 @@ export function findConflicts(grid: Grid): Set<number> {
   return conflicts;
 }
 
-export function candidatesFor(grid: Grid, index: number): number[] {
+export function candidatesFor(
+  grid: Grid,
+  index: number,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+): number[] {
   if (grid[index] !== 0) return [];
-  return [1, 2, 3, 4, 5, 6, 7, 8, 9].filter((value) =>
-    isValidMove(grid, index, value),
+  return boardConfigFor(puzzleSize).digits.filter((value) =>
+    isValidMove(grid, index, value, puzzleSize),
   );
 }
 
-export function candidatesAsNotes(grid: Grid): Notes {
-  return grid.map((value, index) => (value === 0 ? candidatesFor(grid, index) : []));
+export function candidatesAsNotes(
+  grid: Grid,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+): Notes {
+  return grid.map((value, index) =>
+    value === 0 ? candidatesFor(grid, index, puzzleSize) : [],
+  );
 }
 
-export function pruneImpossibleNotes(grid: Grid, notes: Notes): Notes {
+export function pruneImpossibleNotes(
+  grid: Grid,
+  notes: Notes,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+): Notes {
   return notes.map((cell, index) => {
-    const candidates = candidatesFor(grid, index);
+    const candidates = candidatesFor(grid, index, puzzleSize);
     return cell.filter((note) => candidates.includes(note));
   });
 }
 
-export function solveGrid(grid: Grid): Grid | null {
-  if (findConflicts(grid).size > 0) return null;
+export function solveGrid(
+  grid: Grid,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+): Grid | null {
+  const config = boardConfigFor(puzzleSize);
+  if (findConflicts(grid, puzzleSize).size > 0) return null;
   const working = [...grid];
 
   function solve(): boolean {
     let bestIndex = -1;
     let bestCandidates: number[] = [];
 
-    for (let index = 0; index < 81; index += 1) {
+    for (let index = 0; index < config.cellCount; index += 1) {
       if (working[index] !== 0) continue;
-      const candidates = candidatesFor(working, index);
+      const candidates = candidatesFor(working, index, puzzleSize);
       if (candidates.length === 0) return false;
       if (bestIndex === -1 || candidates.length < bestCandidates.length) {
         bestIndex = index;
@@ -216,8 +313,13 @@ export function solveGrid(grid: Grid): Grid | null {
   return solve() ? working : null;
 }
 
-function countSolutions(grid: Grid, limit: number): number {
-  if (findConflicts(grid).size > 0) return 0;
+function countSolutions(
+  grid: Grid,
+  limit: number,
+  puzzleSize: PuzzleSize,
+): number {
+  const config = boardConfigFor(puzzleSize);
+  if (findConflicts(grid, puzzleSize).size > 0) return 0;
   const working = [...grid];
   let count = 0;
 
@@ -227,9 +329,9 @@ function countSolutions(grid: Grid, limit: number): number {
     let bestIndex = -1;
     let bestCandidates: number[] = [];
 
-    for (let index = 0; index < 81; index += 1) {
+    for (let index = 0; index < config.cellCount; index += 1) {
       if (working[index] !== 0) continue;
-      const candidates = candidatesFor(working, index);
+      const candidates = candidatesFor(working, index, puzzleSize);
       if (candidates.length === 0) return;
       if (bestIndex === -1 || candidates.length < bestCandidates.length) {
         bestIndex = index;
@@ -254,8 +356,11 @@ function countSolutions(grid: Grid, limit: number): number {
   return count;
 }
 
-export function nextHint(grid: Grid): Hint {
-  if (findConflicts(grid).size > 0) {
+export function nextHint(
+  grid: Grid,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+): Hint {
+  if (findConflicts(grid, puzzleSize).size > 0) {
     return {
       kind: 'invalid',
       message: 'There is a conflict on the board. Fix highlighted cells first.',
@@ -266,27 +371,30 @@ export function nextHint(grid: Grid): Hint {
     return { kind: 'complete', message: 'The board is complete.' };
   }
 
-  for (let index = 0; index < 81; index += 1) {
-    const candidates = candidatesFor(grid, index);
+  const config = boardConfigFor(puzzleSize);
+  for (let index = 0; index < config.cellCount; index += 1) {
+    const candidates = candidatesFor(grid, index, puzzleSize);
     if (candidates.length === 1) {
       return {
         kind: 'single',
         technique: 'Naked single',
         cell: index,
         value: candidates[0],
-        nudge: `${labelCell(index)} is nearly forced.`,
-        message: `${labelCell(index)} can only be ${candidates[0]}.`,
+        nudge: `${labelCell(index, puzzleSize)} is nearly forced.`,
+        message: `${labelCell(index, puzzleSize)} can only be ${candidates[0]}.`,
         detail: `Every other digit conflicts with the row, column, or box around ${labelCell(
           index,
+          puzzleSize,
         )}.`,
       };
     }
   }
 
-  for (const unit of allUnits()) {
-    for (let value = 1; value <= 9; value += 1) {
+  for (const unit of allUnits(puzzleSize)) {
+    for (const value of config.digits) {
       const possibleCells = unit.filter(
-        (index) => grid[index] === 0 && candidatesFor(grid, index).includes(value),
+        (index) =>
+          grid[index] === 0 && candidatesFor(grid, index, puzzleSize).includes(value),
       );
       if (possibleCells.length === 1) {
         return {
@@ -294,17 +402,18 @@ export function nextHint(grid: Grid): Hint {
           technique: 'Hidden single',
           cell: possibleCells[0],
           value,
-          nudge: `Look for where ${value} can go in ${unitLabel(unit)}.`,
-          message: `${value} has only one place in ${unitLabel(unit)}.`,
+          nudge: `Look for where ${value} can go in ${unitLabel(unit, puzzleSize)}.`,
+          message: `${value} has only one place in ${unitLabel(unit, puzzleSize)}.`,
           detail: `${labelCell(
             possibleCells[0],
+            puzzleSize,
           )} is the only open cell in that unit that can accept ${value}.`,
         };
       }
     }
   }
 
-  const solved = solveGrid(grid);
+  const solved = solveGrid(grid, puzzleSize);
   if (!solved) {
     return {
       kind: 'invalid',
@@ -318,40 +427,50 @@ export function nextHint(grid: Grid): Hint {
     technique: 'Solver nudge',
     cell,
     value: solved[cell],
-    nudge: `Try investigating ${labelCell(cell)}.`,
-    message: `No simple single is available. Try ${solved[cell]} at ${labelCell(cell)}.`,
+    nudge: `Try investigating ${labelCell(cell, puzzleSize)}.`,
+    message: `No simple single is available. Try ${solved[cell]} at ${labelCell(cell, puzzleSize)}.`,
     detail:
       'The lightweight human hint engine did not find a naked or hidden single, so this falls back to the solved grid.',
   };
 }
 
-export function removeRelatedNotes(notes: Notes, index: number, value: number): Notes {
+export function removeRelatedNotes(
+  notes: Notes,
+  index: number,
+  value: number,
+  puzzleSize: PuzzleSize = notes.length === BOARD_CONFIGS['6x6'].cellCount ? '6x6' : '9x9',
+): Notes {
   const next = cloneNotes(notes);
   next[index] = [];
-  for (const peer of peers(index)) {
+  for (const peer of peers(index, puzzleSize)) {
     next[peer] = next[peer].filter((note) => note !== value);
   }
   return next;
 }
 
-export function labelCell(index: number): string {
-  return `r${Math.floor(index / 9) + 1}c${(index % 9) + 1}`;
+export function labelCell(
+  index: number,
+  puzzleSize: PuzzleSize = DEFAULT_PUZZLE_SIZE,
+): string {
+  const size = boardConfigFor(puzzleSize).size;
+  return `r${Math.floor(index / size) + 1}c${(index % size) + 1}`;
 }
 
-function allUnits(): number[][] {
+function allUnits(puzzleSize: PuzzleSize): number[][] {
+  const config = boardConfigFor(puzzleSize);
   const units: number[][] = [];
 
-  for (let i = 0; i < 9; i += 1) {
-    units.push(Array.from({ length: 9 }, (_, col) => i * 9 + col));
-    units.push(Array.from({ length: 9 }, (_, row) => row * 9 + i));
+  for (let i = 0; i < config.size; i += 1) {
+    units.push(Array.from({ length: config.size }, (_, col) => i * config.size + col));
+    units.push(Array.from({ length: config.size }, (_, row) => row * config.size + i));
   }
 
-  for (let boxRow = 0; boxRow < 3; boxRow += 1) {
-    for (let boxCol = 0; boxCol < 3; boxCol += 1) {
+  for (let boxRow = 0; boxRow < config.size / config.boxRows; boxRow += 1) {
+    for (let boxCol = 0; boxCol < config.size / config.boxCols; boxCol += 1) {
       const unit: number[] = [];
-      for (let row = boxRow * 3; row < boxRow * 3 + 3; row += 1) {
-        for (let col = boxCol * 3; col < boxCol * 3 + 3; col += 1) {
-          unit.push(row * 9 + col);
+      for (let row = boxRow * config.boxRows; row < boxRow * config.boxRows + config.boxRows; row += 1) {
+        for (let col = boxCol * config.boxCols; col < boxCol * config.boxCols + config.boxCols; col += 1) {
+          unit.push(row * config.size + col);
         }
       }
       units.push(unit);
@@ -361,19 +480,39 @@ function allUnits(): number[][] {
   return units;
 }
 
-function makeSolvedGrid(random: () => number): Grid {
-  const bands = shuffle([0, 1, 2], random);
-  const stacks = shuffle([0, 1, 2], random);
+function makeSolvedGrid(
+  puzzleSize: PuzzleSize,
+  random: () => number,
+): Grid {
+  const config = boardConfigFor(puzzleSize);
+  const bandCount = config.size / config.boxRows;
+  const stackCount = config.size / config.boxCols;
+  const bands = shuffle(
+    Array.from({ length: bandCount }, (_, index) => index),
+    random,
+  );
+  const stacks = shuffle(
+    Array.from({ length: stackCount }, (_, index) => index),
+    random,
+  );
   const rows = bands.flatMap((band) =>
-    shuffle([0, 1, 2], random).map((row) => band * 3 + row),
+    shuffle(
+      Array.from({ length: config.boxRows }, (_, row) => band * config.boxRows + row),
+      random,
+    ),
   );
   const cols = stacks.flatMap((stack) =>
-    shuffle([0, 1, 2], random).map((col) => stack * 3 + col),
+    shuffle(
+      Array.from({ length: config.boxCols }, (_, col) => stack * config.boxCols + col),
+      random,
+    ),
   );
-  const values = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9], random);
+  const values = shuffle(config.digits, random);
 
   return rows.flatMap((row) =>
-    cols.map((col) => values[(row * 3 + Math.floor(row / 3) + col) % 9]),
+    cols.map((col) =>
+      values[(row * config.boxCols + Math.floor(row / config.boxRows) + col) % config.size],
+    ),
   );
 }
 
@@ -397,11 +536,24 @@ function seededRandom(seed: number) {
   };
 }
 
-function unitLabel(unit: number[]): string {
+function unitLabel(unit: number[], puzzleSize: PuzzleSize): string {
+  const config = boardConfigFor(puzzleSize);
   const first = unit[0];
   const second = unit[1];
 
-  if (second === first + 1) return `row ${Math.floor(first / 9) + 1}`;
-  if (second === first + 9) return `column ${(first % 9) + 1}`;
-  return `box ${Math.floor(first / 27) * 3 + Math.floor((first % 9) / 3) + 1}`;
+  if (second === first + 1) return `row ${Math.floor(first / config.size) + 1}`;
+  if (second === first + config.size) return `column ${(first % config.size) + 1}`;
+
+  const row = Math.floor(first / config.size);
+  const col = first % config.size;
+  const boxesPerRow = config.size / config.boxCols;
+  return `box ${
+    Math.floor(row / config.boxRows) * boxesPerRow +
+    Math.floor(col / config.boxCols) +
+    1
+  }`;
+}
+
+function normalizeGridText(input: string) {
+  return input.replace(/[^0-9.]/g, '');
 }

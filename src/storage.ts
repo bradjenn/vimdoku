@@ -3,10 +3,13 @@ import {
   EMPTY_NOTES,
   STARTER_GRID,
   cloneNotes,
+  emptyNotes,
   parseGrid,
+  puzzleSizeFromGrid,
   type Grid,
   type Notes,
   type PuzzleDifficulty,
+  type PuzzleSize,
 } from './sudoku';
 
 export type Snapshot = {
@@ -18,6 +21,7 @@ export type Snapshot = {
 export type GameMeta = {
   id: string;
   puzzle: string;
+  puzzleSize: PuzzleSize;
   source: string;
   difficulty?: PuzzleDifficulty | 'custom';
   startedAt: string;
@@ -70,12 +74,14 @@ export function createGameMeta(
   puzzleGrid: Grid,
   source: string,
   difficulty?: PuzzleDifficulty | 'custom',
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(puzzleGrid),
 ): GameMeta {
   const now = new Date().toISOString();
-  const puzzle = gridToString(puzzleGrid);
+  const puzzle = gridToString(puzzleGrid, puzzleSize);
   return {
     id: `${hashString(`${puzzle}:${source}:${now}`).toString(36)}-${Date.now().toString(36)}`,
     puzzle,
+    puzzleSize,
     source,
     difficulty,
     startedAt: now,
@@ -201,8 +207,12 @@ export function upsertGameRecord(records: GameRecord[], nextRecord: GameRecord) 
   return [merged, ...records.filter((record) => record.id !== nextRecord.id)].slice(0, 80);
 }
 
-export function gridToString(grid: Grid) {
-  return grid.map((value) => (value >= 1 && value <= 9 ? value : 0)).join('');
+export function gridToString(
+  grid: Grid,
+  puzzleSize: PuzzleSize = puzzleSizeFromGrid(grid),
+) {
+  const maxDigit = puzzleSize === '6x6' ? 6 : 9;
+  return grid.map((value) => (value >= 1 && value <= maxDigit ? value : 0)).join('');
 }
 
 async function migrateLocalStorage() {
@@ -253,24 +263,33 @@ function loadLegacyActiveGame(): GameMeta | null {
 }
 
 function sanitizeSnapshot(snapshot: Snapshot): Snapshot | null {
-  if (snapshot.grid?.length !== 81 || snapshot.givens?.length !== 81) return null;
+  const puzzleSize = puzzleSizeFromGrid(snapshot.grid ?? []);
+  const cellCount = puzzleSize === '6x6' ? 36 : 81;
+  if (snapshot.grid?.length !== cellCount || snapshot.givens?.length !== cellCount) {
+    return null;
+  }
   return {
-    grid: parseGrid(snapshot.grid.join('')),
+    grid: parseGrid(snapshot.grid.join(''), puzzleSize),
     givens: snapshot.givens.map(Boolean),
     notes:
-      snapshot.notes?.length === 81
+      snapshot.notes?.length === cellCount
         ? snapshot.notes.map((cell) =>
-            cell.filter((value) => value >= 1 && value <= 9).sort(),
+            cell.filter((value) => value >= 1 && value <= (puzzleSize === '6x6' ? 6 : 9)).sort(),
           )
-        : EMPTY_NOTES,
+        : emptyNotes(puzzleSize),
   };
 }
 
 function sanitizeGameMeta(meta: GameMeta): GameMeta | null {
   if (!meta.id || !meta.puzzle || !meta.source || !meta.startedAt) return null;
+  const puzzleSize =
+    meta.puzzleSize === '6x6' || meta.puzzleSize === '9x9'
+      ? meta.puzzleSize
+      : puzzleSizeFromGrid(String(meta.puzzle));
   return {
     id: String(meta.id),
-    puzzle: gridToString(parseGrid(meta.puzzle)),
+    puzzle: gridToString(parseGrid(meta.puzzle, puzzleSize), puzzleSize),
+    puzzleSize,
     source: String(meta.source),
     difficulty: meta.difficulty,
     startedAt: String(meta.startedAt),
@@ -278,11 +297,18 @@ function sanitizeGameMeta(meta: GameMeta): GameMeta | null {
 }
 
 function sanitizeGameRecord(record: GameRecord): GameRecord | null {
+  const puzzleSize =
+    record.puzzleSize === '6x6' || record.puzzleSize === '9x9'
+      ? record.puzzleSize
+      : puzzleSizeFromGrid(record.grid ?? record.puzzle ?? '');
+  const cellCount = puzzleSize === '6x6' ? 36 : 81;
+  const maxDigit = puzzleSize === '6x6' ? 6 : 9;
+
   if (
     !record.id ||
-    record.grid?.length !== 81 ||
-    record.givens?.length !== 81 ||
-    record.notes?.length !== 81
+    record.grid?.length !== cellCount ||
+    record.givens?.length !== cellCount ||
+    record.notes?.length !== cellCount
   ) {
     return null;
   }
@@ -293,19 +319,20 @@ function sanitizeGameRecord(record: GameRecord): GameRecord | null {
 
   return {
     id: String(record.id),
-    puzzle: gridToString(parseGrid(record.puzzle ?? fallbackPuzzle)),
+    puzzle: gridToString(parseGrid(record.puzzle ?? fallbackPuzzle, puzzleSize), puzzleSize),
+    puzzleSize,
     source: String(record.source ?? 'unknown'),
     difficulty: record.difficulty,
     startedAt: String(record.startedAt),
     updatedAt: String(record.updatedAt ?? record.startedAt),
     completedAt: record.completedAt ? String(record.completedAt) : undefined,
-    completion: Math.max(0, Math.min(81, Number(record.completion) || 0)),
+    completion: Math.max(0, Math.min(cellCount, Number(record.completion) || 0)),
     elapsedMs: Math.max(0, Math.floor(Number(record.elapsedMs) || 0)),
     status: record.status === 'completed' ? 'completed' : 'in-progress',
-    grid: parseGrid(record.grid.join('')),
+    grid: parseGrid(record.grid.join(''), puzzleSize),
     givens: record.givens.map(Boolean),
     notes: record.notes.map((cell) =>
-      cell.filter((value) => value >= 1 && value <= 9).sort(),
+      cell.filter((value) => value >= 1 && value <= maxDigit).sort(),
     ),
   };
 }

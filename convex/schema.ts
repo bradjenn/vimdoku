@@ -19,6 +19,7 @@ export default defineSchema({
     grid: v.array(v.number()),
     notes: v.array(v.array(v.number())),
     puzzle: v.string(),
+    puzzleSize: v.optional(v.string()),
     recordId: v.string(),
     source: v.string(),
     status: v.union(v.literal('in-progress'), v.literal('completed')),
@@ -36,10 +37,12 @@ export default defineSchema({
     elapsedMs: v.number(),
     player: v.string(),
     puzzle: v.string(),
+    puzzleSize: v.optional(v.string()),
     recordId: v.string(),
     source: v.string(),
   })
     .index('by_elapsedMs', ['elapsedMs'])
+    .index('by_puzzleSize_elapsedMs', ['puzzleSize', 'elapsedMs'])
     .index('by_puzzle_elapsedMs', ['puzzle', 'elapsedMs'])
     .index('by_recordId', ['recordId']),
 });

@@ -1,4 +1,5 @@
 import type { GameRecord } from './storage';
+import type { PuzzleSize } from './sudoku';
 
 export const PLAYER_NAME_KEY = 'vimdoku-player-name-v1';
 
@@ -9,6 +10,7 @@ export type LeaderboardEntry = {
   id: string;
   player: string;
   puzzle: string;
+  puzzleSize?: PuzzleSize;
   source: string;
 };
 
@@ -20,12 +22,14 @@ export function hasGlobalLeaderboard() {
   return Boolean(LEADERBOARD_ENDPOINT);
 }
 
-export async function fetchGlobalLeaderboard() {
+export async function fetchGlobalLeaderboard(puzzleSize: PuzzleSize = '9x9') {
   if (!LEADERBOARD_ENDPOINT) {
     throw new Error('No global leaderboard endpoint is configured.');
   }
 
-  const response = await fetch(LEADERBOARD_ENDPOINT);
+  const url = new URL(LEADERBOARD_ENDPOINT);
+  url.searchParams.set('puzzleSize', puzzleSize);
+  const response = await fetch(url);
   if (!response.ok) throw new Error(`Leaderboard request failed: ${response.status}`);
   const payload = await response.json();
   const entries: LeaderboardEntry[] = Array.isArray(payload)
@@ -51,6 +55,7 @@ export async function submitGlobalScore(record: GameRecord) {
       id: record.id,
       player: localStorage.getItem(PLAYER_NAME_KEY) || 'anonymous',
       puzzle: record.puzzle,
+      puzzleSize: record.puzzleSize,
       source: record.source,
     }),
     headers: { 'Content-Type': 'application/json' },
@@ -67,6 +72,7 @@ function normalizeEntry(entry: LeaderboardEntry): LeaderboardEntry | null {
     id: String(entry.id),
     player: String(entry.player || 'anonymous'),
     puzzle: String(entry.puzzle),
+    puzzleSize: entry.puzzleSize === '6x6' ? '6x6' : '9x9',
     source: String(entry.source || 'unknown'),
   };
 }

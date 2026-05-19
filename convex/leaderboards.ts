@@ -9,6 +9,7 @@ export const submitScore = mutation({
     elapsedMs: v.number(),
     player: v.string(),
     puzzle: v.string(),
+    puzzleSize: v.optional(v.string()),
     recordId: v.string(),
     source: v.string(),
   },
@@ -27,6 +28,7 @@ export const submitScore = mutation({
         difficulty: args.difficulty,
         elapsedMs,
         player,
+        puzzleSize: cleanPuzzleSize(args.puzzleSize),
         source: args.source,
       });
       return existing._id;
@@ -40,6 +42,7 @@ export const submitScore = mutation({
       elapsedMs,
       player,
       puzzle: args.puzzle,
+      puzzleSize: cleanPuzzleSize(args.puzzleSize),
       recordId: args.recordId,
       source: args.source,
     });
@@ -50,6 +53,7 @@ export const top = query({
   args: {
     limit: v.optional(v.number()),
     puzzle: v.optional(v.string()),
+    puzzleSize: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
@@ -59,6 +63,14 @@ export const top = query({
           .withIndex('by_puzzle_elapsedMs', (q) => q.eq('puzzle', args.puzzle ?? ''))
           .order('asc')
           .take(limit)
+      : args.puzzleSize
+        ? await ctx.db
+            .query('scores')
+            .withIndex('by_puzzleSize_elapsedMs', (q) =>
+              q.eq('puzzleSize', cleanPuzzleSize(args.puzzleSize)),
+            )
+            .order('asc')
+            .take(limit)
       : await ctx.db.query('scores').withIndex('by_elapsedMs').order('asc').take(limit);
 
     return scores.map((score) => ({
@@ -68,6 +80,7 @@ export const top = query({
       id: score.recordId,
       player: score.player,
       puzzle: score.puzzle,
+      puzzleSize: score.puzzleSize ?? '9x9',
       source: score.source,
     }));
   },
@@ -76,4 +89,8 @@ export const top = query({
 function cleanName(value: string) {
   const trimmed = value.trim().slice(0, 32);
   return trimmed || 'anonymous';
+}
+
+function cleanPuzzleSize(value: string | undefined) {
+  return value === '6x6' ? '6x6' : '9x9';
 }

@@ -11,6 +11,7 @@ const snapshotArgs = {
   grid: v.array(v.number()),
   notes: v.array(v.array(v.number())),
   puzzle: v.string(),
+  puzzleSize: v.optional(v.string()),
   recordId: v.string(),
   source: v.string(),
   status: v.union(v.literal('in-progress'), v.literal('completed')),
@@ -28,13 +29,16 @@ export const upsert = mutation({
     const doc = {
       anonId: args.anonId,
       completedAt: args.completedAt,
-      completion: clampNumber(args.completion, 0, 81),
+      completion: clampNumber(args.completion, 0, args.puzzleSize === '6x6' ? 36 : 81),
       difficulty: args.difficulty,
       elapsedMs: Math.max(0, Math.floor(args.elapsedMs)),
-      givens: args.givens.slice(0, 81),
-      grid: args.grid.slice(0, 81),
-      notes: args.notes.slice(0, 81).map((note) => note.slice(0, 9)),
+      givens: args.givens.slice(0, args.puzzleSize === '6x6' ? 36 : 81),
+      grid: args.grid.slice(0, args.puzzleSize === '6x6' ? 36 : 81),
+      notes: args.notes
+        .slice(0, args.puzzleSize === '6x6' ? 36 : 81)
+        .map((note) => note.slice(0, args.puzzleSize === '6x6' ? 6 : 9)),
       puzzle: args.puzzle,
+      puzzleSize: args.puzzleSize ?? '9x9',
       recordId: args.recordId,
       source: args.source,
       status: args.status,
