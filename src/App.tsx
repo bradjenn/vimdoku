@@ -155,6 +155,7 @@ const DASHBOARD_ACTIONS: [key: string, label: string][] = [
   ['c', 'continue'],
   ['g', 'puzzle log'],
   ['l', 'leaderboards'],
+  ['r', 'challenge race'],
   ['p', 'profile'],
   ['s', 'settings'],
 ];
@@ -1400,11 +1401,20 @@ function App() {
       if (key === 'n') openNewGame();
       else if (key === 'g') openGameLibrary();
       else if (key === 'l') openLeaderboards();
+      else if (key === 'r') createRaceChallenge();
       else if (key === 'p') goToProfile();
       else if (key === 's') openModalRoute('settings');
       else goToPlay();
     },
-    [goToPlay, goToProfile, openGameLibrary, openLeaderboards, openModalRoute, openNewGame],
+    [
+      createRaceChallenge,
+      goToPlay,
+      goToProfile,
+      openGameLibrary,
+      openLeaderboards,
+      openModalRoute,
+      openNewGame,
+    ],
   );
 
   const jumpToNextEmpty = useCallback((direction: 1 | -1) => {
