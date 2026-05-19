@@ -400,12 +400,15 @@ function App() {
     setCommandMode(null);
     if (activePage === 'play') {
       setMenuModal('new');
+      if (routeModal) {
+        void navigate({ to: '/play' });
+      }
       setStatusLine('Opened new game menu.');
       return;
     }
     void navigate({ to: '/new' });
     setStatusLine('Opened new game page.');
-  }, [activePage, navigate]);
+  }, [activePage, navigate, routeModal]);
 
   const closeMenuModal = useCallback(() => {
     setMenuModal(null);
