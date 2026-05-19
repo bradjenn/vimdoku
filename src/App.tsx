@@ -3052,6 +3052,40 @@ function SolvedModal({
   );
 }
 
+function NewGameSection({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <section className="relative border border-[var(--border)] bg-[var(--input-bg)] p-4">
+      <span className="absolute -top-[7px] left-3 bg-[var(--workspace-bg)] px-1.5 font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
+        {title}
+      </span>
+      {children}
+    </section>
+  );
+}
+
+function NewGameField({
+  children,
+  label,
+}: {
+  children: ReactNode;
+  label: string;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 font-mono text-[0.6rem] uppercase tracking-[0.2em] text-[var(--muted)]">
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 function NewGamePanel({
   dailyRecord,
   dateKey,
@@ -3112,204 +3146,222 @@ function NewGamePanel({
   const cellCount = boardConfigFor(puzzleSize).cellCount;
 
   return (
-    <div className="space-y-5">
-      <form
-        className={`grid gap-4 border bg-[var(--input-bg)] p-3 lg:grid-cols-[minmax(0,1fr)_220px] ${
-          dailyCompleted ? 'border-[var(--accent)]' : 'border-[var(--border)]'
-        }`}
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          const selectedDateKey = String(form.get('daily-date') ?? dateKey);
-          onOpenDaily(isValidDateKey(selectedDateKey) ? selectedDateKey : dateKey);
-        }}
-      >
-        <div className="min-w-0">
-          <p className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-            daily navigator
-          </p>
-          {dailyCompleted && (
-            <div className="mb-3 border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-bg)]">
-              completed {dailyRecord?.completedAt ? `· ${formatGameDate(dailyRecord.completedAt)}` : ''}
-            </div>
-          )}
-          <div className="mb-2 grid grid-cols-2 gap-2">
-            {PUZZLE_SIZES.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
-                  puzzleSize === option
-                    ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                    : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
-                }`}
-                onClick={() => onSizeChange(option)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-          <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-            {PLAY_MODES.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
-                  mode === option
-                    ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                    : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
-                }`}
-                onClick={() => onModeChange(option)}
-              >
-                {modeLabel(option)}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {NEW_GAME_DIFFICULTIES.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
-                  difficulty === option
-                    ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                    : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
-                }`}
-                onClick={() => onDifficultyChange(option)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+    <div className="space-y-4">
+      <NewGameSection title="play a daily">
+        <form
+          className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            const selectedDateKey = String(form.get('daily-date') ?? dateKey);
+            onOpenDaily(
+              isValidDateKey(selectedDateKey) ? selectedDateKey : dateKey,
+            );
+          }}
+        >
+          <div className="min-w-0 space-y-3">
+            {dailyCompleted && (
+              <div className="border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-bg)]">
+                completed{' '}
+                {dailyRecord?.completedAt
+                  ? `· ${formatGameDate(dailyRecord.completedAt)}`
+                  : ''}
+              </div>
+            )}
+            <NewGameField label="board">
+              <div className="grid grid-cols-2 gap-2">
+                {PUZZLE_SIZES.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
+                      puzzleSize === option
+                        ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                        : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                    }`}
+                    onClick={() => onSizeChange(option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </NewGameField>
+            <NewGameField label="mode">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {PLAY_MODES.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
+                      mode === option
+                        ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                        : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                    }`}
+                    onClick={() => onModeChange(option)}
+                  >
+                    {modeLabel(option)}
+                  </button>
+                ))}
+              </div>
+            </NewGameField>
+            <NewGameField label="difficulty">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {NEW_GAME_DIFFICULTIES.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
+                      difficulty === option
+                        ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                        : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                    }`}
+                    onClick={() => onDifficultyChange(option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </NewGameField>
+            <NewGameField label="date">
+              <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]">
+                <button
+                  type="button"
+                  className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)]"
+                  onClick={() => onDateChange(shiftDateKey(dateKey, -1))}
+                >
+                  prev
+                </button>
+                <label className="flex items-center gap-2 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+                  <span className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+                    date
+                  </span>
+                  <input
+                    className="min-w-0 flex-1 bg-transparent font-mono text-sm text-[var(--app-text)] outline-none"
+                    max={todayDateKey()}
+                    name="daily-date"
+                    type="date"
+                    value={dateKey}
+                    onChange={(event) => {
+                      if (isValidDateKey(event.target.value)) {
+                        onDateChange(event.target.value);
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={!canGoNext}
+                  className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => onDateChange(shiftDateKey(dateKey, 1))}
+                >
+                  next
+                </button>
+                <button
+                  type="button"
+                  className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)]"
+                  onClick={onToday}
+                >
+                  today
+                </button>
+              </div>
+            </NewGameField>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]">
-            <button
-              type="button"
-              className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)]"
-              onClick={() => onDateChange(shiftDateKey(dateKey, -1))}
-            >
-              prev
-            </button>
-            <label className="flex items-center gap-2 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
-              <span className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
-                date
-              </span>
-              <input
-                className="min-w-0 flex-1 bg-transparent font-mono text-sm text-[var(--app-text)] outline-none"
-                max={todayDateKey()}
-                name="daily-date"
-                type="date"
-                value={dateKey}
-                onChange={(event) => {
-                  if (isValidDateKey(event.target.value)) {
-                    onDateChange(event.target.value);
-                  }
-                }}
+            <div className="grid gap-2 border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs uppercase tracking-[0.14em] sm:grid-cols-3">
+              <DailyMeta
+                label="daily"
+                value={`${puzzleSize} / ${modeLabel(mode)} / ${difficulty} / ${dateLabel}`}
               />
-            </label>
-            <button
-              type="button"
-              disabled={!canGoNext}
-              className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
-              onClick={() => onDateChange(shiftDateKey(dateKey, 1))}
-            >
-              next
-            </button>
-            <button
-              type="button"
-              className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)]"
-              onClick={onToday}
-            >
-              today
-            </button>
-          </div>
+              <DailyMeta
+                label="status"
+                value={
+                  dailyRecord
+                    ? dailyRecord.status === 'completed'
+                      ? 'completed'
+                      : 'in progress'
+                    : 'not started'
+                }
+                tone={dailyCompleted ? 'done' : dailyRecord ? 'active' : 'default'}
+              />
+              <DailyMeta
+                label="progress"
+                value={
+                  dailyRecord
+                    ? `${dailyRecord.completion}/${cellCount} · ${formatDuration(dailyRecord.elapsedMs)}`
+                    : `0/${cellCount}`
+                }
+              />
+            </div>
 
-          <div className="mt-3 grid gap-2 border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs uppercase tracking-[0.14em] sm:grid-cols-3">
-            <DailyMeta label="daily" value={`${puzzleSize} / ${modeLabel(mode)} / ${difficulty} / ${dateLabel}`} />
-            <DailyMeta
-              label="status"
-              value={
-                dailyRecord
-                  ? dailyRecord.status === 'completed'
-                    ? 'completed'
-                    : 'in progress'
-                  : 'not started'
-              }
-              tone={dailyCompleted ? 'done' : dailyRecord ? 'active' : 'default'}
-            />
-            <DailyMeta
-              label="progress"
-              value={
-                dailyRecord
-                  ? `${dailyRecord.completion}/${cellCount} · ${formatDuration(dailyRecord.elapsedMs)}`
-                  : `0/${cellCount}`
-              }
-            />
+            <button
+              type="submit"
+              className={`w-full border px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.16em] ${
+                dailyCompleted
+                  ? 'border-[var(--accent)] bg-[var(--button-bg)] text-[var(--accent)]'
+                  : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+              }`}
+            >
+              {dailyCompleted
+                ? 'review completed daily'
+                : dailyRecord
+                  ? 'resume daily'
+                  : 'play daily'}
+            </button>
           </div>
 
           <button
             type="submit"
-            className={`mt-3 w-full border px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.16em] ${
-              dailyCompleted
-                ? 'border-[var(--accent)] bg-[var(--button-bg)] text-[var(--accent)]'
-                : 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+            className={`relative border bg-[var(--button-bg)] p-3 transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] ${
+              dailyCompleted ? 'border-[var(--accent)]' : 'border-[var(--border)]'
             }`}
           >
-            {dailyCompleted ? 'review completed daily' : dailyRecord ? 'resume daily' : 'play daily'}
+            {dailyCompleted && (
+              <span className="absolute right-2 top-2 z-10 border border-[var(--accent)] bg-[var(--accent)] px-2 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-[0.14em] text-[var(--app-bg)]">
+                solved
+              </span>
+            )}
+            <PuzzlePreview
+              grid={dailyGrid}
+              givens={dailyGrid.map((value) => value !== 0)}
+            />
           </button>
-        </div>
+        </form>
+      </NewGameSection>
 
-        <button
-          type="submit"
-          className={`relative border bg-[var(--button-bg)] p-3 transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] ${
-            dailyCompleted ? 'border-[var(--accent)]' : 'border-[var(--border)]'
-          }`}
-        >
-          {dailyCompleted && (
-            <span className="absolute right-2 top-2 z-10 border border-[var(--accent)] bg-[var(--accent)] px-2 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-[0.14em] text-[var(--app-bg)]">
-              solved
-            </span>
-          )}
-          <PuzzlePreview
-            grid={dailyGrid}
-            givens={dailyGrid.map((value) => value !== 0)}
+      <NewGameSection title="generate a puzzle">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <NewGameAction
+            command=":new local"
+            description="Generate a fresh unique puzzle without leaving the app."
+            onClick={onLocal}
           />
-        </button>
-      </form>
+          <NewGameAction
+            command=":new yesterday"
+            description="Reopen the previous daily by date."
+            onClick={onYesterday}
+          />
+          <NewGameAction
+            command=":new mountain"
+            description="Fetch a free public API puzzle from Sudoku Mountain."
+            disabled={isFetchingPuzzle}
+            onClick={onMountain}
+          />
+          <NewGameAction
+            command=":new mountain-daily"
+            description="Use the public API with a stable daily seed."
+            disabled={isFetchingPuzzle}
+            onClick={onMountainDaily}
+          />
+        </div>
+      </NewGameSection>
 
-      <section className="grid gap-2 sm:grid-cols-2">
-        <NewGameAction
-          command=":new local"
-          description="Generate a fresh unique puzzle without leaving the app."
-          onClick={onLocal}
-        />
-        <NewGameAction
-          command=":new yesterday"
-          description="Reopen the previous daily by date."
-          onClick={onYesterday}
-        />
-        <NewGameAction
-          command=":new mountain"
-          description="Fetch a free public API puzzle from Sudoku Mountain."
-          disabled={isFetchingPuzzle}
-          onClick={onMountain}
-        />
-        <NewGameAction
-          command=":new mountain-daily"
-          description="Use the public API with a stable daily seed."
-          disabled={isFetchingPuzzle}
-          onClick={onMountainDaily}
-        />
-      </section>
-
-      <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+      <NewGameSection title="import">
         <div className="flex items-center justify-between gap-3">
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-            import grid
+          <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+            paste a grid, or import a photo
           </p>
           <button
             type="button"
-            className="border border-[var(--border)] px-2 py-1 font-mono text-xs uppercase tracking-[0.12em] hover:border-[var(--accent)]"
+            className="shrink-0 border border-[var(--border)] px-2 py-1 font-mono text-xs uppercase tracking-[0.12em] hover:border-[var(--accent)]"
             onClick={onImage}
           >
             image
@@ -3323,7 +3375,8 @@ function NewGamePanel({
         />
         <div className="mt-2 flex items-center justify-between gap-3">
           <p className="text-xs text-[var(--muted)]">
-            Newspaper dailies can come in here by paste or photo; automated scraping is intentionally not wired in.
+            Newspaper dailies can come in here by paste or photo; automated
+            scraping is intentionally not wired in.
           </p>
           <button
             type="button"
@@ -3333,7 +3386,7 @@ function NewGamePanel({
             load
           </button>
         </div>
-      </section>
+      </NewGameSection>
 
       {status && (
         <p className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--accent)]">
@@ -3359,14 +3412,19 @@ function NewGameAction({
     <button
       type="button"
       disabled={disabled}
-      className="border border-[var(--border)] bg-[var(--button-bg)] p-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] disabled:cursor-wait disabled:opacity-60"
+      className="group flex items-start gap-3 border border-[var(--border)] bg-[var(--button-bg)] p-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] disabled:cursor-wait disabled:opacity-60"
       onClick={onClick}
     >
-      <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-        {command}
+      <span className="mt-0.5 shrink-0 font-mono text-sm text-[var(--border)] transition group-hover:text-[var(--accent)]">
+        →
       </span>
-      <span className="mt-2 block text-sm text-[var(--muted)]">
-        {description}
+      <span className="min-w-0">
+        <span className="block font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+          {command}
+        </span>
+        <span className="mt-1 block text-sm text-[var(--muted)]">
+          {description}
+        </span>
       </span>
     </button>
   );
