@@ -4747,6 +4747,14 @@ function ChallengeRacePanel({
   shareUrl: string;
   status: string;
 }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+
+  useEffect(() => {
+    if (copyState !== 'copied') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
   if (!hasConvexBackend()) {
     return (
       <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
@@ -4844,12 +4852,29 @@ function ChallengeRacePanel({
                 </code>
                 <button
                   type="button"
-                  className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)]"
-                  onClick={onCopyLink}
+                  aria-live="polite"
+                  className={`min-w-24 border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] transition ${
+                    copyState === 'copied'
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                      : 'border-[var(--border)] bg-[var(--button-bg)] hover:border-[var(--accent)]'
+                  }`}
+                  onClick={() => {
+                    onCopyLink();
+                    setCopyState('copied');
+                  }}
                 >
-                  copy
+                  {copyState === 'copied' ? 'copied' : 'copy'}
                 </button>
               </div>
+              <p
+                className={`mt-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] transition-opacity ${
+                  copyState === 'copied'
+                    ? 'text-[var(--accent)] opacity-100'
+                    : 'text-[var(--muted)] opacity-0'
+                }`}
+              >
+                link copied to clipboard
+              </p>
             </div>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
               Both players solve this exact puzzle. The race starts when each
