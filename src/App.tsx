@@ -384,6 +384,9 @@ function App() {
   const [leaderboardMode, setLeaderboardMode] = useState<PlayMode>('classic');
   const [leaderboardSize, setLeaderboardSize] = useState<PuzzleSize>('9x9');
   const [solvedDismissed, setSolvedDismissed] = useState(false);
+  const [solvedNamePromptGameId, setSolvedNamePromptGameId] = useState<string | null>(
+    null,
+  );
   const [newPuzzleText, setNewPuzzleText] = useState('');
   const [newGameStatus, setNewGameStatus] = useState('');
   const [isFetchingPuzzle, setIsFetchingPuzzle] = useState(false);
@@ -530,6 +533,9 @@ function App() {
     () => createGameRecord(activeGame, grid, notes, givens, isSolved, elapsedMs),
     [activeGame, elapsedMs, givens, grid, isSolved, notes],
   );
+  const needsSolvedNamePrompt =
+    scoreEnabled &&
+    (!hasCustomPlayerName || solvedNamePromptGameId === currentRecord.id);
   const trackedGameRecords = useMemo(
     () => upsertGameRecord(gameRecords, currentRecord),
     [currentRecord, gameRecords],
@@ -754,16 +760,43 @@ function App() {
   }, [routeChallengeId]);
 
   useEffect(() => {
+    if (!showSolved) {
+      if (solvedNamePromptGameId) setSolvedNamePromptGameId(null);
+      return;
+    }
+    if (
+      scoreEnabled &&
+      !hasCustomPlayerName &&
+      solvedNamePromptGameId !== currentRecord.id
+    ) {
+      setSolvedNamePromptGameId(currentRecord.id);
+    }
+  }, [
+    currentRecord.id,
+    hasCustomPlayerName,
+    scoreEnabled,
+    showSolved,
+    solvedNamePromptGameId,
+  ]);
+
+  useEffect(() => {
     if (!showSolved || !currentRecord.completedAt) return;
     if (hasConvexBackend()) return;
     if (!hasCustomPlayerName) return;
     if (!scoreEnabled) return;
+    if (solvedNamePromptGameId === currentRecord.id) return;
     if (submittedScoreIdsRef.current.has(currentRecord.id)) return;
     submittedScoreIdsRef.current.add(currentRecord.id);
     void submitGlobalScore(currentRecord).catch(() => {
       setLeaderboardStatus('Could not submit global score.');
     });
-  }, [currentRecord, hasCustomPlayerName, scoreEnabled, showSolved]);
+  }, [
+    currentRecord,
+    hasCustomPlayerName,
+    scoreEnabled,
+    showSolved,
+    solvedNamePromptGameId,
+  ]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 640px)');
@@ -2145,7 +2178,11 @@ function App() {
             onStatus={setLeaderboardStatus}
             playerName={playerName}
             scoreRecordId={showSolved ? currentRecord.id : null}
-            scoreSubmissionsEnabled={hasCustomPlayerName && scoreEnabled}
+            scoreSubmissionsEnabled={
+              hasCustomPlayerName &&
+              scoreEnabled &&
+              solvedNamePromptGameId !== currentRecord.id
+            }
           />
           <ChallengeBridge
             activeChallengeId={activeChallengeId}
@@ -3116,8 +3153,15 @@ function App() {
         <SolvedModal
           difficulty={activeGame.difficulty}
           elapsedMs={elapsedMs}
-          needsName={scoreEnabled && !hasCustomPlayerName}
+          needsName={needsSolvedNamePrompt}
           onNameChange={updatePlayerName}
+          onNameConfirm={() => {
+            if (!isCustomPlayerName(playerName)) {
+              setLeaderboardStatus('Choose a leaderboard handle first.');
+              return;
+            }
+            setSolvedNamePromptGameId(null);
+          }}
           source={activeGame.source}
           playerName={playerName}
           onLeaderboards={() => {
@@ -3207,6 +3251,7 @@ function SolvedModal({
   onLeaderboards,
   onNewGame,
   onNameChange,
+  onNameConfirm,
   onPuzzleLog,
   onReview,
   playerName,
@@ -3218,6 +3263,7 @@ function SolvedModal({
   onLeaderboards: () => void;
   onNewGame: () => void;
   onNameChange: (value: string) => void;
+  onNameConfirm: () => void;
   onPuzzleLog: () => void;
   onReview: () => void;
   playerName: string;
@@ -3229,6 +3275,8 @@ function SolvedModal({
     ['l', 'leaderboards', onLeaderboards],
     ['esc', 'review board', onReview],
   ];
+  const playerNameValue =
+    needsName && !isCustomPlayerName(playerName) ? '' : playerName;
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop returns to review when clicking outside the solved dialog.
@@ -3264,10 +3312,24 @@ function SolvedModal({
                 className="mt-2 w-full border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
                 maxLength={32}
                 placeholder="anonymous"
-                value={playerName}
+                value={playerNameValue}
                 onChange={(event) => onNameChange(event.target.value)}
+                onKeyDown={(event) => {
+                  event.stopPropagation();
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    onNameConfirm();
+                  }
+                }}
               />
             </label>
+            <button
+              type="button"
+              className="mt-3 w-full border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] transition active:translate-y-px"
+              onClick={onNameConfirm}
+            >
+              save handle
+            </button>
           </div>
         )}
         <div className="flex flex-col p-2">
