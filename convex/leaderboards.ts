@@ -13,13 +13,15 @@ export const submitScore = mutation({
     puzzleSize: v.optional(v.string()),
     recordId: v.string(),
     source: v.string(),
+    variantId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const elapsedMs = Math.max(0, Math.floor(args.elapsedMs));
     const player = cleanName(args.player);
     const puzzleSize = cleanPuzzleSize(args.puzzleSize);
     const playMode = cleanPlayMode(args.playMode);
-    const leaderboardKey = makeLeaderboardKey(puzzleSize, playMode);
+    const variantId = cleanVariantId(args.variantId);
+    const leaderboardKey = makeLeaderboardKey(puzzleSize, playMode, variantId);
     const existing = await ctx.db
       .query('scores')
       .withIndex('by_recordId', (q) => q.eq('recordId', args.recordId))
@@ -36,6 +38,7 @@ export const submitScore = mutation({
         playMode,
         puzzleSize,
         source: args.source,
+        variantId,
       });
       return existing._id;
     }
@@ -53,6 +56,7 @@ export const submitScore = mutation({
       puzzleSize,
       recordId: args.recordId,
       source: args.source,
+      variantId,
     });
   },
 });
@@ -63,6 +67,7 @@ export const top = query({
     playMode: v.optional(v.string()),
     puzzle: v.optional(v.string()),
     puzzleSize: v.optional(v.string()),
+    variantId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
@@ -72,29 +77,26 @@ export const top = query({
           .withIndex('by_puzzle_elapsedMs', (q) => q.eq('puzzle', args.puzzle ?? ''))
           .order('asc')
           .take(limit)
-      : args.puzzleSize && args.playMode
-        ? await ctx.db
-            .query('scores')
-            .withIndex('by_leaderboardKey_and_elapsedMs', (q) =>
-              q.eq(
-                'leaderboardKey',
-                makeLeaderboardKey(
-                  cleanPuzzleSize(args.puzzleSize),
-                  cleanPlayMode(args.playMode),
-                ),
-              ),
-            )
-            .order('asc')
-            .take(limit)
-      : args.puzzleSize
-        ? await ctx.db
-            .query('scores')
-            .withIndex('by_puzzleSize_elapsedMs', (q) =>
-              q.eq('puzzleSize', cleanPuzzleSize(args.puzzleSize)),
-            )
-            .order('asc')
-            .take(limit)
-      : await ctx.db.query('scores').withIndex('by_elapsedMs').order('asc').take(limit);
+      : (
+          await Promise.all(
+            leaderboardKeysFor(
+              cleanPuzzleSize(args.puzzleSize),
+              cleanPlayMode(args.playMode),
+              cleanVariantId(args.variantId),
+            ).map((leaderboardKey) =>
+              ctx.db
+                .query('scores')
+                .withIndex('by_leaderboardKey_and_elapsedMs', (q) =>
+                  q.eq('leaderboardKey', leaderboardKey),
+                )
+                .order('asc')
+                .take(limit),
+            ),
+          )
+        )
+          .flat()
+          .sort((a, b) => a.elapsedMs - b.elapsedMs)
+          .slice(0, limit);
 
     return scores.map((score) => ({
       completedAt: score.completedAt,
@@ -106,6 +108,7 @@ export const top = query({
       puzzle: score.puzzle,
       puzzleSize: score.puzzleSize ?? '9x9',
       source: score.source,
+      variantId: cleanVariantId(score.variantId),
     }));
   },
 });
@@ -125,6 +128,21 @@ function cleanPlayMode(value: string | undefined) {
     : 'classic';
 }
 
-function makeLeaderboardKey(puzzleSize: string, playMode: string) {
-  return `${puzzleSize}:${playMode}`;
+function cleanVariantId(value: string | undefined) {
+  return value === 'anti-knight' ||
+    value === 'anti-king' ||
+    value === 'diagonal' ||
+    value === 'non-consecutive'
+    ? value
+    : 'classic';
+}
+
+function makeLeaderboardKey(puzzleSize: string, playMode: string, variantId: string) {
+  return `${puzzleSize}:${playMode}:${variantId}`;
+}
+
+function leaderboardKeysFor(puzzleSize: string, playMode: string, variantId: string) {
+  const current = makeLeaderboardKey(puzzleSize, playMode, variantId);
+  if (variantId !== 'classic') return [current];
+  return [current, `${puzzleSize}:${playMode}`];
 }

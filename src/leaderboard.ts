@@ -1,6 +1,7 @@
 import { sanitizePlayMode, type PlayMode } from './playModes';
 import type { GameRecord } from './storage';
 import type { PuzzleSize } from './sudoku';
+import { sanitizeVariantId, type VariantId } from './variants';
 
 export const PLAYER_NAME_KEY = 'vimdoku-player-name-v1';
 
@@ -14,6 +15,7 @@ export type LeaderboardEntry = {
   puzzle: string;
   puzzleSize?: PuzzleSize;
   source: string;
+  variantId?: VariantId;
 };
 
 const LEADERBOARD_ENDPOINT = import.meta.env.VITE_LEADERBOARD_ENDPOINT as
@@ -27,6 +29,7 @@ export function hasGlobalLeaderboard() {
 export async function fetchGlobalLeaderboard(
   puzzleSize: PuzzleSize = '9x9',
   playMode: PlayMode = 'classic',
+  variantId: VariantId = 'classic',
 ) {
   if (!LEADERBOARD_ENDPOINT) {
     throw new Error('No global leaderboard endpoint is configured.');
@@ -35,6 +38,7 @@ export async function fetchGlobalLeaderboard(
   const url = new URL(LEADERBOARD_ENDPOINT);
   url.searchParams.set('puzzleSize', puzzleSize);
   url.searchParams.set('playMode', playMode);
+  url.searchParams.set('variantId', variantId);
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Leaderboard request failed: ${response.status}`);
   const payload = await response.json();
@@ -47,6 +51,7 @@ export async function fetchGlobalLeaderboard(
   return entries
     .map(normalizeEntry)
     .filter((entry): entry is LeaderboardEntry => Boolean(entry))
+    .filter((entry) => leaderboardEntryMatches(entry, puzzleSize, playMode, variantId))
     .slice(0, 50);
 }
 
@@ -64,6 +69,7 @@ export async function submitGlobalScore(record: GameRecord) {
       puzzle: record.puzzle,
       puzzleSize: record.puzzleSize,
       source: record.source,
+      variantId: record.variantId,
     }),
     headers: { 'Content-Type': 'application/json' },
     method: 'POST',
@@ -82,5 +88,19 @@ function normalizeEntry(entry: LeaderboardEntry): LeaderboardEntry | null {
     puzzle: String(entry.puzzle),
     puzzleSize: entry.puzzleSize === '6x6' ? '6x6' : '9x9',
     source: String(entry.source || 'unknown'),
+    variantId: sanitizeVariantId(entry.variantId),
   };
+}
+
+export function leaderboardEntryMatches(
+  entry: LeaderboardEntry,
+  puzzleSize: PuzzleSize,
+  playMode: PlayMode,
+  variantId: VariantId,
+) {
+  return (
+    (entry.puzzleSize ?? '9x9') === puzzleSize &&
+    (entry.playMode ?? 'classic') === playMode &&
+    (entry.variantId ?? 'classic') === variantId
+  );
 }

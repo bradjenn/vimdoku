@@ -12,11 +12,17 @@ import {
   type PuzzleSize,
 } from './sudoku';
 import { sanitizePlayMode, type PlayMode } from './playModes';
+import { sanitizeVariantId, type VariantId } from './variants';
+
+export type CellColors = Array<number | null>;
 
 export type Snapshot = {
+  cellColors: CellColors;
+  cornerMarks: Notes;
   grid: Grid;
   notes: Notes;
   givens: boolean[];
+  variantId: VariantId;
 };
 
 export type GameMeta = {
@@ -27,6 +33,7 @@ export type GameMeta = {
   source: string;
   difficulty?: PuzzleDifficulty | 'custom';
   startedAt: string;
+  variantId: VariantId;
 };
 
 export type GameRecord = Snapshot &
@@ -78,6 +85,7 @@ export function createGameMeta(
   difficulty?: PuzzleDifficulty | 'custom',
   puzzleSize: PuzzleSize = puzzleSizeFromGrid(puzzleGrid),
   playMode: PlayMode = 'classic',
+  variantId: VariantId = 'classic',
 ): GameMeta {
   const now = new Date().toISOString();
   const puzzle = gridToString(puzzleGrid, puzzleSize);
@@ -89,6 +97,7 @@ export function createGameMeta(
     source,
     difficulty,
     startedAt: now,
+    variantId,
   };
 }
 
@@ -96,6 +105,8 @@ export function createGameRecord(
   meta: GameMeta,
   grid: Grid,
   notes: Notes,
+  cornerMarks: Notes,
+  cellColors: CellColors,
   givens: boolean[],
   completed: boolean,
   elapsedMs = 0,
@@ -103,9 +114,12 @@ export function createGameRecord(
   const now = new Date().toISOString();
   return {
     ...meta,
+    cellColors: sanitizeCellColors(cellColors, meta.puzzleSize),
+    cornerMarks: sanitizeNotes(cornerMarks, meta.puzzleSize),
     grid: [...grid],
     notes: cloneNotes(notes),
     givens: [...givens],
+    variantId: sanitizeVariantId(meta.variantId),
     completion: grid.filter(Boolean).length,
     elapsedMs: Math.max(0, Math.floor(elapsedMs)),
     status: completed ? 'completed' : 'in-progress',
@@ -145,7 +159,14 @@ export function loadInitialGameMeta() {
   const puzzleGrid =
     snapshot?.grid.map((value, index) => (snapshot.givens[index] ? value : 0)) ??
     STARTER_GRID;
-  return createGameMeta(puzzleGrid, snapshot ? 'saved puzzle' : 'starter', 'custom');
+  return createGameMeta(
+    puzzleGrid,
+    snapshot ? 'saved puzzle' : 'starter',
+    'custom',
+    puzzleSizeFromGrid(puzzleGrid),
+    'classic',
+    snapshot?.variantId ?? 'classic',
+  );
 }
 
 export async function loadStoredState(): Promise<StoredState> {
@@ -158,9 +179,12 @@ export async function loadStoredState(): Promise<StoredState> {
   ]);
 
   const fallbackSnapshot = loadLegacySnapshot() ?? {
+    cellColors: emptyCellColors('9x9'),
+    cornerMarks: emptyNotes('9x9'),
     grid: STARTER_GRID,
     givens: STARTER_GRID.map(Boolean),
     notes: EMPTY_NOTES,
+    variantId: 'classic',
   };
   const snapshot =
     snapshotEntry?.key === 'snapshot'
@@ -230,7 +254,17 @@ async function migrateLocalStorage() {
   const recordsToStore =
     records.length > 0 || !snapshot
       ? records
-      : [createGameRecord(activeGame, snapshot.grid, snapshot.notes, snapshot.givens, false)];
+      : [
+          createGameRecord(
+            { ...activeGame, variantId: snapshot.variantId },
+            snapshot.grid,
+            snapshot.notes,
+            snapshot.cornerMarks,
+            snapshot.cellColors,
+            snapshot.givens,
+            false,
+          ),
+        ];
 
   const tx = db.transaction(['app', 'games'], 'readwrite');
   if (snapshot) {
@@ -273,14 +307,12 @@ function sanitizeSnapshot(snapshot: Snapshot): Snapshot | null {
     return null;
   }
   return {
+    cellColors: sanitizeCellColors(snapshot.cellColors, puzzleSize),
+    cornerMarks: sanitizeNotes(snapshot.cornerMarks, puzzleSize),
     grid: parseGrid(snapshot.grid.join(''), puzzleSize),
     givens: snapshot.givens.map(Boolean),
-    notes:
-      snapshot.notes?.length === cellCount
-        ? snapshot.notes.map((cell) =>
-            cell.filter((value) => value >= 1 && value <= (puzzleSize === '6x6' ? 6 : 9)).sort(),
-          )
-        : emptyNotes(puzzleSize),
+    notes: sanitizeNotes(snapshot.notes, puzzleSize),
+    variantId: sanitizeVariantId(snapshot.variantId),
   };
 }
 
@@ -298,6 +330,7 @@ function sanitizeGameMeta(meta: GameMeta): GameMeta | null {
     source: String(meta.source),
     difficulty: meta.difficulty,
     startedAt: String(meta.startedAt),
+    variantId: sanitizeVariantId(meta.variantId),
   };
 }
 
@@ -335,12 +368,44 @@ function sanitizeGameRecord(record: GameRecord): GameRecord | null {
     completion: Math.max(0, Math.min(cellCount, Number(record.completion) || 0)),
     elapsedMs: Math.max(0, Math.floor(Number(record.elapsedMs) || 0)),
     status: record.status === 'completed' ? 'completed' : 'in-progress',
+    cellColors: sanitizeCellColors(record.cellColors, puzzleSize),
+    cornerMarks: sanitizeNotes(record.cornerMarks, puzzleSize),
     grid: parseGrid(record.grid.join(''), puzzleSize),
     givens: record.givens.map(Boolean),
-    notes: record.notes.map((cell) =>
-      cell.filter((value) => value >= 1 && value <= maxDigit).sort(),
-    ),
+    notes: record.notes.map((cell) => sanitizeNoteCell(cell, maxDigit)),
+    variantId: sanitizeVariantId(record.variantId),
   };
+}
+
+function emptyCellColors(puzzleSize: PuzzleSize): CellColors {
+  return Array(puzzleSize === '6x6' ? 36 : 81).fill(null);
+}
+
+function sanitizeCellColors(
+  cellColors: CellColors | undefined,
+  puzzleSize: PuzzleSize,
+): CellColors {
+  const cellCount = puzzleSize === '6x6' ? 36 : 81;
+  if (!Array.isArray(cellColors) || cellColors.length !== cellCount) {
+    return emptyCellColors(puzzleSize);
+  }
+  return cellColors.map((value) =>
+    typeof value === 'number' && value >= 0 && value <= 5 ? Math.floor(value) : null,
+  );
+}
+
+function sanitizeNotes(notes: Notes | undefined, puzzleSize: PuzzleSize): Notes {
+  const cellCount = puzzleSize === '6x6' ? 36 : 81;
+  const maxDigit = puzzleSize === '6x6' ? 6 : 9;
+  if (!Array.isArray(notes) || notes.length !== cellCount) return emptyNotes(puzzleSize);
+  return notes.map((cell) => sanitizeNoteCell(cell, maxDigit));
+}
+
+function sanitizeNoteCell(cell: number[] | undefined, maxDigit: number) {
+  if (!Array.isArray(cell)) return [];
+  return [...new Set(cell.filter((value) => value >= 1 && value <= maxDigit))]
+    .map((value) => Math.floor(value))
+    .sort();
 }
 
 function isGameRecord(record: GameRecord | null): record is GameRecord {

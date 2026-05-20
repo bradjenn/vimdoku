@@ -1,6 +1,7 @@
 import type { PlayMode } from './playModes';
 import type { GameMeta } from './storage';
 import type { PuzzleDifficulty, PuzzleSize } from './sudoku';
+import type { VariantId } from './variants';
 
 export type ChallengeAttempt = {
   anonId: string;
@@ -32,6 +33,7 @@ export type ChallengeRace = {
   source: string;
   status: 'open' | 'closed';
   title: string;
+  variantId: VariantId;
 };
 
 export type ChallengeCreateRequest = {
@@ -46,6 +48,7 @@ export type ChallengeCreateRequest = {
   recipientName?: string;
   requestId: string;
   source: string;
+  variantId: VariantId;
 };
 
 export function challengeIdFromPath(pathname: string) {
@@ -95,5 +98,6 @@ export function createChallengeGameMeta(challenge: ChallengeRace): GameMeta {
     puzzleSize: challenge.puzzleSize,
     source: `challenge ${challengeKindLabel(challenge.challengeKind)} ${challenge.challengeId}`,
     startedAt: new Date().toISOString(),
+    variantId: challenge.variantId,
   };
 }

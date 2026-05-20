@@ -7,6 +7,8 @@ const snapshotArgs = {
   completion: v.number(),
   difficulty: v.optional(v.string()),
   elapsedMs: v.number(),
+  cellColors: v.optional(v.array(v.union(v.number(), v.null()))),
+  cornerMarks: v.optional(v.array(v.array(v.number()))),
   givens: v.array(v.boolean()),
   grid: v.array(v.number()),
   notes: v.array(v.array(v.number())),
@@ -17,6 +19,7 @@ const snapshotArgs = {
   source: v.string(),
   status: v.union(v.literal('in-progress'), v.literal('completed')),
   updatedAt: v.string(),
+  variantId: v.optional(v.string()),
 };
 
 export const upsert = mutation({
@@ -33,6 +36,8 @@ export const upsert = mutation({
       completion: clampNumber(args.completion, 0, args.puzzleSize === '6x6' ? 36 : 81),
       difficulty: args.difficulty,
       elapsedMs: Math.max(0, Math.floor(args.elapsedMs)),
+      cellColors: cleanCellColors(args.cellColors, args.puzzleSize),
+      cornerMarks: cleanNotes(args.cornerMarks, args.puzzleSize),
       givens: args.givens.slice(0, args.puzzleSize === '6x6' ? 36 : 81),
       grid: args.grid.slice(0, args.puzzleSize === '6x6' ? 36 : 81),
       notes: args.notes
@@ -45,6 +50,7 @@ export const upsert = mutation({
       source: args.source,
       status: args.status,
       updatedAt: args.updatedAt,
+      variantId: cleanVariantId(args.variantId),
     };
 
     if (existing) {
@@ -127,4 +133,37 @@ function cleanPlayMode(value: string | undefined) {
   return value === 'speedrun' || value === 'zen' || value === 'no-check'
     ? value
     : 'classic';
+}
+
+function cleanVariantId(value: string | undefined) {
+  return value === 'anti-knight' ||
+    value === 'anti-king' ||
+    value === 'diagonal' ||
+    value === 'non-consecutive'
+    ? value
+    : 'classic';
+}
+
+function cleanCellColors(
+  values: Array<number | null> | undefined,
+  puzzleSize: string | undefined,
+) {
+  const cellCount = puzzleSize === '6x6' ? 36 : 81;
+  if (!Array.isArray(values)) return Array(cellCount).fill(null);
+  return values.slice(0, cellCount).map((value) =>
+    typeof value === 'number' && value >= 0 && value <= 5 ? Math.floor(value) : null,
+  );
+}
+
+function cleanNotes(values: number[][] | undefined, puzzleSize: string | undefined) {
+  const cellCount = puzzleSize === '6x6' ? 36 : 81;
+  const maxDigit = puzzleSize === '6x6' ? 6 : 9;
+  if (!Array.isArray(values)) return Array.from({ length: cellCount }, () => []);
+  return values.slice(0, cellCount).map((cell) =>
+    Array.isArray(cell)
+      ? [...new Set(cell.filter((value) => value >= 1 && value <= maxDigit))]
+          .map((value) => Math.floor(value))
+          .sort()
+      : [],
+  );
 }

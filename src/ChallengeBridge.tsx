@@ -21,6 +21,7 @@ type CreateRaceArgs = {
   recipientAnonId?: string;
   recipientName?: string;
   source: string;
+  variantId?: string;
 };
 
 type StartAttemptArgs = {
@@ -124,6 +125,7 @@ export function ChallengeBridge({
       recipientAnonId: createRequest.recipientAnonId,
       recipientName: createRequest.recipientName,
       source: createRequest.source,
+      variantId: createRequest.variantId,
     })
       .then((createdId) => onCreateResult(createdId, createRequest.requestId))
       .catch(() => {

@@ -27,6 +27,12 @@ const playRoute = createRoute({
   component: () => null,
 })
 
+const sharedPuzzleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/p/$payload',
+  component: () => null,
+})
+
 const dailyPlayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play/daily/$difficulty/$date',
@@ -63,12 +69,6 @@ const modeShortDailyPlayRoute = createRoute({
   component: () => null,
 })
 
-const menuRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/menu',
-  component: () => null,
-})
-
 const newRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/new',
@@ -84,6 +84,12 @@ const gamesRoute = createRoute({
 const leaderboardsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/leaderboards',
+  component: () => null,
+})
+
+const leaderboardDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/leaderboards/$size/$mode/$variant/$difficulty',
   component: () => null,
 })
 
@@ -126,16 +132,17 @@ const commandsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   playRoute,
+  sharedPuzzleRoute,
   dailyPlayRoute,
   sizedDailyPlayRoute,
   modeDailyPlayRoute,
   shortDailyPlayRoute,
   sizedShortDailyPlayRoute,
   modeShortDailyPlayRoute,
-  menuRoute,
   newRoute,
   gamesRoute,
   leaderboardsRoute,
+  leaderboardDetailRoute,
   challengeSetupRoute,
   challengeRoute,
   profileRoute,

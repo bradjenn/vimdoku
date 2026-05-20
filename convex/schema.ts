@@ -19,6 +19,8 @@ export default defineSchema({
     completion: v.number(),
     difficulty: v.optional(v.string()),
     elapsedMs: v.number(),
+    cellColors: v.optional(v.array(v.union(v.number(), v.null()))),
+    cornerMarks: v.optional(v.array(v.array(v.number()))),
     givens: v.array(v.boolean()),
     grid: v.array(v.number()),
     notes: v.array(v.array(v.number())),
@@ -29,6 +31,7 @@ export default defineSchema({
     source: v.string(),
     status: v.union(v.literal('in-progress'), v.literal('completed')),
     updatedAt: v.string(),
+    variantId: v.optional(v.string()),
   })
     .index('by_anonId_updated', ['anonId', 'updatedAt'])
     .index('by_recordId', ['recordId'])
@@ -47,6 +50,7 @@ export default defineSchema({
     puzzleSize: v.optional(v.string()),
     recordId: v.string(),
     source: v.string(),
+    variantId: v.optional(v.string()),
   })
     .index('by_elapsedMs', ['elapsedMs'])
     .index('by_leaderboardKey_and_elapsedMs', ['leaderboardKey', 'elapsedMs'])
@@ -67,6 +71,7 @@ export default defineSchema({
     recipientAnonId: v.optional(v.string()),
     recipientName: v.optional(v.string()),
     source: v.string(),
+    variantId: v.optional(v.string()),
     status: v.union(v.literal('open'), v.literal('closed')),
     title: v.string(),
   })

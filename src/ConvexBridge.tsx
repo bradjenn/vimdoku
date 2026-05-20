@@ -7,6 +7,7 @@ import type { PlayMode } from './playModes';
 import type { GameRecord } from './storage';
 import type { PuzzleSize } from './sudoku';
 import { getOrCreateGuestId } from './identity';
+import type { VariantId } from './variants';
 
 export type CloudProfile = {
   anonId: string;
@@ -38,6 +39,7 @@ type SubmitScoreArgs = {
   puzzleSize?: PuzzleSize;
   recordId: string;
   source: string;
+  variantId?: VariantId;
 };
 
 type UpsertGameArgs = {
@@ -49,6 +51,8 @@ type UpsertGameArgs = {
   givens: boolean[];
   grid: number[];
   notes: number[][];
+  cornerMarks: number[][];
+  cellColors: Array<number | null>;
   playMode?: PlayMode;
   puzzle: string;
   puzzleSize?: PuzzleSize;
@@ -56,11 +60,12 @@ type UpsertGameArgs = {
   source: string;
   status: 'in-progress' | 'completed';
   updatedAt: string;
+  variantId?: VariantId;
 };
 
 const topScoresRef = makeFunctionReference<
   'query',
-  { limit?: number; playMode?: PlayMode; puzzleSize?: PuzzleSize },
+  { limit?: number; playMode?: PlayMode; puzzleSize?: PuzzleSize; variantId?: VariantId },
   LeaderboardEntry[]
 >('leaderboards:top');
 
@@ -94,6 +99,7 @@ export function ConvexBridge({
   leaderboardOpen,
   leaderboardMode,
   leaderboardSize,
+  leaderboardVariant,
   onProfile,
   onScores,
   onStats,
@@ -107,6 +113,7 @@ export function ConvexBridge({
   leaderboardOpen: boolean;
   leaderboardMode: PlayMode;
   leaderboardSize: PuzzleSize;
+  leaderboardVariant: VariantId;
   onProfile: (profile: CloudProfile | null) => void;
   onScores: (scores: LeaderboardEntry[]) => void;
   onStats: (stats: CloudStats | null) => void;
@@ -122,7 +129,12 @@ export function ConvexBridge({
   const topScores = useQuery(
     topScoresRef as FunctionReference<'query'>,
     leaderboardOpen
-      ? { limit: 50, playMode: leaderboardMode, puzzleSize: leaderboardSize }
+      ? {
+          limit: 50,
+          playMode: leaderboardMode,
+          puzzleSize: leaderboardSize,
+          variantId: leaderboardVariant,
+        }
       : 'skip',
   ) as LeaderboardEntry[] | undefined;
   const profile = useQuery(
@@ -228,6 +240,8 @@ function toGameArgs(record: GameRecord, anonId: string): UpsertGameArgs {
     givens: record.givens,
     grid: record.grid,
     notes: record.notes,
+    cornerMarks: record.cornerMarks,
+    cellColors: record.cellColors,
     playMode: record.playMode,
     puzzle: record.puzzle,
     puzzleSize: record.puzzleSize,
@@ -235,6 +249,7 @@ function toGameArgs(record: GameRecord, anonId: string): UpsertGameArgs {
     source: record.source,
     status: record.status,
     updatedAt: record.updatedAt,
+    variantId: record.variantId,
   };
 }
 
@@ -254,5 +269,6 @@ function toScoreArgs(
     puzzleSize: record.puzzleSize,
     recordId: record.id,
     source: record.source,
+    variantId: record.variantId,
   };
 }

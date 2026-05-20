@@ -15,6 +15,7 @@ export const createRace = mutation({
     recipientAnonId: v.optional(v.string()),
     recipientName: v.optional(v.string()),
     source: v.string(),
+    variantId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const challengeId = cleanChallengeId(args.challengeId);
@@ -28,6 +29,7 @@ export const createRace = mutation({
     const challengeKind = cleanChallengeKind(args.challengeKind);
     const puzzleSize = cleanPuzzleSize(args.puzzleSize);
     const playMode = cleanPlayMode(args.playMode);
+    const variantId = cleanVariantId(args.variantId);
     const source = cleanText(args.source, 80) || 'vimdoku puzzle';
     const difficulty = args.difficulty
       ? cleanText(args.difficulty, 24)
@@ -61,6 +63,7 @@ export const createRace = mutation({
       source,
       status: 'open',
       title: `${challengeKind === 'streak' ? 'Streak battle' : 'Race'} ${titleParts.join(' / ')}`,
+      variantId,
     });
 
     return challengeId;
@@ -102,6 +105,7 @@ export const getRace = query({
       source: challenge.source,
       status: challenge.status,
       title: challenge.title,
+      variantId: cleanVariantId(challenge.variantId),
       attempts: attempts
         .map((attempt) => ({
           anonId: attempt.anonId,
@@ -200,6 +204,7 @@ export const listMine = query({
           status: challenge.status,
           title: challenge.title,
           updatedAt: latestChallengeActivity(challenge.createdAt, sortedAttempts),
+          variantId: cleanVariantId(challenge.variantId),
         };
       }),
     );
@@ -379,6 +384,15 @@ function cleanPuzzleSize(value: string | undefined) {
 
 function cleanPlayMode(value: string | undefined) {
   return value === 'speedrun' || value === 'zen' || value === 'no-check'
+    ? value
+    : 'classic';
+}
+
+function cleanVariantId(value: string | undefined) {
+  return value === 'anti-knight' ||
+    value === 'anti-king' ||
+    value === 'diagonal' ||
+    value === 'non-consecutive'
     ? value
     : 'classic';
 }

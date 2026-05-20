@@ -82,6 +82,7 @@ import {
   PLAYER_NAME_KEY,
   fetchGlobalLeaderboard,
   hasGlobalLeaderboard,
+  leaderboardEntryMatches,
   submitGlobalScore,
   type LeaderboardEntry,
 } from './leaderboard';
@@ -110,6 +111,16 @@ import {
   modePolicy,
   type PlayMode,
 } from './playModes';
+import { checkGrid } from './checks';
+import {
+  boxSelection,
+  columnSelection,
+  nextEmptyCell,
+  rectangularSelection,
+  rowSelection,
+} from './selection';
+import { decodePuzzleLinkData, encodePuzzleLinkData } from './puzzleLinks';
+import { VARIANTS, checkVariant, type VariantId } from './variants';
 import { TuiDialog } from './ui';
 
 type ReviewCell = {
@@ -117,11 +128,13 @@ type ReviewCell = {
   confidence: number;
 };
 
-type EditorMode = 'normal' | 'annotate' | 'visual';
+type EditorMode = 'normal' | 'annotate' | 'corner' | 'color' | 'visual';
+type ToolMode = 'digit' | 'center' | 'corner' | 'color';
 type HintMode = 'nudge' | 'explain' | 'show';
 type CommandMode = 'command' | 'search';
-type MenuModal = 'menu' | 'settings' | 'commands' | 'new' | null;
-type RouteModal = 'menu' | 'settings' | 'commands';
+type MenuModal = 'menu' | 'settings' | 'commands' | 'new' | 'rules' | null;
+type RouteModal = 'menu' | 'settings' | 'commands' | 'rules';
+type TimerPauseReason = 'manual' | 'auto' | null;
 type PageRoute =
   | 'dashboard'
   | 'play'
@@ -144,6 +157,15 @@ const THEME_KEY = 'vimdoku-theme-v1';
 const TIMER_PAUSED_GAME_KEY = 'vimdoku-paused-game-v1';
 const NEW_GAME_DIFFICULTIES: PuzzleDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
 const PUZZLE_SIZES: PuzzleSize[] = ['9x9', '6x6'];
+const LEADERBOARD_PLAY_MODES = PLAY_MODES.filter((mode) => modePolicy(mode).scoreEnabled);
+const CELL_COLORS = [
+  '#f7768e',
+  '#e0af68',
+  '#9ece6a',
+  '#7dcfff',
+  '#bb9af7',
+  '#f5c2e7',
+] as const;
 const listFriendsRef = makeFunctionReference<
   'query',
   { anonId: string },
@@ -183,12 +205,6 @@ const DASHBOARD_ACTIONS: [key: string, label: string][] = [
   ['p', 'profile'],
   ['s', 'settings'],
 ];
-
-const ROUTE_MODAL_PATHS: Record<RouteModal, string> = {
-  commands: '/commands',
-  menu: '/menu',
-  settings: '/settings',
-};
 
 const DARK_THEMES = [
   {
@@ -335,6 +351,7 @@ function App() {
   const publicFriendCode = useMemo(() => publicFriendCodeFromPath(pathname), [pathname]);
   const dailyRoute = useMemo(() => parseDailyRoute(pathname), [pathname]);
   const routeChallengeId = useMemo(() => challengeIdFromPath(pathname), [pathname]);
+  const sharedPuzzlePayload = useMemo(() => sharedPuzzlePayloadFromPath(pathname), [pathname]);
   const showDashboard = activePage === 'dashboard';
   const showBoard = activePage === 'play';
   const [grid, setGrid] = useState<Grid>(() => loadLegacySnapshot()?.grid ?? STARTER_GRID);
@@ -346,9 +363,19 @@ function App() {
   const [noteMode, setNoteMode] = useState(false);
   const [shiftHeld, setShiftHeld] = useState(false);
   const [visualAnchor, setVisualAnchor] = useState<number | null>(null);
+  const [explicitSelection, setExplicitSelection] = useState<Set<number> | null>(null);
   const [history, setHistory] = useState<Snapshot[]>([]);
   const [future, setFuture] = useState<Snapshot[]>([]);
   const [hint, setHint] = useState<Hint | null>(null);
+  const [toolMode, setToolMode] = useState<ToolMode>('digit');
+  const [activeColor, setActiveColor] = useState(0);
+  const [variantId, setVariantId] = useState<VariantId>('classic');
+  const [cellColors, setCellColors] = useState<(number | null)[]>(() =>
+    loadLegacySnapshot()?.cellColors ?? Array(STARTER_GRID.length).fill(null),
+  );
+  const [cornerMarks, setCornerMarks] = useState<Notes>(() =>
+    loadLegacySnapshot()?.cornerMarks ?? emptyNotes(puzzleSizeFromGrid(STARTER_GRID)),
+  );
   const [hintMode, setHintMode] = useState<HintMode>('explain');
   const [review, setReview] = useState<ReviewCell[] | null>(null);
   const [reviewSelected, setReviewSelected] = useState(0);
@@ -368,6 +395,8 @@ function App() {
   const [gameCursor, setGameCursor] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [timerPaused, setTimerPaused] = useState(false);
+  const [timerPauseReason, setTimerPauseReason] =
+    useState<TimerPauseReason>(null);
   const [activeGame, setActiveGame] = useState<GameMeta>(() =>
     loadInitialGameMeta(),
   );
@@ -409,8 +438,14 @@ function App() {
   const [challengeSize, setChallengeSize] = useState<PuzzleSize>('9x9');
   const [challengeSource, setChallengeSource] =
     useState<ChallengePuzzleSource>('daily');
-  const [leaderboardMode, setLeaderboardMode] = useState<PlayMode>('classic');
-  const [leaderboardSize, setLeaderboardSize] = useState<PuzzleSize>('9x9');
+  const leaderboardScope = useMemo(
+    () => leaderboardScopeFromPath(pathname),
+    [pathname],
+  );
+  const leaderboardSize = leaderboardScope?.size ?? '9x9';
+  const leaderboardMode = leaderboardScope?.mode ?? 'classic';
+  const leaderboardVariant = leaderboardScope?.variant ?? 'classic';
+  const leaderboardDifficulty = leaderboardScope?.difficulty ?? 'easy';
   const [solvedDismissed, setSolvedDismissed] = useState(false);
   const [solvedNamePromptGameId, setSolvedNamePromptGameId] = useState<string | null>(
     null,
@@ -420,6 +455,7 @@ function App() {
   const [isFetchingPuzzle, setIsFetchingPuzzle] = useState(false);
   const [hintRailOpen, setHintRailOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [toolsPanelOpen, setToolsPanelOpen] = useState(true);
   const [leaderPending, setLeaderPending] = useState(false);
   const [compactStatus, setCompactStatus] = useState(
     () =>
@@ -430,7 +466,7 @@ function App() {
   const pendingKeyRef = useRef('');
   const submittedScoreIdsRef = useRef(new Set<string>());
   const previousPageRef = useRef(activePage);
-  const activeMenuModal = routeModal ?? menuModal;
+  const activeMenuModal = menuModal ?? routeModal;
   const hasCustomPlayerName = isCustomPlayerName(playerName);
   const activeSize = activeGame.puzzleSize ?? puzzleSizeFromGrid(grid);
   const activeMode = activeGame.playMode ?? 'classic';
@@ -529,13 +565,16 @@ function App() {
     (modal: RouteModal) => {
       setGamePickerOpen(false);
       if (modal === 'commands') setCommandMode(null);
-      const path = ROUTE_MODAL_PATHS[modal];
-      if (pathname !== path) {
-        void navigate({ to: path });
-      }
+      setMenuModal(modal);
     },
-    [navigate, pathname],
+    [],
   );
+
+  const chooseToolMode = useCallback((mode: ToolMode) => {
+    setToolMode(mode);
+    setNoteMode(mode === 'center');
+    setStatusLine(toolModeMessage(mode));
+  }, []);
 
   const openNewGame = useCallback(() => {
     setGamePickerOpen(false);
@@ -581,8 +620,18 @@ function App() {
     !review &&
     !solvedDismissed;
   const currentRecord = useMemo(
-    () => createGameRecord(activeGame, grid, notes, givens, isSolved, elapsedMs),
-    [activeGame, elapsedMs, givens, grid, isSolved, notes],
+    () =>
+      createGameRecord(
+        { ...activeGame, variantId },
+        grid,
+        notes,
+        cornerMarks,
+        cellColors,
+        givens,
+        isSolved,
+        elapsedMs,
+      ),
+    [activeGame, cellColors, cornerMarks, elapsedMs, givens, grid, isSolved, notes, variantId],
   );
   const needsSolvedNamePrompt =
     scoreEnabled &&
@@ -612,10 +661,38 @@ function App() {
       completedGames
         .filter((record) => record.puzzleSize === leaderboardSize)
         .filter((record) => record.playMode === leaderboardMode)
+        .filter((record) => record.variantId === leaderboardVariant)
+        .filter((record) => record.difficulty === leaderboardDifficulty)
         .filter((record) => record.elapsedMs > 0)
         .sort((a, b) => a.elapsedMs - b.elapsedMs)
         .slice(0, 25),
-    [completedGames, leaderboardMode, leaderboardSize],
+    [
+      completedGames,
+      leaderboardDifficulty,
+      leaderboardMode,
+      leaderboardSize,
+      leaderboardVariant,
+    ],
+  );
+  const visibleGlobalLeaderboard = useMemo(
+    () =>
+      globalScores
+        .filter((score) =>
+          leaderboardEntryMatches(
+            score,
+            leaderboardSize,
+            leaderboardMode,
+            leaderboardVariant,
+          ),
+        )
+        .filter((score) => score.difficulty === leaderboardDifficulty),
+    [
+      globalScores,
+      leaderboardDifficulty,
+      leaderboardMode,
+      leaderboardSize,
+      leaderboardVariant,
+    ],
   );
   const localProfileStats = useMemo(
     () => buildLocalStats(trackedGameRecords),
@@ -640,15 +717,20 @@ function App() {
     filteredGameRecords[Math.min(gameCursor, Math.max(0, filteredGameRecords.length - 1))] ??
     null;
   const editorMode: EditorMode =
-    visualAnchor !== null
+    visualAnchor !== null || explicitSelection !== null
       ? 'visual'
-      : notesEnabled && (shiftHeld || noteMode)
-        ? 'annotate'
-        : 'normal';
+      : toolMode === 'color'
+        ? 'color'
+        : toolMode === 'corner' || (notesEnabled && shiftHeld)
+          ? 'corner'
+          : toolMode === 'center' || (notesEnabled && noteMode)
+            ? 'annotate'
+            : 'normal';
 
   const resumeTimerFromActivity = useCallback(() => {
     if (!timerPaused || isSolved) return;
     setTimerPaused(false);
+    setTimerPauseReason(null);
     setStatusLine('Timer resumed.');
   }, [isSolved, timerPaused]);
 
@@ -665,7 +747,11 @@ function App() {
       setStatusLine('Solved puzzles keep their final time.');
       return;
     }
-    setTimerPaused((current) => !current);
+    setTimerPaused((current) => {
+      const next = !current;
+      setTimerPauseReason(next ? 'manual' : null);
+      return next;
+    });
     setStatusLine(timerPaused ? 'Timer resumed.' : 'Timer paused.');
   }, [isSolved, pauseEnabled, timerEnabled, timerPaused]);
 
@@ -678,19 +764,18 @@ function App() {
 
   // The visual selection is the rectangle spanning the anchor and the
   // (moving) cursor; null whenever visual mode is off.
-  const visualCells = useMemo(() => {
-    if (visualAnchor === null) return null;
-    const size = activeConfig.size;
-    const r1 = Math.min(Math.floor(visualAnchor / size), Math.floor(selected / size));
-    const r2 = Math.max(Math.floor(visualAnchor / size), Math.floor(selected / size));
-    const c1 = Math.min(visualAnchor % size, selected % size);
-    const c2 = Math.max(visualAnchor % size, selected % size);
-    const cells = new Set<number>();
-    for (let row = r1; row <= r2; row += 1) {
-      for (let col = c1; col <= c2; col += 1) cells.add(row * size + col);
-    }
-    return cells;
-  }, [activeConfig.size, visualAnchor, selected]);
+  const visualCells = useMemo(
+    () =>
+      explicitSelection ??
+      (visualAnchor === null
+        ? null
+        : rectangularSelection(visualAnchor, selected, activeSize)),
+    [activeSize, explicitSelection, visualAnchor, selected],
+  );
+  const activeCells = useMemo(
+    () => visualCells ?? new Set([selected]),
+    [selected, visualCells],
+  );
   const activeTheme = useMemo(
     () => DARK_THEMES.find((theme) => theme.id === themeId) ?? DARK_THEMES[0],
     [themeId],
@@ -721,14 +806,22 @@ function App() {
         if (cancelled) return;
         setGrid(stored.snapshot.grid);
         setNotes(stored.snapshot.notes);
+        setCornerMarks(stored.snapshot.cornerMarks);
+        setCellColors(stored.snapshot.cellColors);
         setGivens(stored.snapshot.givens);
-        setActiveGame(stored.activeGame);
+        setVariantId(stored.snapshot.variantId);
+        setActiveGame({
+          ...stored.activeGame,
+          variantId: stored.snapshot.variantId,
+        });
         setGameRecords(stored.records);
         setElapsedMs(
           stored.records.find((record) => record.id === stored.activeGame.id)
             ?.elapsedMs ?? 0,
         );
-        setTimerPaused(loadPausedGameId() === stored.activeGame.id);
+        const storedTimerPaused = loadPausedGameId() === stored.activeGame.id;
+        setTimerPaused(storedTimerPaused);
+        setTimerPauseReason(storedTimerPaused ? 'manual' : null);
       })
       .finally(() => {
         if (!cancelled) setStorageReady(true);
@@ -741,23 +834,80 @@ function App() {
 
   useEffect(() => {
     if (!storageReady) return;
-    if (timerPaused) {
+    if (timerPaused && timerPauseReason === 'manual') {
       localStorage.setItem(TIMER_PAUSED_GAME_KEY, activeGame.id);
     } else if (loadPausedGameId() === activeGame.id) {
       localStorage.removeItem(TIMER_PAUSED_GAME_KEY);
     }
-  }, [activeGame.id, storageReady, timerPaused]);
+  }, [activeGame.id, storageReady, timerPaused, timerPauseReason]);
+
+  useEffect(() => {
+    if (!storageReady || activePage !== 'play' || !timerEnabled || !pauseEnabled || isSolved) {
+      return;
+    }
+
+    function appIsActive() {
+      return document.visibilityState === 'visible' && document.hasFocus();
+    }
+
+    function autoPause() {
+      if (timerPaused || appIsActive()) return;
+      setTimerPauseReason('auto');
+      setTimerPaused(true);
+      setStatusLine('Timer auto-paused while Vimdoku was inactive.');
+    }
+
+    function autoResume() {
+      if (timerPauseReason !== 'auto' || !appIsActive()) return;
+      setTimerPaused(false);
+      setTimerPauseReason(null);
+      setStatusLine('Timer resumed.');
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') autoResume();
+      else autoPause();
+    }
+
+    window.addEventListener('blur', autoPause);
+    window.addEventListener('focus', autoResume);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('blur', autoPause);
+      window.removeEventListener('focus', autoResume);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [
+    activePage,
+    isSolved,
+    pauseEnabled,
+    storageReady,
+    timerEnabled,
+    timerPaused,
+    timerPauseReason,
+  ]);
 
   useEffect(() => {
     if (!storageReady) return;
     void saveStoredState(
-      { grid, notes, givens },
+      { cellColors, cornerMarks, grid, notes, givens, variantId },
       activeGame,
       trackedGameRecords,
     ).catch(() => {
       setStatusLine('Could not save puzzle history.');
     });
-  }, [activeGame, givens, grid, notes, storageReady, trackedGameRecords]);
+  }, [
+    activeGame,
+    cellColors,
+    cornerMarks,
+    givens,
+    grid,
+    notes,
+    storageReady,
+    trackedGameRecords,
+    variantId,
+  ]);
 
   useEffect(() => {
     if (
@@ -797,11 +947,15 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (activePage !== 'leaderboards') return;
+    if (!leaderboardScope) return;
     if (hasConvexBackend()) return;
     if (!hasGlobalLeaderboard()) return;
 
-    void fetchGlobalLeaderboard(leaderboardSize, leaderboardMode)
+    void fetchGlobalLeaderboard(
+      leaderboardScope.size,
+      leaderboardScope.mode,
+      leaderboardScope.variant,
+    )
       .then((scores) => {
         setGlobalScores(scores);
         setLeaderboardStatus('');
@@ -809,7 +963,7 @@ function App() {
       .catch(() => {
         setLeaderboardStatus('Could not load global leaderboard.');
       });
-  }, [activePage, leaderboardMode, leaderboardSize]);
+  }, [leaderboardScope]);
 
   useEffect(() => {
     if (!routeChallengeId) return;
@@ -887,12 +1041,22 @@ function App() {
   }, []);
 
   const pushHistory = useCallback(() => {
-    setHistory((current) => [...current.slice(-49), { grid, notes, givens }]);
+    setHistory((current) => [
+      ...current.slice(-49),
+      { cellColors, cornerMarks, grid, notes, givens, variantId },
+    ]);
     setFuture([]);
-  }, [givens, grid, notes]);
+  }, [cellColors, cornerMarks, givens, grid, notes, variantId]);
+
+  const chooseVariant = useCallback((nextVariant: VariantId) => {
+    pushHistory();
+    setVariantId(nextVariant);
+    setActiveGame((current) => ({ ...current, variantId: nextVariant }));
+  }, [pushHistory]);
 
   const moveSelection = useCallback((deltaRow: number, deltaCol: number) => {
     resumeTimerFromActivity();
+    setExplicitSelection(null);
     setSelected((index) => {
       const row = Math.max(0, Math.min(activeConfig.size - 1, Math.floor(index / activeConfig.size) + deltaRow));
       const col = Math.max(0, Math.min(activeConfig.size - 1, (index % activeConfig.size) + deltaCol));
@@ -903,6 +1067,7 @@ function App() {
   // Jump to the same relative cell in an adjacent box ({ and }).
   const moveBox = useCallback((delta: number) => {
     resumeTimerFromActivity();
+    setExplicitSelection(null);
     setSelected((index) => {
       const boxesPerRow = activeConfig.size / activeConfig.boxCols;
       const boxCount = boxesPerRow * (activeConfig.size / activeConfig.boxRows);
@@ -923,32 +1088,48 @@ function App() {
 
   const setCell = useCallback(
     (value: number) => {
-      if (givens[selected]) return;
+      const targets = [...activeCells].filter((index) => !givens[index]);
+      if (targets.length === 0) return;
       resumeTimerFromActivity();
       pushHistory();
-      if (
-        activeChallengeKind === 'streak' &&
-        value !== 0 &&
-        grid[selected] !== value &&
-        solved?.[selected] !== value
-      ) {
-        setChallengeMistakes((count) => count + 1);
+      const mistakes =
+        activeChallengeKind === 'streak' && value !== 0
+          ? targets.filter((index) => grid[index] !== value && solved?.[index] !== value)
+              .length
+          : 0;
+      if (mistakes > 0) {
+        setChallengeMistakes((count) => count + mistakes);
         setStatusLine('Streak battle: bad entry recorded.');
         triggerBattleImpact(12, 0.34, 0.78);
       }
-      setGrid((current) => {
-        const next = [...current];
-        next[selected] = value;
-        return next;
-      });
+      const nextGrid = [...grid];
+      for (const index of targets) nextGrid[index] = value;
+      setGrid(nextGrid);
       setNotes((current) =>
-        value === 0 ? current : removeRelatedNotes(current, selected, value, activeSize),
+        value === 0
+          ? current
+          : targets.reduce(
+              (nextNotes, index) => removeRelatedNotes(nextNotes, index, value, activeSize),
+              current,
+            ),
       );
+      if (value !== 0) {
+        setCornerMarks((current) => {
+          const next = cloneNotes(current);
+          for (const index of targets) next[index] = [];
+          return next;
+        });
+      }
       setHint(null);
+      if (activeSize === '6x6' && value !== 0 && targets.length === 1) {
+        const nextEmpty = nextEmptyCell(nextGrid, givens, selected);
+        if (nextEmpty !== null) setSelected(nextEmpty);
+      }
     },
     [
       activeChallengeKind,
       activeSize,
+      activeCells,
       givens,
       grid,
       pushHistory,
@@ -965,40 +1146,13 @@ function App() {
         setStatusLine('Notes are disabled in speedrun.');
         return;
       }
-      if (givens[selected] || grid[selected] !== 0) return;
-      resumeTimerFromActivity();
-      pushHistory();
-      setNotes((current) => {
-        const next = cloneNotes(current);
-        next[selected] = next[selected].includes(value)
-          ? next[selected].filter((note) => note !== value)
-          : [...next[selected], value].sort();
-        return next;
-      });
-      setHint(null);
-    },
-    [givens, grid, notesEnabled, pushHistory, resumeTimerFromActivity, selected],
-  );
-
-  const toggleNoteAcrossBlock = useCallback(
-    (value: number) => {
-      if (!notesEnabled) {
-        setStatusLine('Notes are disabled in speedrun.');
-        return;
-      }
-      if (!visualCells) return;
-      resumeTimerFromActivity();
-      // Notes only live on empty, non-given cells.
-      const eligible = [...visualCells].filter(
-        (index) => grid[index] === 0 && !givens[index],
+      const eligible = [...activeCells].filter(
+        (index) => !givens[index] && grid[index] === 0,
       );
-      if (eligible.length === 0) {
-        setStatusLine('No empty cells in the selection.');
-        return;
-      }
-      // Group toggle: clear the note only when every cell already has it.
-      const allHave = eligible.every((index) => notes[index].includes(value));
+      if (eligible.length === 0) return;
+      resumeTimerFromActivity();
       pushHistory();
+      const allHave = eligible.every((index) => notes[index].includes(value));
       setNotes((current) => {
         const next = cloneNotes(current);
         for (const index of eligible) {
@@ -1011,28 +1165,115 @@ function App() {
         return next;
       });
       setHint(null);
+      if (eligible.length > 1) {
+        setStatusLine(
+          `${allHave ? 'Removed' : 'Annotated'} ${value} ${
+            allHave ? 'from' : 'on'
+          } ${eligible.length} cells.`,
+        );
+      }
+    },
+    [
+      activeCells,
+      givens,
+      grid,
+      notes,
+      notesEnabled,
+      pushHistory,
+      resumeTimerFromActivity,
+    ],
+  );
+
+  const toggleCornerMark = useCallback(
+    (value: number) => {
+      if (!notesEnabled) {
+        setStatusLine('Marks are disabled in speedrun.');
+        return;
+      }
+      const eligible = [...activeCells].filter(
+        (index) => !givens[index] && grid[index] === 0,
+      );
+      if (eligible.length === 0) return;
+      resumeTimerFromActivity();
+      pushHistory();
+      const allHave = eligible.every((index) => cornerMarks[index].includes(value));
+      setCornerMarks((current) => {
+        const next = cloneNotes(current);
+        for (const index of eligible) {
+          if (allHave) {
+            next[index] = next[index].filter((mark) => mark !== value);
+          } else if (!next[index].includes(value)) {
+            next[index] = [...next[index], value].sort();
+          }
+        }
+        return next;
+      });
+      setHint(null);
       setStatusLine(
-        `${allHave ? 'Removed' : 'Annotated'} ${value} ${
+        `${allHave ? 'Removed' : 'Marked'} corner ${value} ${
           allHave ? 'from' : 'on'
         } ${eligible.length} cell${eligible.length === 1 ? '' : 's'}.`,
       );
     },
-    [givens, grid, notes, notesEnabled, pushHistory, resumeTimerFromActivity, visualCells],
+    [
+      activeCells,
+      cornerMarks,
+      givens,
+      grid,
+      notesEnabled,
+      pushHistory,
+      resumeTimerFromActivity,
+    ],
+  );
+
+  const applyColor = useCallback(
+    (colorIndex: number | null) => {
+      resumeTimerFromActivity();
+      const targets = [...activeCells];
+      if (colorIndex !== null) setActiveColor(colorIndex);
+      pushHistory();
+      setCellColors((current) => {
+        const next = [...current];
+        for (const index of targets) next[index] = colorIndex;
+        return next;
+      });
+      setStatusLine(
+        colorIndex === null
+          ? `Cleared colour from ${targets.length} cell${targets.length === 1 ? '' : 's'}.`
+          : `Applied colour ${colorIndex + 1} to ${targets.length} cell${
+              targets.length === 1 ? '' : 's'
+            }.`,
+      );
+    },
+    [activeCells, pushHistory, resumeTimerFromActivity],
   );
 
   const clearNotesAcrossBlock = useCallback(() => {
     if (!notesEnabled) return;
-    if (!visualCells) return;
+    const targets = [...activeCells];
     resumeTimerFromActivity();
     pushHistory();
     setNotes((current) => {
       const next = cloneNotes(current);
-      for (const index of visualCells) next[index] = [];
+      for (const index of targets) next[index] = [];
       return next;
     });
     setHint(null);
-    setStatusLine(`Cleared notes in ${visualCells.size} cells.`);
-  }, [notesEnabled, pushHistory, resumeTimerFromActivity, visualCells]);
+    setStatusLine(`Cleared notes in ${targets.length} cells.`);
+  }, [activeCells, notesEnabled, pushHistory, resumeTimerFromActivity]);
+
+  const clearCornerMarksAcrossSelection = useCallback(() => {
+    const targets = [...activeCells];
+    resumeTimerFromActivity();
+    pushHistory();
+    setCornerMarks((current) => {
+      const next = cloneNotes(current);
+      for (const index of targets) next[index] = [];
+      return next;
+    });
+    setHint(null);
+    setStatusLine(`Cleared corners in ${targets.length} cells.`);
+  }, [activeCells, pushHistory, resumeTimerFromActivity]);
 
   const undo = useCallback(() => {
     if (!history.length) {
@@ -1041,14 +1282,30 @@ function App() {
     }
     resumeTimerFromActivity();
     const previous = history[history.length - 1];
-    setFuture((current) => [...current.slice(-49), { grid, notes, givens }]);
+    setFuture((current) => [
+      ...current.slice(-49),
+      { cellColors, cornerMarks, grid, notes, givens, variantId },
+    ]);
     setHistory((current) => current.slice(0, -1));
+    setCellColors(previous.cellColors);
+    setCornerMarks(previous.cornerMarks);
     setGrid(previous.grid);
     setNotes(previous.notes);
     setGivens(previous.givens);
+    setVariantId(previous.variantId);
+    setActiveGame((current) => ({ ...current, variantId: previous.variantId }));
     setHint(null);
     setStatusLine('Undid last change.');
-  }, [givens, grid, history, notes, resumeTimerFromActivity]);
+  }, [
+    cellColors,
+    cornerMarks,
+    givens,
+    grid,
+    history,
+    notes,
+    resumeTimerFromActivity,
+    variantId,
+  ]);
 
   const redo = useCallback(() => {
     if (!future.length) {
@@ -1057,14 +1314,30 @@ function App() {
     }
     resumeTimerFromActivity();
     const next = future[future.length - 1];
-    setHistory((current) => [...current.slice(-49), { grid, notes, givens }]);
+    setHistory((current) => [
+      ...current.slice(-49),
+      { cellColors, cornerMarks, grid, notes, givens, variantId },
+    ]);
     setFuture((current) => current.slice(0, -1));
+    setCellColors(next.cellColors);
+    setCornerMarks(next.cornerMarks);
     setGrid(next.grid);
     setNotes(next.notes);
     setGivens(next.givens);
+    setVariantId(next.variantId);
+    setActiveGame((current) => ({ ...current, variantId: next.variantId }));
     setHint(null);
     setStatusLine('Redid change.');
-  }, [future, givens, grid, notes, resumeTimerFromActivity]);
+  }, [
+    cellColors,
+    cornerMarks,
+    future,
+    givens,
+    grid,
+    notes,
+    resumeTimerFromActivity,
+    variantId,
+  ]);
 
   const askForHint = useCallback((mode: HintMode = hintMode) => {
     if (!hintsEnabled) {
@@ -1102,22 +1375,44 @@ function App() {
     pushHistory();
     setGrid((current) => current.map((value, index) => (givens[index] ? value : 0)));
     setNotes(emptyNotes(activeSize));
+    setCornerMarks(emptyNotes(activeSize));
+    setCellColors(Array(activeCellCount).fill(null));
     setHint(null);
-  }, [activeSize, givens, pushHistory, resumeTimerFromActivity]);
+  }, [activeCellCount, activeSize, givens, pushHistory, resumeTimerFromActivity]);
 
   const clearAll = useCallback(() => {
     setGameRecords((current) => upsertGameRecord(current, currentRecord));
     pushHistory();
     setGrid(emptyGrid(activeSize));
     setNotes(emptyNotes(activeSize));
+    setCornerMarks(emptyNotes(activeSize));
+    setCellColors(Array(activeCellCount).fill(null));
     setGivens(Array(activeCellCount).fill(false));
     setHint(null);
     setElapsedMs(0);
     setTimerPaused(false);
+    setTimerPauseReason(null);
     setChallengeMistakes(0);
-    setActiveGame(createGameMeta(emptyGrid(activeSize), 'blank', 'custom', activeSize, activeMode));
+    setActiveGame(
+      createGameMeta(
+        emptyGrid(activeSize),
+        'blank',
+        'custom',
+        activeSize,
+        activeMode,
+        variantId,
+      ),
+    );
     goToPlay();
-  }, [activeCellCount, activeMode, activeSize, currentRecord, goToPlay, pushHistory]);
+  }, [
+    activeCellCount,
+    activeMode,
+    activeSize,
+    currentRecord,
+    goToPlay,
+    pushHistory,
+    variantId,
+  ]);
 
   const startNewPuzzle = useCallback((
     nextGrid: Grid,
@@ -1132,6 +1427,8 @@ function App() {
     setGameRecords((current) => upsertGameRecord(current, currentRecord));
     setGrid(nextGrid);
     setNotes(emptyNotes(meta.puzzleSize));
+    setCornerMarks(emptyNotes(meta.puzzleSize));
+    setCellColors(Array(nextGrid.length).fill(null));
     setGivens(nextGrid.map(Boolean));
     setHistory([]);
     setFuture([]);
@@ -1140,8 +1437,13 @@ function App() {
     setHighlightDigit(null);
     setElapsedMs(0);
     setTimerPaused(false);
+    setTimerPauseReason(null);
     setChallengeMistakes(0);
     setNoteMode(false);
+    setToolMode('digit');
+    setVariantId(meta.variantId);
+    setVisualAnchor(null);
+    setExplicitSelection(null);
     setActiveGame(meta);
     const firstEmpty = nextGrid.indexOf(0);
     setSelected(firstEmpty >= 0 ? firstEmpty : 0);
@@ -1157,6 +1459,8 @@ function App() {
     setGameRecords((current) => upsertGameRecord(current, currentRecord));
     setGrid(record.grid);
     setNotes(record.notes);
+    setCornerMarks(record.cornerMarks);
+    setCellColors(record.cellColors);
     setGivens(record.givens);
     setElapsedMs(record.elapsedMs);
     setChallengeMistakes(0);
@@ -1168,6 +1472,7 @@ function App() {
       startedAt: record.startedAt,
       puzzleSize: record.puzzleSize,
       playMode: record.playMode,
+      variantId: record.variantId,
     });
     setHistory([]);
     setFuture([]);
@@ -1178,7 +1483,12 @@ function App() {
     setGameQuery('');
     setGameCursor(0);
     setTimerPaused(false);
+    setTimerPauseReason(null);
     setNoteMode(false);
+    setToolMode('digit');
+    setVariantId(record.variantId);
+    setVisualAnchor(null);
+    setExplicitSelection(null);
     const firstEmpty = record.grid.indexOf(0);
     setSelected(firstEmpty >= 0 ? firstEmpty : 0);
     setStatusLine(message);
@@ -1322,6 +1632,34 @@ function App() {
     setNewGameStatus('');
     closeMenuModal();
   }, [closeMenuModal, newGameMode, newPuzzleText, startNewPuzzle]);
+
+  useEffect(() => {
+    if (!storageReady || !sharedPuzzlePayload) return;
+    const shared = decodePuzzleLinkData(sharedPuzzlePayload);
+    if (!shared) {
+      setStatusLine('Shared puzzle link could not be read.');
+      void navigate({ to: '/play', replace: true });
+      return;
+    }
+    startNewPuzzle(
+      shared.grid,
+      `Opened shared ${shared.puzzleSize} puzzle.`,
+      shared.title ?? 'shared puzzle',
+      'custom',
+      shared.puzzleSize,
+      'classic',
+      createGameMeta(
+        shared.grid,
+        shared.title ?? 'shared puzzle',
+        'custom',
+        shared.puzzleSize,
+        'classic',
+        shared.variantId ?? 'classic',
+      ),
+      false,
+    );
+    void navigate({ to: '/play', replace: true });
+  }, [navigate, sharedPuzzlePayload, startNewPuzzle, storageReady]);
 
   const resumeGame = useCallback((record: GameRecord) => {
     closeMenuModal();
@@ -1471,6 +1809,24 @@ function App() {
     return url;
   }, []);
 
+  const copyPuzzleLink = useCallback(() => {
+    const puzzleGrid = grid.map((value, index) => (givens[index] ? value : 0));
+    const payload = encodePuzzleLinkData({
+      givens: givens.map(Boolean),
+      grid: puzzleGrid,
+      puzzleSize: activeSize,
+      rules: puzzleRules(activeSize, variantId),
+      title: activeGame.source,
+      variantId,
+    });
+    const url = `${window.location.origin}/p/${payload}`;
+    void navigator.clipboard?.writeText(url).catch(() => {
+      setStatusLine('Puzzle link is ready, but clipboard access failed.');
+    });
+    setStatusLine('Puzzle link copied.');
+    return url;
+  }, [activeGame.source, activeSize, givens, grid, variantId]);
+
   const createRaceChallenge = useCallback((template?: {
     challengeKind?: ChallengeKind;
     difficulty?: PuzzleDifficulty | 'custom';
@@ -1478,6 +1834,7 @@ function App() {
     puzzle: string;
     puzzleSize: PuzzleSize;
     source: string;
+    variantId?: VariantId;
   }) => {
     if (!hasConvexBackend()) {
       setChallengeStatus('Challenge links need the Convex backend.');
@@ -1491,6 +1848,7 @@ function App() {
       puzzle: activeGame.puzzle,
       puzzleSize: activeSize,
       source: activeGame.source,
+      variantId,
     };
     const nextChallengeKind = raceTemplate.challengeKind ?? challengeKind;
     const challengeId = makeChallengeId(nextChallengeKind);
@@ -1506,6 +1864,7 @@ function App() {
       recipientName: challengeRecipient?.name,
       requestId: `${challengeId}-${Date.now().toString(36)}`,
       source: raceTemplate.source,
+      variantId: raceTemplate.variantId ?? 'classic',
     };
     setChallengeCreateRequest(request);
     setChallengeStatus(`Creating ${challengeKindLabel(nextChallengeKind)} link...`);
@@ -1521,6 +1880,7 @@ function App() {
     closeMenuModal,
     navigate,
     playerName,
+    variantId,
   ]);
 
   const createConfiguredRaceChallenge = useCallback(() => {
@@ -1551,6 +1911,7 @@ function App() {
         challengeSource === 'daily'
           ? `vimdoku ${challengeSize} ${modeLabel(challengeMode)} daily ${dateKey}`
           : `generated ${challengeSize} ${modeLabel(challengeMode)} ${challengeDifficulty} challenge`,
+      variantId: 'classic',
     });
   }, [
     challengeKind,
@@ -1668,8 +2029,46 @@ function App() {
     resumeTimerFromActivity();
     pushHistory();
     setNotes(emptyNotes(activeSize));
+    setCornerMarks(emptyNotes(activeSize));
     setStatusLine('Cleared annotations.');
   }, [activeSize, pushHistory, resumeTimerFromActivity]);
+
+  const runCheck = useCallback(() => {
+    const result = checkGrid(grid, activeSize);
+    if (!result.ok) {
+      setExplicitSelection(new Set(result.issues[0].cells));
+      setVisualAnchor(result.issues[0].cells[0]);
+      setSelected(result.issues[0].cells[1]);
+      setStatusLine(result.message);
+      return;
+    }
+    const variantIssues = checkVariant(grid, activeSize, variantId);
+    if (variantIssues.length > 0) {
+      const issue = variantIssues[0];
+      setExplicitSelection(new Set(issue.cells));
+      setVisualAnchor(issue.cells[0]);
+      setSelected(issue.cells[1]);
+      setStatusLine(issue.message);
+      return;
+    }
+    setStatusLine(
+      variantId === 'classic'
+        ? result.message
+        : `Check passed: ${VARIANTS[variantId].label} constraints hold.`,
+    );
+  }, [activeSize, grid, variantId]);
+
+  const selectCells = useCallback(
+    (cells: Set<number>, message: string) => {
+      const ordered = [...cells].sort((a, b) => a - b);
+      if (ordered.length === 0) return;
+      setExplicitSelection(new Set(ordered));
+      setVisualAnchor(ordered[0]);
+      setSelected(ordered[ordered.length - 1]);
+      setStatusLine(message);
+    },
+    [],
+  );
 
   const placeSolution = useCallback(() => {
     const solution = solveGrid(grid, activeSize);
@@ -1707,6 +2106,58 @@ function App() {
         pruneNotes();
       } else if (['clear-notes', 'cn'].includes(command)) {
         clearNotes();
+      } else if (['check', 'validate'].includes(command)) {
+        runCheck();
+      } else if (['rules', 'rule'].includes(command)) {
+        openModalRoute('rules');
+        setStatusLine('Opened puzzle rules.');
+      } else if (['share', 'copy-link', 'puzzle-link'].includes(command)) {
+        copyPuzzleLink();
+      } else if (['select-row', 'row'].includes(command)) {
+        selectCells(rowSelection(selected, activeSize), 'Selected current row.');
+      } else if (['select-col', 'select-column', 'col', 'column'].includes(command)) {
+        selectCells(columnSelection(selected, activeSize), 'Selected current column.');
+      } else if (['select-box', 'box'].includes(command)) {
+        selectCells(boxSelection(selected, activeSize), 'Selected current box.');
+      } else if (['select-all', 'all'].includes(command)) {
+        selectCells(
+          new Set(Array.from({ length: activeCellCount }, (_, index) => index)),
+          'Selected every cell.',
+        );
+      } else if (command.startsWith('color ') || command.startsWith('colour ')) {
+        const value = command.split(/\s+/)[1];
+        if (value === 'clear') applyColor(null);
+        else {
+          const index = Number(value) - 1;
+          if (index >= 0 && index < CELL_COLORS.length) applyColor(index);
+          else setStatusLine(`Unknown colour: ${value}`);
+        }
+      } else if (['tool-digit', 'digit-tool'].includes(command)) {
+        chooseToolMode('digit');
+      } else if (['tool-notes', 'tool-center', 'centre', 'center'].includes(command)) {
+        chooseToolMode('center');
+      } else if (['tool-corner', 'corner'].includes(command)) {
+        chooseToolMode('corner');
+      } else if (['tool-color', 'tool-colour', 'color', 'colour'].includes(command)) {
+        chooseToolMode('color');
+      } else if (command === 'variant anti-knight' || command === 'anti-knight') {
+        chooseVariant('anti-knight');
+        setStatusLine('Anti-knight rules active for checks.');
+      } else if (command === 'variant anti-king' || command === 'anti-king') {
+        chooseVariant('anti-king');
+        setStatusLine('Anti-king rules active for checks.');
+      } else if (command === 'variant diagonal' || command === 'diagonal') {
+        chooseVariant('diagonal');
+        setStatusLine('Diagonal rules active for checks.');
+      } else if (
+        command === 'variant non-consecutive' ||
+        command === 'non-consecutive'
+      ) {
+        chooseVariant('non-consecutive');
+        setStatusLine('Non-consecutive rules active for checks.');
+      } else if (command === 'variant classic' || command === 'classic') {
+        chooseVariant('classic');
+        setStatusLine('Classic rules active.');
       } else if (['noh', 'nohlsearch', 'clear-hints', 'clear-hint'].includes(command)) {
         clearHintState();
       } else if (['hints-off', 'hint-off', 'nohint', 'nohints'].includes(command)) {
@@ -1756,7 +2207,14 @@ function App() {
     },
     [
       activeConfig.size,
+      activeCellCount,
       askForHint,
+      activeSize,
+      applyColor,
+      selected,
+      copyPuzzleLink,
+      chooseToolMode,
+      chooseVariant,
       clearAll,
       clearHintState,
       clearNotes,
@@ -1776,6 +2234,8 @@ function App() {
       placeSolution,
       pruneNotes,
       resetPuzzle,
+      runCheck,
+      selectCells,
       timerPaused,
       toggleTimerPaused,
     ],
@@ -1890,6 +2350,7 @@ function App() {
         event.preventDefault();
         pendingKeyRef.current = '';
         setVisualAnchor(null);
+        setExplicitSelection(null);
         setCommandMode(null);
         setCommandValue('');
         openGamePicker();
@@ -1899,6 +2360,7 @@ function App() {
         event.preventDefault();
         pendingKeyRef.current = '';
         setVisualAnchor(null);
+        setExplicitSelection(null);
         setCommandMode(null);
         setCommandValue('');
         if (activeMenuModal === 'menu') closeMenuModal();
@@ -1937,24 +2399,36 @@ function App() {
         }
       }
 
-      if (visualAnchor !== null) {
+      if (visualCells) {
         const visualKey = event.key.toLowerCase();
         if (event.key === 'Escape' || visualKey === 'v') {
           event.preventDefault();
           pendingKeyRef.current = '';
           setVisualAnchor(null);
+          setExplicitSelection(null);
           setStatusLine('Visual mode off.');
           return;
         }
         const visualDigit = digitFromKeyEvent(event);
         if (visualDigit >= 1 && visualDigit <= activeConfig.size) {
           event.preventDefault();
-          toggleNoteAcrossBlock(visualDigit);
+          if (event.altKey || toolMode === 'color') {
+            applyColor((visualDigit - 1) % CELL_COLORS.length);
+          } else if (toolMode === 'digit' && !event.shiftKey) {
+            setCell(visualDigit);
+          } else if (toolMode === 'center' || noteMode) {
+            toggleNote(visualDigit);
+          } else {
+            toggleCornerMark(visualDigit);
+          }
           return;
         }
         if (['0', 'backspace', 'delete', 'x'].includes(visualKey)) {
           event.preventDefault();
-          clearNotesAcrossBlock();
+          if (toolMode === 'color') applyColor(null);
+          else if (toolMode === 'digit' && !event.shiftKey) setCell(0);
+          else if (toolMode === 'center' || noteMode) clearNotesAcrossBlock();
+          else clearCornerMarksAcrossSelection();
           return;
         }
         // Movement keys fall through to the normal handler below so the
@@ -2029,6 +2503,11 @@ function App() {
       }
 
       const numeric = digitFromKeyEvent(event);
+      if (numeric >= 1 && numeric <= CELL_COLORS.length && event.altKey) {
+        event.preventDefault();
+        applyColor(numeric - 1);
+        return;
+      }
       if (pendingKeyRef.current === 'f' && numeric >= 1 && numeric <= activeConfig.size) {
         event.preventDefault();
         pendingKeyRef.current = '';
@@ -2038,7 +2517,11 @@ function App() {
 
       if (numeric >= 1 && numeric <= activeConfig.size) {
         event.preventDefault();
-        if (event.shiftKey || noteMode) {
+        if (toolMode === 'color') {
+          applyColor((numeric - 1) % CELL_COLORS.length);
+        } else if (event.shiftKey || toolMode === 'corner') {
+          toggleCornerMark(numeric);
+        } else if (noteMode || toolMode === 'center') {
           toggleNote(numeric);
         } else {
           setCell(numeric);
@@ -2051,6 +2534,13 @@ function App() {
         pendingKeyRef.current = '';
         setSelected(activeCellCount - 1);
         setStatusLine('Jumped to the last cell.');
+        return;
+      }
+
+      if (event.key === 'P') {
+        event.preventDefault();
+        pendingKeyRef.current = '';
+        toggleTimerPaused();
         return;
       }
 
@@ -2092,11 +2582,32 @@ function App() {
 
       if (['0', 'backspace', 'delete', 'x'].includes(key)) {
         event.preventDefault();
-        setCell(0);
+        if (toolMode === 'color') applyColor(null);
+        else if (event.shiftKey || toolMode === 'corner') clearCornerMarksAcrossSelection();
+        else if (toolMode === 'center' || noteMode) clearNotesAcrossBlock();
+        else setCell(0);
       } else if (key === 'n') {
         event.preventDefault();
-        if (notesEnabled) setNoteMode((current) => !current);
+        if (notesEnabled) {
+          setNoteMode((current) => {
+            const next = !current;
+            setToolMode(next ? 'center' : 'digit');
+            return next;
+          });
+        }
         else setStatusLine('Notes are disabled in speedrun.');
+      } else if (key === 'z') {
+        event.preventDefault();
+        chooseToolMode('digit');
+      } else if (key === 'm') {
+        event.preventDefault();
+        chooseToolMode('center');
+      } else if (key === 'a') {
+        event.preventDefault();
+        chooseToolMode('corner');
+      } else if (key === 'c') {
+        event.preventDefault();
+        chooseToolMode('color');
       } else if (key === 'u') {
         event.preventDefault();
         undo();
@@ -2127,8 +2638,11 @@ function App() {
       } else if (key === 'v') {
         event.preventDefault();
         pendingKeyRef.current = '';
+        setExplicitSelection(null);
         setVisualAnchor(selected);
-        setStatusLine(`VISUAL — 1-${activeConfig.size} annotates the block, x clears, Esc exits.`);
+        setNoteMode(false);
+        setToolMode('corner');
+        setStatusLine(`VISUAL — numbers mark corners, z digit, m centre, c colour.`);
       } else if (key === '}') {
         event.preventDefault();
         pendingKeyRef.current = '';
@@ -2145,16 +2659,20 @@ function App() {
   }, [
     activeCellCount,
     activeConfig,
+    applyColor,
     askForHint,
+    chooseToolMode,
+    clearCornerMarksAcrossSelection,
     clearHintState,
+    clearNotesAcrossBlock,
     closeMenuModal,
-    commandMode,
     closeGamePicker,
+    commandMode,
     gamePickerOpen,
+    goToProfile,
     hintsEnabled,
     jumpToDigit,
     jumpToNextEmpty,
-    goToProfile,
     activeMenuModal,
     moveBox,
     moveSelection,
@@ -2171,11 +2689,12 @@ function App() {
     selected,
     showBoard,
     showSolved,
+    toolMode,
+    toggleCornerMark,
+    toggleTimerPaused,
     toggleNote,
-    toggleNoteAcrossBlock,
-    clearNotesAcrossBlock,
     undo,
-    visualAnchor,
+    visualCells,
   ]);
 
   useEffect(() => {
@@ -2279,6 +2798,7 @@ function App() {
             leaderboardMode={leaderboardMode}
             leaderboardOpen={activePage === 'leaderboards'}
             leaderboardSize={leaderboardSize}
+            leaderboardVariant={leaderboardVariant}
             onProfile={setCloudProfile}
             onScores={setGlobalScores}
             onStats={setCloudStats}
@@ -2329,7 +2849,7 @@ function App() {
       )}
 
       {activePage === 'games' && (
-        <AppPageFrame title="puzzle log">
+        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="puzzle log">
           <GameLibrary
             activeGameId={activeGame.id}
             completedCount={completedGames.length}
@@ -2347,7 +2867,7 @@ function App() {
       )}
 
       {activePage === 'new' && (
-        <AppPageFrame title="new game">
+        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="new game">
           <NewGamePanel
             dailyRecord={findDailyRecord(
               gameFinderRecords,
@@ -2392,21 +2912,21 @@ function App() {
       )}
 
       {activePage === 'leaderboards' && (
-        <AppPageFrame title="leaderboards">
+        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="leaderboards">
           <Leaderboards
+            completedGames={completedGames}
             globalScores={globalScores}
             localScores={localLeaderboard}
-            onModeChange={setLeaderboardMode}
-            onSizeChange={setLeaderboardSize}
-            playMode={leaderboardMode}
-            puzzleSize={leaderboardSize}
+            playerName={playerName}
+            scope={leaderboardScope}
+            scopedGlobalScores={visibleGlobalLeaderboard}
             status={leaderboardStatus}
           />
         </AppPageFrame>
       )}
 
       {activePage === 'challenge' && (
-        <AppPageFrame title="challenge">
+        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="challenge">
           {routeChallengeId ? (
             <ChallengeRacePanel
               activeChallengeId={activeChallengeId}
@@ -2477,6 +2997,7 @@ function App() {
 
       {activePage === 'profile' && (
         <AppPageFrame
+          onOpenMenu={() => openModalRoute('menu')}
           title={publicFriendCode ? 'player profile' : 'profile'}
         >
           {publicFriendCode ? (
@@ -2515,34 +3036,12 @@ function App() {
       )}
 
       {showBoard && (
-        <div
-        className="grid min-h-screen w-full grid-cols-1 transition-[grid-template-columns] duration-300 ease-out lg:h-screen lg:min-h-0 lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)_var(--hint-rail-width)]"
-        style={
-          {
-            '--sidebar-width': sidebarOpen ? '340px' : '0px',
-            '--hint-rail-width': hintRailOpen ? '360px' : '0px',
-          } as CSSProperties
-        }
-      >
-        <section
-          className="column-rise order-2 flex min-h-screen flex-col justify-between border-[var(--border)] bg-[var(--workspace-bg)] lg:min-h-0 lg:border-l"
-          style={{ animationDelay: '80ms' }}
-        >
-          <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2.5 lg:hidden">
-            <div className="flex min-w-0 items-baseline gap-2 font-mono">
-              <button
-                type="button"
-                aria-label="Home"
-                onClick={goToDashboard}
-                className="shrink-0 text-sm font-bold uppercase tracking-[0.16em] text-[var(--accent)] transition hover:brightness-125"
-              >
-                vimdoku
-              </button>
-              <span className="truncate text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
-                {labelCell(selected, activeSize)} · {completion}/{activeCellCount}
-              </span>
-            </div>
-            <div className="flex shrink-0 gap-1.5">
+        <section className="flex h-[100dvh] min-h-[100dvh] overflow-hidden flex-col bg-[var(--workspace-bg)] font-mono lg:h-screen lg:min-h-screen">
+          <AppShellHeader
+            onHome={goToDashboard}
+            onMenu={() => openModalRoute('menu')}
+            title={`${labelCell(selected, activeSize)} · ${completion}/${activeCellCount}`}
+            extraActions={
               <button
                 type="button"
                 aria-label="Hint"
@@ -2553,23 +3052,44 @@ function App() {
                   setHintRailOpen(true);
                   askForHint();
                 }}
-                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] transition hover:border-[var(--accent)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ?
               </button>
-              <button
-                type="button"
-                aria-label="Open menu"
-                onClick={() => openModalRoute('menu')}
-                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] active:translate-y-px"
-              >
-                <Menu size={18} />
-              </button>
-            </div>
-          </header>
+            }
+          />
+          <div
+          className="grid min-h-0 w-full flex-1 overflow-hidden grid-cols-1 transition-[grid-template-columns] duration-300 ease-out lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)_var(--hint-rail-width)] lg:grid-rows-[minmax(0,1fr)]"
+          style={
+            {
+              '--sidebar-width': sidebarOpen ? '340px' : '0px',
+              '--hint-rail-width': hintRailOpen ? '360px' : '0px',
+            } as CSSProperties
+          }
+        >
+        <section
+          className="column-rise relative order-2 flex min-h-0 flex-col justify-between overflow-hidden border-[var(--border)] bg-[var(--workspace-bg)] lg:border-l"
+          style={{ animationDelay: '80ms' }}
+        >
+          <button
+            type="button"
+            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            onClick={() => {
+              setSidebarOpen((current) => {
+                setStatusLine(current ? 'Sidebar hidden.' : 'Sidebar shown.');
+                return !current;
+              });
+            }}
+            className="absolute bottom-20 left-0 z-50 hidden h-12 w-5 border-y border-r border-[var(--border)] bg-[var(--status-bg)] font-mono text-[0.65rem] font-black text-[var(--muted)] shadow-[1px_0_0_var(--app-bg)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] lg:grid lg:place-items-center"
+          >
+            {sidebarOpen ? '<' : '>'}
+          </button>
 
           <div
-            className="relative grid min-h-0 place-items-center overflow-hidden px-3 py-3 sm:px-5 lg:flex-1 lg:px-8 lg:py-4"
+            className={`relative grid min-h-0 flex-1 place-items-center overflow-hidden px-2 py-2 sm:px-5 sm:py-3 lg:px-8 lg:py-4 ${
+              timerPaused ? 'cursor-not-allowed' : ''
+            }`}
             style={battleImpactStyle}
           >
             <div
@@ -2577,7 +3097,12 @@ function App() {
               className="pointer-events-none absolute inset-0 z-10 bg-[var(--danger)] mix-blend-screen"
               style={battleImpactFlashStyle}
             />
-            <div className="w-full max-w-[min(76vh,calc(100vh-176px),820px,100%)]">
+            <div
+              className={`w-full max-w-[min(68dvh,calc(100dvh-220px),820px,100%)] transition duration-200 sm:max-w-[min(76vh,calc(100vh-176px),820px,100%)] ${
+                timerPaused ? 'scale-[0.98] blur-md brightness-50' : ''
+              }`}
+              aria-hidden={timerPaused}
+            >
               <section
                 className="board-settle grid aspect-square border-4 border-[var(--grid-line)] bg-[var(--grid-line)]"
                 style={{ gridTemplateColumns: `repeat(${activeConfig.size}, minmax(0, 1fr))` }}
@@ -2588,9 +3113,10 @@ function App() {
                     type="button"
                     key={labelCell(index, activeSize)}
                     aria-label={`${labelCell(index, activeSize)} ${value || 'empty'}`}
-                    onClick={() => {
+                    onClick={(event) => {
                       resumeTimerFromActivity();
                       setSelected(index);
+                      event.currentTarget.blur();
                     }}
                     className={cellClassName(
                       index,
@@ -2601,24 +3127,61 @@ function App() {
                       hint,
                       highlightDigit,
                       visualCells,
+                      cellColors[index],
                       activeConfig,
                     )}
+                    style={
+                      cellColors[index] !== null
+                        ? ({
+                            '--cell-user-color': CELL_COLORS[cellColors[index] ?? 0],
+                          } as CSSProperties)
+                        : undefined
+                    }
                   >
+                    {!value && cornerMarks[index].length > 0 && (
+                      <span
+                        className={`absolute left-[8%] top-[7%] flex gap-[0.18em] font-mono text-[clamp(0.46rem,1.25vw,0.82rem)] font-black leading-none ${
+                          visualCells?.has(index) ||
+                          index === selected ||
+                          (hint && 'cell' in hint && hint.cell === index)
+                            ? 'text-[var(--app-bg)]'
+                            : 'text-[var(--accent-2)]'
+                        }`}
+                      >
+                        {cornerMarks[index].map((mark) => (
+                          <span key={mark}>{mark}</span>
+                        ))}
+                      </span>
+                    )}
                     {value ? (
-                      <span className="text-[clamp(1.55rem,7vw,3.9rem)] leading-none">
+                      <span className="text-[clamp(1.32rem,6.25vw,3.9rem)] leading-none sm:text-[clamp(1.55rem,7vw,3.9rem)]">
                         {value}
                       </span>
                     ) : (
                       <span
-                        className={`flex h-full w-full flex-wrap content-start items-start gap-x-[10%] gap-y-[3%] px-[12%] py-[10%] font-mono text-[clamp(0.58rem,1.75vw,1.1rem)] font-bold leading-none ${
+                        className={`flex h-[70%] w-[72%] flex-wrap content-center items-center justify-center gap-x-[0.08em] gap-y-0 self-center justify-self-center font-mono text-[clamp(0.82rem,3.6vw,1.6rem)] font-medium leading-[0.92] sm:text-[clamp(1rem,2.6vw,1.9rem)] ${
+                          visualCells?.has(index) ||
                           index === selected ||
                           (hint && 'cell' in hint && hint.cell === index)
                             ? 'text-[var(--app-bg)]'
                             : 'text-[var(--note)]'
                         }`}
                       >
-                        {notes[index].map((note) => (
-                          <span key={note}>{note}</span>
+                        {notes[index].map((note, noteIndex) => (
+                          <span
+                            key={note}
+                            className={
+                              visualCells?.has(index) ||
+                              index === selected ||
+                              (hint && 'cell' in hint && hint.cell === index)
+                                ? 'text-[var(--app-bg)]'
+                                : noteIndex % 2 === 0
+                                ? 'text-[var(--accent)]'
+                                : 'text-[var(--danger)]'
+                            }
+                          >
+                            {note}
+                          </span>
                         ))}
                       </span>
                     )}
@@ -2626,15 +3189,40 @@ function App() {
                 ))}
               </section>
             </div>
+            {timerPaused && (
+              <div className="absolute inset-0 z-20 grid place-items-center bg-black/30 px-4">
+                <button
+                  type="button"
+                  onClick={toggleTimerPaused}
+                  className="border border-[var(--accent)] bg-[var(--status-bg)] px-5 py-4 font-mono text-sm font-black uppercase tracking-[0.18em] text-[var(--accent)] shadow-[0_0_0_1px_var(--app-bg)] transition hover:bg-[var(--accent)] hover:text-[var(--app-bg)]"
+                >
+                  {timerPauseReason === 'auto' ? 'auto-paused · resume' : 'timer paused · resume'}
+                </button>
+              </div>
+            )}
           </div>
+
+          <ToolModeBar
+            activeColor={activeColor}
+            colors={CELL_COLORS}
+            onColorChange={(index) => {
+              setActiveColor(index);
+              setToolMode('color');
+              applyColor(index);
+            }}
+            onModeChange={chooseToolMode}
+            toolMode={toolMode}
+          />
 
           <NumberPad
             digits={activeDigits}
             notesEnabled={notesEnabled}
-            noteMode={noteMode}
+            noteMode={noteMode || toolMode === 'center'}
             onDigit={(digit) => {
               resumeTimerFromActivity();
-              if (noteMode && notesEnabled) toggleNote(digit);
+              if (toolMode === 'color') applyColor((digit - 1) % CELL_COLORS.length);
+              else if (toolMode === 'corner') toggleCornerMark(digit);
+              else if ((noteMode || toolMode === 'center') && notesEnabled) toggleNote(digit);
               else setCell(digit);
             }}
             onErase={() => {
@@ -2643,11 +3231,15 @@ function App() {
             }}
             onToggleNotes={() => {
               resumeTimerFromActivity();
-              if (notesEnabled) setNoteMode((current) => !current);
+              if (notesEnabled) {
+                setNoteMode((current) => {
+                  const next = !current;
+                  setToolMode(next ? 'center' : 'digit');
+                  return next;
+                });
+              }
             }}
           />
-
-          <div className="flex-1 lg:hidden" aria-hidden="true" />
 
           <StatusLine
             cellLabel={labelCell(selected, activeSize)}
@@ -2663,7 +3255,11 @@ function App() {
             noteMode={noteMode}
             onToggleNotes={() => {
               resumeTimerFromActivity();
-              setNoteMode((current) => !current);
+              setNoteMode((current) => {
+                const next = !current;
+                setToolMode(next ? 'center' : 'digit');
+                return next;
+              });
             }}
             onToggleTimer={toggleTimerPaused}
             timerEnabled={timerEnabled}
@@ -2674,35 +3270,11 @@ function App() {
 
         <aside
           aria-hidden={!sidebarOpen}
-          className={`column-rise order-1 hidden min-h-0 overflow-hidden border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 lg:block lg:h-screen ${
+          className={`column-rise order-1 hidden min-h-0 overflow-hidden border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 lg:block ${
             sidebarOpen ? 'opacity-100' : 'lg:pointer-events-none lg:opacity-0'
           }`}
         >
           <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto p-3 lg:w-[340px]">
-          <section className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3">
-            <button
-              type="button"
-              aria-label="Home"
-              onClick={goToDashboard}
-              className="group text-left transition"
-            >
-              <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-                Vim-first sudoku
-              </p>
-              <h1 className="text-2xl font-black tracking-normal group-hover:text-[var(--accent)]">
-                Vimdoku
-              </h1>
-            </button>
-            <button
-              type="button"
-              aria-label="Open menu"
-              title="Menu"
-              className="grid h-10 w-10 shrink-0 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] active:translate-y-px"
-              onClick={() => openModalRoute('menu')}
-            >
-              <Menu size={18} />
-            </button>
-          </section>
           <input
             ref={fileInputRef}
             className="hidden"
@@ -2714,85 +3286,94 @@ function App() {
               event.currentTarget.value = '';
             }}
           />
-          <Panel title="puzzle log">
-            <div className="flex items-center justify-between gap-3">
-              <p className="min-w-0 truncate font-mono text-sm text-[var(--app-text)]">
-                {activeGame.source}
-              </p>
+          <Panel title="session">
+            <dl className="space-y-1 font-mono text-xs">
+              <div className="flex items-center justify-between">
+                <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                  grid
+                </dt>
+                <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                  {activeSize}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                  rules
+                </dt>
+                <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                  {modeLabel(activeMode)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                  conflicts
+                </dt>
+                <dd
+                  className={`font-bold uppercase tracking-[0.12em] ${
+                    visibleConflicts.size > 0 && activeMode !== 'no-check'
+                      ? 'text-[var(--danger)]'
+                      : 'text-[var(--app-text)]'
+                  }`}
+                >
+                  {activeMode === 'no-check' ? 'hidden' : visibleConflicts.size}
+                </dd>
+              </div>
+            </dl>
+          </Panel>
+          <Panel title="timer">
+            <div className="space-y-3 font-mono">
+              <div className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+                <span className="text-[0.65rem] font-black uppercase tracking-[0.18em] text-[var(--muted)]">
+                  clock
+                </span>
+                <span className="text-sm font-black uppercase tracking-[0.12em] text-[var(--accent)]">
+                  {timerEnabled ? formatDuration(elapsedMs) : 'zen'}
+                </span>
+              </div>
               <button
                 type="button"
-                className="shrink-0 border border-[var(--border)] bg-[var(--button-bg)] px-2 py-1.5 font-mono text-xs font-bold uppercase tracking-[0.14em] hover:border-[var(--accent)]"
-                onClick={openGameLibrary}
+                disabled={!timerEnabled || !pauseEnabled || isSolved}
+                onClick={toggleTimerPaused}
+                className={`flex w-full items-center justify-center gap-2 border px-3 py-2.5 text-xs font-black uppercase tracking-[0.16em] transition active:translate-y-px ${
+                  !timerEnabled || !pauseEnabled || isSolved
+                    ? 'cursor-not-allowed border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] opacity-50'
+                    : timerPaused
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
+                }`}
               >
-                open
+                {timerPaused ? <Play size={14} /> : <Pause size={14} />}
+                {timerPaused ? 'resume' : 'pause'}
               </button>
+              <p className="text-xs leading-relaxed text-[var(--muted)]">
+                Pausing hides the grid until play resumes.
+              </p>
             </div>
-            <p className="mt-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
-              <span className="text-[var(--accent)]">{inProgressGames.length}</span>{' '}
-              active /{' '}
-              <span className="text-[var(--accent)]">{completedGames.length}</span>{' '}
-              done /{' '}
-              <span className="text-[var(--accent)]">{formatDuration(elapsedMs)}</span>
-            </p>
           </Panel>
-          <Panel title="session">
-            <div className="grid grid-cols-2 gap-2">
-              <SessionMeta label="cell" value={labelCell(selected, activeSize)} />
-              <SessionMeta label="filled" value={`${completion}/${activeCellCount}`} />
-              <SessionMeta label="grid" value={activeSize} />
-              <SessionMeta label="rules" value={modeLabel(activeMode)} accent={activeMode !== 'classic'} />
-              <SessionMeta label="mode" value={editorMode} accent={editorMode !== 'normal'} />
-              <SessionMeta
-                label="timer"
-                value={timerPaused ? 'paused' : formatDuration(elapsedMs)}
-                accent={timerPaused}
-              />
-            </div>
-
-            <div className="mt-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em]">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--muted)]">notes</span>
-                <span className={noteMode ? 'text-[var(--accent)]' : 'text-[var(--app-text)]'}>
-                  {noteMode ? 'on' : 'off'}
-                </span>
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-3">
-                <span className="text-[var(--muted)]">conflicts</span>
-                <span className={visibleConflicts.size > 0 ? 'text-[var(--danger)]' : 'text-[var(--app-text)]'}>
-                  {activeMode === 'no-check' ? 'hidden' : visibleConflicts.size}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-1.5 font-mono text-xs">
-              {[
-                ['?', 'hint'],
-                [':', 'command line'],
-                ['cmd+p', 'puzzle picker'],
-                [':notes', 'fill candidates'],
-                [':prune', 'remove bad notes'],
-                [':clear-notes', 'clear annotations'],
-              ].map(([key, value]) => (
-                <div
-                  key={key}
-                  className="grid grid-cols-[104px_minmax(0,1fr)] gap-2 border border-[var(--border)] bg-[var(--button-bg)] px-2.5 py-1.5"
-                >
-                  <span className="whitespace-nowrap text-[0.68rem] font-bold text-[var(--accent)]">
-                    {key}
-                  </span>
-                  <span className="truncate uppercase tracking-[0.12em] text-[var(--muted)]">
-                    {value}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <Panel
+            collapsed={!toolsPanelOpen}
+            onToggle={() => setToolsPanelOpen((current) => !current)}
+            title="tools"
+          >
+            <ToolModeBar
+              activeColor={activeColor}
+              colors={CELL_COLORS}
+              layout="panel"
+              onColorChange={(index) => {
+                setActiveColor(index);
+                setToolMode('color');
+                applyColor(index);
+              }}
+              onModeChange={chooseToolMode}
+              toolMode={toolMode}
+            />
           </Panel>
           </div>
         </aside>
 
         <aside
           aria-hidden={!hintRailOpen}
-          className={`column-rise order-3 border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:max-h-[80vh] max-lg:border-t lg:h-screen lg:min-h-0 lg:overflow-hidden lg:border-l ${
+          className={`column-rise order-3 border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:max-h-[80vh] max-lg:border-t lg:min-h-0 lg:overflow-hidden lg:border-l ${
             hintRailOpen
               ? 'opacity-100'
               : 'pointer-events-none opacity-0 max-lg:hidden'
@@ -2812,6 +3393,7 @@ function App() {
           </div>
         </aside>
         </div>
+        </section>
       )}
 
       {review && (
@@ -3073,13 +3655,31 @@ function App() {
               >
                 <Home size={15} />
               </MenuItem>
-              <MenuItem label="new game" onClick={openNewGame}>
+              <MenuItem
+                label="new game"
+                onClick={() => {
+                  if (activePage !== 'play') closeMenuModal();
+                  openNewGame();
+                }}
+              >
                 <Plus size={15} />
               </MenuItem>
-              <MenuItem label="puzzle library" onClick={openGameLibrary}>
+              <MenuItem
+                label="puzzle library"
+                onClick={() => {
+                  closeMenuModal();
+                  openGameLibrary();
+                }}
+              >
                 <History size={15} />
               </MenuItem>
-              <MenuItem label="leaderboards" onClick={openLeaderboards}>
+              <MenuItem
+                label="leaderboards"
+                onClick={() => {
+                  closeMenuModal();
+                  openLeaderboards();
+                }}
+              >
                 <Trophy size={15} />
               </MenuItem>
               <MenuItem
@@ -3091,7 +3691,13 @@ function App() {
               >
                 <Swords size={15} />
               </MenuItem>
-              <MenuItem label="profile" onClick={goToProfile}>
+              <MenuItem
+                label="profile"
+                onClick={() => {
+                  closeMenuModal();
+                  goToProfile();
+                }}
+              >
                 <UserRound size={15} />
               </MenuItem>
               <MenuItem
@@ -3113,6 +3719,66 @@ function App() {
                 }}
               >
                 <Lightbulb size={15} />
+              </MenuItem>
+              <MenuItem
+                label="check"
+                hint=":check"
+                onClick={() => {
+                  closeMenuModal();
+                  runCheck();
+                }}
+              >
+                <Check size={15} />
+              </MenuItem>
+              <MenuItem
+                label="rules"
+                hint=":rules"
+                onClick={() => openModalRoute('rules')}
+              >
+                <Command size={15} />
+              </MenuItem>
+              <MenuItem
+                label="copy puzzle link"
+                hint=":share"
+                onClick={() => {
+                  closeMenuModal();
+                  copyPuzzleLink();
+                }}
+              >
+                <Terminal size={15} />
+              </MenuItem>
+              <div className="my-1 border-t border-[var(--border)]" />
+              <MenuItem
+                label="digit tool"
+                hint="z"
+                active={toolMode === 'digit'}
+                onClick={() => chooseToolMode('digit')}
+              >
+                <Command size={15} />
+              </MenuItem>
+              <MenuItem
+                label="centre notes"
+                hint="m"
+                active={toolMode === 'center'}
+                onClick={() => chooseToolMode('center')}
+              >
+                <Command size={15} />
+              </MenuItem>
+              <MenuItem
+                label="corners tool"
+                hint="a"
+                active={toolMode === 'corner'}
+                onClick={() => chooseToolMode('corner')}
+              >
+                <Command size={15} />
+              </MenuItem>
+              <MenuItem
+                label="colour tool"
+                hint="c"
+                active={toolMode === 'color'}
+                onClick={() => chooseToolMode('color')}
+              >
+                <Command size={15} />
               </MenuItem>
               <MenuItem
                 label="undo"
@@ -3301,46 +3967,89 @@ function App() {
           )}
 
           {activeMenuModal === 'commands' && (
-            <div className="grid gap-x-8 gap-y-0.5 font-mono text-sm sm:grid-cols-2">
-              {[
-                [':menu', 'open menu'],
-                [':dashboard', 'open start screen'],
-                [':notes', 'fill candidates'],
-                [':new', 'open new game menu'],
-                [':daily', 'open today daily URL'],
-                [':yesterday', 'open yesterday daily URL'],
-                [':games', 'open puzzle log'],
-                [':scores', 'open leaderboards'],
-                [':profile', 'open player profile'],
-                [':pause', 'pause puzzle timer'],
-                [':resume', 'resume puzzle timer'],
-                [':noh', 'clear hint/search highlights'],
-                [':nohint', 'turn hints off'],
-                [':prune', 'remove impossible notes'],
-                [':clear-notes', 'clear all notes'],
-                [':settings', 'open global settings'],
-                [':import', 'open image import'],
-                ['cmd+m', 'open menu'],
-                ['cmd+p', 'open puzzle finder'],
-                ['/5', 'highlight 5s'],
-                ['f5', 'jump to next 5'],
-                ['w / b', 'next / previous empty'],
-                ['{ / }', 'previous / next box'],
-                ['H J K L', 'jump one box in direction'],
-                ['gg / G', 'first / last cell'],
-                ['C-d / C-u', 'jump 3 rows down / up'],
-                ['u / C-r', 'undo / redo'],
-                ['SPC', 'leader menu (e h n g l i s m)'],
-              ].map(([key, value]) => (
-                <div key={key} className="flex items-baseline gap-2.5 py-1">
-                  <span className="w-28 shrink-0 whitespace-nowrap font-bold text-[var(--accent)]">
-                    {key}
-                  </span>
-                  <span className="text-[var(--border)]">→</span>
-                  <span className="text-[var(--app-text)]">{value}</span>
+            <div className="space-y-4 font-mono">
+              <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+                  mode keys
+                </p>
+                <div className="mt-3 grid gap-2 text-sm text-[var(--muted)] sm:grid-cols-4">
+                  {[
+                    ['z', 'Digit'],
+                    ['m', 'Notes'],
+                    ['a', 'Corners'],
+                    ['c', 'Colour'],
+                  ].map(([key, label]) => (
+                    <p key={key} className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+                      <span className="mr-2 font-black text-[var(--accent)]">{key}</span>
+                      {label}
+                    </p>
+                  ))}
                 </div>
-              ))}
+              </section>
+              <div className="grid gap-x-8 gap-y-0.5 text-sm sm:grid-cols-2">
+                {[
+                  [':menu', 'open menu'],
+                  [':dashboard', 'open start screen'],
+                  [':notes', 'fill candidates'],
+                  [':new', 'open new game menu'],
+                  [':daily', 'open today daily URL'],
+                  [':yesterday', 'open yesterday daily URL'],
+                  [':games', 'open puzzle log'],
+                  [':scores', 'open leaderboards'],
+                  [':profile', 'open player profile'],
+                  [':pause', 'pause puzzle timer'],
+                  [':resume', 'resume puzzle timer'],
+                  [':check', 'check visible conflicts'],
+                  [':rules', 'open puzzle rules'],
+                  [':share', 'copy puzzle link'],
+                  [':row / :col', 'select current unit'],
+                  [':box / :all', 'select box / board'],
+                  [':color 1', 'colour selected cells'],
+                  [':color clear', 'clear selection colour'],
+                  [':anti-knight', 'variant checks'],
+                  [':diagonal', 'variant checks'],
+                  [':noh', 'clear hint/search highlights'],
+                  [':nohint', 'turn hints off'],
+                  [':prune', 'remove impossible notes'],
+                  [':clear-notes', 'clear all notes'],
+                  [':settings', 'open global settings'],
+                  [':import', 'open image import'],
+                  ['cmd+m', 'open menu'],
+                  ['cmd+p', 'open puzzle finder'],
+                  ['Shift+p', 'pause / resume timer'],
+                  ['Shift+1-9', 'corner notes'],
+                  ['/5', 'highlight 5s'],
+                  ['f5', 'jump to next 5'],
+                  ['w / b', 'next / previous empty'],
+                  ['Alt+1-6', 'quick colour selection'],
+                  ['v', 'visual selection'],
+                  ['{ / }', 'previous / next box'],
+                  ['H J K L', 'jump one box in direction'],
+                  ['gg / G', 'first / last cell'],
+                  ['C-d / C-u', 'jump 3 rows down / up'],
+                  ['u / C-r', 'undo / redo'],
+                  ['SPC', 'leader menu (e h n g l i s m)'],
+                ].map(([key, value]) => (
+                  <div key={key} className="flex items-baseline gap-2.5 py-1">
+                    <span className="w-28 shrink-0 whitespace-nowrap font-bold text-[var(--accent)]">
+                      {key}
+                    </span>
+                    <span className="text-[var(--border)]">→</span>
+                    <span className="text-[var(--app-text)]">{value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+
+          {activeMenuModal === 'rules' && (
+            <RulesPanel
+              onCopyLink={copyPuzzleLink}
+              onVariantChange={chooseVariant}
+              puzzleSize={activeSize}
+              source={activeGame.source}
+              variantId={variantId}
+            />
           )}
         </TuiModal>
       )}
@@ -3426,7 +4135,7 @@ function NumberPad({
               : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)]'
           }`}
         >
-          notes {noteMode ? 'on' : 'off'}
+          centre {noteMode ? 'on' : 'off'}
         </button>
         <button
           type="button"
@@ -3435,6 +4144,175 @@ function NumberPad({
         >
           erase
         </button>
+      </div>
+    </div>
+  );
+}
+
+function RulesPanel({
+  onCopyLink,
+  onVariantChange,
+  puzzleSize,
+  source,
+  variantId,
+}: {
+  onCopyLink: () => void;
+  onVariantChange: (variantId: VariantId) => void;
+  puzzleSize: PuzzleSize;
+  source: string;
+  variantId: VariantId;
+}) {
+  return (
+    <div className="space-y-4 font-mono">
+      <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+          {source}
+        </p>
+        <div className="mt-3 flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+          <span className="text-[0.65rem] font-black uppercase tracking-[0.18em] text-[var(--muted)]">
+            active check
+          </span>
+          <span className="text-xs font-black uppercase tracking-[0.14em] text-[var(--accent)]">
+            {VARIANTS[variantId].label}
+          </span>
+        </div>
+        <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+          {puzzleRules(puzzleSize, variantId)}
+        </p>
+      </section>
+      <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+          variant checks
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {(Object.keys(VARIANTS) as VariantId[]).map((id) => (
+            <button
+              type="button"
+              key={id}
+              onClick={() => onVariantChange(id)}
+              className={`border p-3 text-left text-xs font-black uppercase tracking-[0.14em] transition ${
+                variantId === id
+                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                  : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)]'
+              }`}
+            >
+              {VARIANTS[id].label}
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+          tools
+        </p>
+        <div className="mt-3 grid gap-2 text-sm text-[var(--muted)] sm:grid-cols-2">
+          {[
+            ['v', 'visual selection'],
+            ['z', 'digit tool'],
+            ['m', 'notes'],
+            ['a', 'corners'],
+            ['c', 'colour'],
+            [':check', 'conflict check'],
+          ].map(([key, label]) => (
+            <p key={key} className="flex gap-2">
+              <span className="w-16 shrink-0 font-black text-[var(--accent)]">{key}</span>
+              <span>{label}</span>
+            </p>
+          ))}
+        </div>
+      </section>
+      <button
+        type="button"
+        onClick={onCopyLink}
+        className="w-full border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] transition hover:brightness-110"
+      >
+        copy puzzle link
+      </button>
+    </div>
+  );
+}
+
+function ToolModeBar({
+  activeColor,
+  colors,
+  layout = 'bar',
+  onColorChange,
+  onModeChange,
+  toolMode,
+}: {
+  activeColor: number;
+  colors: readonly string[];
+  layout?: 'bar' | 'panel';
+  onColorChange: (index: number) => void;
+  onModeChange: (mode: ToolMode) => void;
+  toolMode: ToolMode;
+}) {
+  const modes: [ToolMode, string, string][] = [
+    ['digit', 'z', 'digit'],
+    ['center', 'm', 'centre'],
+    ['corner', 'a', 'corners'],
+    ['color', 'c', 'colour'],
+  ];
+
+  const modeButton = (mode: ToolMode, key: string, label: string) => (
+    <button
+      type="button"
+      key={mode}
+      onClick={() => onModeChange(mode)}
+      className={`border px-2.5 py-1.5 text-[0.64rem] font-black uppercase tracking-[0.14em] transition ${
+        toolMode === mode
+          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]'
+      }`}
+    >
+      <span className="text-[0.58rem] opacity-70">{key}</span> {label}
+    </button>
+  );
+
+  const colorButton = (color: string, index: number) => (
+    <button
+      type="button"
+      key={color}
+      aria-label={`Colour ${index + 1}`}
+      onClick={() => onColorChange(index)}
+      className={`h-6 w-full border transition ${
+        toolMode === 'color' && activeColor === index
+          ? 'border-[var(--app-text)]'
+          : 'border-[var(--border)]'
+      }`}
+      style={{ backgroundColor: color }}
+    />
+  );
+
+  if (layout === 'panel') {
+    return (
+      <div className="font-mono">
+        <div className="grid grid-cols-2 gap-1.5">
+          {modes.map(([mode, key, label]) => modeButton(mode, key, label))}
+        </div>
+        <p className="mt-3 mb-1.5 text-[0.6rem] uppercase tracking-[0.2em] text-[var(--muted)]">
+          colour
+        </p>
+        <div className="grid grid-cols-6 gap-1">
+          {colors.map((color, index) => colorButton(color, index))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="shrink-0 border-t border-[var(--border)] bg-[var(--status-bg)] px-2 py-1.5 font-mono lg:hidden">
+      <div className="flex items-center justify-between gap-2 overflow-x-auto">
+        <div className="flex shrink-0 gap-1">
+          {modes.map(([mode, key, label]) => modeButton(mode, key, label))}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          {colors.map((color, index) => (
+            <div key={color} className="h-6 w-6 shrink-0">
+              {colorButton(color, index)}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -4169,10 +5047,12 @@ function AppShellHeader({
 function AppPageFrame({
   children,
   extraActions,
+  onOpenMenu,
   title,
 }: {
   children: ReactNode;
   extraActions?: ReactNode;
+  onOpenMenu: () => void;
   title?: string;
 }) {
   const navigate = useNavigate();
@@ -4181,7 +5061,7 @@ function AppPageFrame({
       <AppShellHeader
         extraActions={extraActions}
         onHome={() => void navigate({ to: '/' })}
-        onMenu={() => void navigate({ to: '/menu' })}
+        onMenu={onOpenMenu}
         title={title}
       />
       <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
@@ -4709,66 +5589,245 @@ function GameFinder({
   );
 }
 
+type LeaderboardScope = {
+  size: PuzzleSize;
+  mode: PlayMode;
+  variant: VariantId;
+  difficulty: PuzzleDifficulty;
+};
+
 function Leaderboards({
+  completedGames,
   globalScores,
   localScores,
-  onModeChange,
-  onSizeChange,
-  playMode,
-  puzzleSize,
+  playerName,
+  scope,
+  scopedGlobalScores,
   status,
 }: {
+  completedGames: GameRecord[];
   globalScores: LeaderboardEntry[];
   localScores: GameRecord[];
-  onModeChange: (mode: PlayMode) => void;
-  onSizeChange: (puzzleSize: PuzzleSize) => void;
-  playMode: PlayMode;
-  puzzleSize: PuzzleSize;
+  playerName: string;
+  scope: LeaderboardScope | null;
+  scopedGlobalScores: LeaderboardEntry[];
   status: string;
 }) {
+  if (scope) {
+    return (
+      <LeaderboardsDetail
+        globalScores={scopedGlobalScores}
+        localScores={localScores}
+        scope={scope}
+        status={status}
+      />
+    );
+  }
+  return (
+    <LeaderboardsIndex
+      completedGames={completedGames}
+      globalScores={globalScores}
+      playerName={playerName}
+    />
+  );
+}
+
+type LeaderboardComboEntry = {
+  id: string;
+  player: string;
+  source: string;
+  difficulty?: string;
+  elapsedMs: number;
+};
+
+function LeaderboardsIndex({
+  completedGames,
+  globalScores,
+  playerName,
+}: {
+  completedGames: GameRecord[];
+  globalScores: LeaderboardEntry[];
+  playerName: string;
+}) {
+  const navigate = useNavigate();
+  const localPlayer = isCustomPlayerName(playerName) ? playerName : 'you';
+  const [indexMode, setIndexMode] = useState<PlayMode>('classic');
+  // Default scope: 9x9 classic variant. Filter by game mode only for now;
+  // size & variant can be browsed via direct URLs.
+  const indexSize: PuzzleSize = '9x9';
+  const indexVariant: VariantId = 'classic';
+
+  const combos = useMemo(
+    () =>
+      LEADERBOARD_DIFFICULTIES.map((difficulty) => {
+        const scope: LeaderboardScope = {
+          size: indexSize,
+          mode: indexMode,
+          variant: indexVariant,
+          difficulty,
+        };
+        const localTop: LeaderboardComboEntry[] = completedGames
+          .filter(
+            (record) =>
+              record.puzzleSize === indexSize &&
+              record.playMode === indexMode &&
+              record.variantId === indexVariant &&
+              record.difficulty === difficulty &&
+              record.elapsedMs > 0,
+          )
+          .map((record) => ({
+            id: `local-${record.id}`,
+            player: localPlayer,
+            source: record.source,
+            difficulty: record.difficulty,
+            elapsedMs: record.elapsedMs,
+          }));
+        const globalTop: LeaderboardComboEntry[] = globalScores
+          .filter(
+            (score) =>
+              leaderboardEntryMatches(score, indexSize, indexMode, indexVariant) &&
+              score.difficulty === difficulty,
+          )
+          .map((score) => ({
+            id: `global-${score.id}`,
+            player: score.player,
+            source: score.source,
+            difficulty: score.difficulty,
+            elapsedMs: score.elapsedMs,
+          }));
+        const top = [...localTop, ...globalTop]
+          .sort((a, b) => a.elapsedMs - b.elapsedMs)
+          .slice(0, 10);
+        return { scope, top };
+      }),
+    [completedGames, globalScores, indexMode, localPlayer],
+  );
+
   return (
     <div className="space-y-3">
-      <section className="flex flex-wrap items-center justify-between gap-2 border border-[var(--border)] bg-[var(--status-bg)] p-2">
-        <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
-          board size
+      <section className="flex flex-wrap items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+        <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-[var(--muted)]">
+          <span className="text-[var(--accent)]">9x9</span>
+          <span className="mx-1.5 text-[var(--border)]">·</span>
+          <span className="text-[var(--app-text)]">classic ruleset</span>
         </p>
-        <div className="flex gap-1">
-          {PUZZLE_SIZES.map((option) => (
-            <button
-              type="button"
-              key={option}
-              className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] ${
-                puzzleSize === option
-                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                  : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]'
-              }`}
-              onClick={() => onSizeChange(option)}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
         <div className="flex flex-wrap gap-1">
-          {PLAY_MODES.map((option) => (
+          {LEADERBOARD_PLAY_MODES.map((mode) => (
             <button
               type="button"
-              key={option}
-              className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] ${
-                playMode === option
+              key={mode}
+              onClick={() => setIndexMode(mode)}
+              className={`border px-2.5 py-1.5 font-mono text-[0.68rem] font-bold uppercase tracking-[0.14em] transition ${
+                indexMode === mode
                   ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
                   : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]'
               }`}
-              onClick={() => onModeChange(option)}
             >
-              {modeLabel(option)}
+              {modeLabel(mode)}
             </button>
           ))}
         </div>
       </section>
       <div className="grid gap-3 lg:grid-cols-2">
+      {combos.map(({ scope: combo, top }) => {
+        const hasEntries = top.length > 0;
+        return (
+          <button
+            type="button"
+            key={`${combo.size}-${combo.mode}-${combo.variant}-${combo.difficulty}`}
+            onClick={() =>
+              void navigate({
+                to: '/leaderboards/$size/$mode/$variant/$difficulty',
+                params: combo,
+              })
+            }
+            className={`group flex flex-col gap-4 border border-[var(--border)] bg-[var(--input-bg)] p-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] ${
+              hasEntries ? 'min-h-64' : ''
+            }`}
+          >
+            <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-[0.7rem] uppercase tracking-[0.14em]">
+              <span className="font-black text-[var(--accent)]">
+                {combo.size}
+              </span>
+              <span className="text-[var(--border)]">·</span>
+              <span className="font-bold text-[var(--app-text)]">
+                {modeLabel(combo.mode)}
+              </span>
+              <span className="text-[var(--border)]">·</span>
+              <span className="text-[var(--muted)]">
+                {VARIANTS[combo.variant].label}
+              </span>
+              <span className="text-[var(--border)]">·</span>
+              <span className="font-bold text-[var(--accent-2)]">
+                {combo.difficulty}
+              </span>
+            </header>
+            {!hasEntries ? (
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+                no entries yet
+              </p>
+            ) : (
+              <ol className="grid gap-1 font-mono text-xs">
+                {top.map((entry, index) => (
+                  <li
+                    key={entry.id}
+                    className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-2"
+                  >
+                    <span className="text-[var(--muted)]">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <span className="min-w-0 truncate">
+                      <span className="font-bold uppercase tracking-[0.1em] text-[var(--app-text)]">
+                        {entry.player}
+                      </span>
+                      <span className="mx-1.5 text-[var(--border)]">·</span>
+                      <span className="text-[var(--muted)]">{entry.source}</span>
+                    </span>
+                    <span className="font-bold text-[var(--accent)]">
+                      {formatDuration(entry.elapsedMs)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </button>
+        );
+      })}
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardsDetail({
+  globalScores,
+  localScores,
+  scope,
+  status,
+}: {
+  globalScores: LeaderboardEntry[];
+  localScores: GameRecord[];
+  scope: LeaderboardScope;
+  status: string;
+}) {
+  const navigate = useNavigate();
+  const scopeLabel = `${scope.size} / ${modeLabel(scope.mode)} / ${VARIANTS[scope.variant].label} / ${scope.difficulty}`;
+
+  return (
+    <div className="space-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em]">
+        <button
+          type="button"
+          onClick={() => void navigate({ to: '/leaderboards' })}
+          className="border border-[var(--border)] bg-[var(--button-bg)] px-2 py-1 font-bold text-[var(--accent)] transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)]"
+        >
+          ← all boards
+        </button>
+        <span className="text-[var(--app-text)]">{scopeLabel}</span>
+      </header>
+      <div className="grid gap-3 lg:grid-cols-2">
         <LeaderboardPanel
-          title={`local best / ${puzzleSize} / ${modeLabel(playMode)}`}
-          empty={`No completed ${puzzleSize} ${modeLabel(playMode)} local games yet.`}
+          title={`local best / ${scopeLabel}`}
+          empty={`No completed ${scopeLabel} local games yet.`}
         >
           {localScores.map((record, index) => (
             <LeaderboardRow
@@ -4782,8 +5841,8 @@ function Leaderboards({
         </LeaderboardPanel>
 
         <LeaderboardPanel
-          title={`global best / ${puzzleSize} / ${modeLabel(playMode)}`}
-          empty={status || `No global ${puzzleSize} ${modeLabel(playMode)} scores loaded.`}
+          title={`global best / ${scopeLabel}`}
+          empty={status || `No global ${scopeLabel} scores loaded.`}
         >
           {globalScores.map((score, index) => (
             <LeaderboardRow
@@ -4799,6 +5858,7 @@ function Leaderboards({
     </div>
   );
 }
+
 
 function ChallengeSetupPanel({
   currentGame,
@@ -5707,45 +6767,41 @@ function TuiModal({
 
 function Panel({
   children,
+  collapsed = false,
+  onToggle,
   title,
 }: {
   children: React.ReactNode;
+  collapsed?: boolean;
+  onToggle?: () => void;
   title?: string;
 }) {
   return (
     <section className="relative border border-[var(--border)] bg-[var(--panel-bg)] p-4">
       {title && (
-        <span className="absolute -top-[7px] left-3 bg-[var(--sidebar-bg)] px-1.5 font-mono text-[0.65rem] font-bold uppercase leading-none tracking-[0.2em] text-[var(--accent)]">
-          {title}
-        </span>
+        onToggle ? (
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={onToggle}
+            className="absolute -top-[7px] left-3 bg-[var(--sidebar-bg)] px-1.5 font-mono text-[0.65rem] font-bold uppercase leading-none tracking-[0.2em] text-[var(--accent)] transition hover:brightness-125"
+          >
+            {collapsed ? '+' : '-'} {title}
+          </button>
+        ) : (
+          <span className="absolute -top-[7px] left-3 bg-[var(--sidebar-bg)] px-1.5 font-mono text-[0.65rem] font-bold uppercase leading-none tracking-[0.2em] text-[var(--accent)]">
+            {title}
+          </span>
+        )
       )}
-      {children}
-    </section>
-  );
-}
-
-function SessionMeta({
-  accent = false,
-  label,
-  value,
-}: {
-  accent?: boolean;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="border border-[var(--border)] bg-[var(--input-bg)] p-2 font-mono">
-      <p className="text-[0.62rem] uppercase tracking-[0.16em] text-[var(--muted)]">
-        {label}
-      </p>
-      <p
-        className={`mt-1 truncate text-sm font-bold uppercase tracking-[0.12em] ${
-          accent ? 'text-[var(--accent)]' : 'text-[var(--app-text)]'
+      <div
+        className={`overflow-hidden transition-[max-height,opacity] duration-200 ${
+          collapsed ? 'max-h-0 opacity-0' : 'max-h-96 opacity-100'
         }`}
       >
-        {value}
-      </p>
-    </div>
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -5782,6 +6838,10 @@ function StatusLine({
   const modeBg =
     mode === 'visual'
       ? 'var(--cell-search)'
+      : mode === 'color'
+        ? 'var(--cell-hint)'
+      : mode === 'corner'
+        ? 'var(--accent-2)'
       : mode === 'annotate'
         ? 'var(--accent-2)'
         : 'var(--accent)';
@@ -5796,7 +6856,7 @@ function StatusLine({
       className="flex h-8 shrink-0 select-none items-stretch overflow-hidden border-t border-[var(--border)] bg-[var(--status-bg)] font-mono text-xs"
     >
       <div className={section} style={{ background: modeBg, color: 'var(--app-bg)' }}>
-        {mode}
+        {editorModeLabel(mode)}
       </div>
       <Wedge direction="right" tip={modeBg} field="var(--panel-soft)" />
 
@@ -5807,12 +6867,12 @@ function StatusLine({
         <span>{cellLabel}</span>
         <button
           type="button"
-          title="Toggle note mode (n)"
+          title="Toggle centre notes (n)"
           onClick={onToggleNotes}
           className="uppercase tracking-[0.16em] transition hover:brightness-150"
           style={{ color: noteMode ? 'var(--accent-2)' : 'var(--muted)' }}
         >
-          notes {noteMode ? 'on' : 'off'}
+          centre {noteMode ? 'on' : 'off'}
         </button>
       </div>
       <Wedge direction="right" tip="var(--panel-soft)" field="var(--status-bg)" />
@@ -5988,11 +7048,11 @@ function modalTitle(modal: Exclude<MenuModal, null>) {
   if (modal === 'menu') return 'menu';
   if (modal === 'new') return 'new-game';
   if (modal === 'settings') return 'settings';
+  if (modal === 'rules') return 'rules';
   return 'commands';
 }
 
 function modalFromPath(pathname: string): MenuModal {
-  if (pathname === '/menu') return 'menu';
   if (pathname === '/settings') return 'settings';
   if (pathname === '/commands') return 'commands';
   return null;
@@ -6002,7 +7062,8 @@ function pageFromPath(pathname: string): PageRoute {
   if (pathname === '/') return 'dashboard';
   if (pathname === '/new') return 'new';
   if (pathname === '/games') return 'games';
-  if (pathname === '/leaderboards') return 'leaderboards';
+  if (pathname === '/leaderboards' || pathname.startsWith('/leaderboards/'))
+    return 'leaderboards';
   if (pathname === '/challenge') return 'challenge';
   if (challengeIdFromPath(pathname)) return 'challenge';
   if (pathname === '/profile') return 'profile';
@@ -6010,10 +7071,66 @@ function pageFromPath(pathname: string): PageRoute {
   return 'play';
 }
 
+const LEADERBOARD_DIFFICULTIES: PuzzleDifficulty[] = [
+  'easy',
+  'medium',
+  'hard',
+  'expert',
+];
+
+function leaderboardScopeFromPath(pathname: string): {
+  size: PuzzleSize;
+  mode: PlayMode;
+  variant: VariantId;
+  difficulty: PuzzleDifficulty;
+} | null {
+  const match = pathname.match(
+    /^\/leaderboards\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/,
+  );
+  if (!match) return null;
+  const [, size, mode, variant, difficulty] = match;
+  if (!PUZZLE_SIZES.includes(size as PuzzleSize)) return null;
+  if (!LEADERBOARD_PLAY_MODES.includes(mode as PlayMode)) return null;
+  if (!(variant in VARIANTS)) return null;
+  if (!LEADERBOARD_DIFFICULTIES.includes(difficulty as PuzzleDifficulty))
+    return null;
+  return {
+    size: size as PuzzleSize,
+    mode: mode as PlayMode,
+    variant: variant as VariantId,
+    difficulty: difficulty as PuzzleDifficulty,
+  };
+}
+
 function publicFriendCodeFromPath(pathname: string) {
   const match = pathname.match(/^\/u\/([^/]+)$/);
   if (!match) return null;
   return compactFriendCode(decodeURIComponent(match[1]));
+}
+
+function sharedPuzzlePayloadFromPath(pathname: string) {
+  const match = pathname.match(/^\/p\/([^/]+)$/);
+  return match?.[1] ?? null;
+}
+
+function puzzleRules(puzzleSize: PuzzleSize, variantId: VariantId = 'classic') {
+  return `${VARIANTS[variantId].rules} This puzzle uses a ${puzzleSize} grid with digits ${boardConfigFor(
+    puzzleSize,
+  ).digits.join(', ')}.`;
+}
+
+function toolModeMessage(mode: ToolMode) {
+  if (mode === 'digit') return 'Digit tool.';
+  if (mode === 'center') return 'Centre notes tool.';
+  if (mode === 'corner') return 'Corner notes tool.';
+  return 'Colour tool. Press 1-6 or Alt+number.';
+}
+
+function editorModeLabel(mode: EditorMode) {
+  if (mode === 'annotate') return 'centre';
+  if (mode === 'corner') return 'corners';
+  if (mode === 'color') return 'colour';
+  return mode;
 }
 
 function compactFriendCode(value: string) {
@@ -6039,6 +7156,7 @@ function cellClassName(
   hint: Hint | null,
   highlightDigit: number | null,
   visualCells: Set<number> | null,
+  cellColor: number | null,
   config: BoardConfig,
 ) {
   const row = Math.floor(index / config.size);
@@ -6051,8 +7169,7 @@ function cellClassName(
   const searchMatch =
     highlightDigit !== null && index !== selected && grid[index] === highlightDigit;
   const isHint = Boolean(hint && 'cell' in hint && hint.cell === index);
-  const inVisualBlock =
-    index !== selected && (visualCells?.has(index) ?? false);
+  const inVisualBlock = visualCells?.has(index) ?? false;
 
   // Every state below paints a bright background, so cell text must
   // flip to the dark app color or it disappears into the highlight.
@@ -6062,24 +7179,27 @@ function cellClassName(
     inVisualBlock ||
     isHint ||
     searchMatch ||
-    sameValue;
+    sameValue ||
+    cellColor !== null;
 
   return [
     'relative grid aspect-square place-items-center border border-[var(--grid-line)] font-black outline-none transition focus-visible:outline-none focus-visible:outline-offset-0',
     col % config.boxCols === 0 ? 'border-l-4' : '',
     row % config.boxRows === 0 ? 'border-t-4' : '',
-    index === selected
-      ? 'bg-[var(--cell-selected)]'
-      : conflicts.has(index)
+    inVisualBlock
+      ? 'bg-[var(--cell-search)]'
+      : index === selected
+        ? 'bg-[var(--cell-selected)]'
+        : conflicts.has(index)
         ? 'bg-[var(--cell-conflict)]'
-        : inVisualBlock
-          ? 'bg-[var(--cell-search)]'
         : isHint
           ? 'bg-[var(--cell-hint)]'
           : searchMatch
             ? 'bg-[var(--cell-search)]'
           : sameValue
             ? 'bg-[var(--cell-same)]'
+          : cellColor !== null
+            ? 'bg-[var(--cell-user-color)]'
           : sameRow || sameCol
             ? 'bg-[var(--cell-peer)]'
             : 'bg-[var(--cell-bg)]',

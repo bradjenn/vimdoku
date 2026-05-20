@@ -40,6 +40,7 @@ export function createDailyGameMeta(
     puzzleSize,
     source: `vimdoku ${puzzleSize} ${modeLabel(playMode)} daily ${dateKey}`,
     startedAt: `${dateKey}T00:00:00.000Z`,
+    variantId: 'classic',
   };
 }
 
