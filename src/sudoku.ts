@@ -32,6 +32,15 @@ export type Hint =
       detail: string;
     }
   | {
+      kind: 'elimination';
+      technique: string;
+      cells: number[];
+      values: number[];
+      nudge: string;
+      message: string;
+      detail: string;
+    }
+  | {
       kind: 'complete';
       message: string;
     }
@@ -413,6 +422,12 @@ export function nextHint(
     }
   }
 
+  const techniqueHint =
+    findPointingCandidate(grid, puzzleSize) ??
+    findClaimingCandidate(grid, puzzleSize) ??
+    findNakedPair(grid, puzzleSize);
+  if (techniqueHint) return techniqueHint;
+
   const solved = solveGrid(grid, puzzleSize);
   if (!solved) {
     return {
@@ -432,6 +447,165 @@ export function nextHint(
     detail:
       'The lightweight human hint engine did not find a naked or hidden single, so this falls back to the solved grid.',
   };
+}
+
+function findPointingCandidate(
+  grid: Grid,
+  puzzleSize: PuzzleSize,
+): Hint | null {
+  const config = boardConfigFor(puzzleSize);
+
+  for (const box of boxUnits(puzzleSize)) {
+    for (const value of config.digits) {
+      const possibleCells = candidateCells(grid, box, value, puzzleSize);
+      if (possibleCells.length < 2) continue;
+
+      const rows = unique(possibleCells.map((index) => Math.floor(index / config.size)));
+      if (rows.length === 1) {
+        const row = rowUnit(rows[0], puzzleSize);
+        const targets = candidateCells(
+          grid,
+          row.filter((index) => !box.includes(index)),
+          value,
+          puzzleSize,
+        );
+        if (targets.length > 0) {
+          return eliminationHint(
+            'Pointing candidate',
+            value,
+            possibleCells,
+            targets,
+            `Check ${unitLabel(box, puzzleSize)} before scanning row ${rows[0] + 1}.`,
+            `${value} is locked into row ${rows[0] + 1} inside ${unitLabel(box, puzzleSize)}.`,
+            `Every possible ${value} in ${unitLabel(
+              box,
+              puzzleSize,
+            )} sits on row ${rows[0] + 1}, so remove ${value} from ${listCells(
+              targets,
+              puzzleSize,
+            )}.`,
+          );
+        }
+      }
+
+      const cols = unique(possibleCells.map((index) => index % config.size));
+      if (cols.length === 1) {
+        const col = columnUnit(cols[0], puzzleSize);
+        const targets = candidateCells(
+          grid,
+          col.filter((index) => !box.includes(index)),
+          value,
+          puzzleSize,
+        );
+        if (targets.length > 0) {
+          return eliminationHint(
+            'Pointing candidate',
+            value,
+            possibleCells,
+            targets,
+            `Check ${unitLabel(box, puzzleSize)} before scanning column ${cols[0] + 1}.`,
+            `${value} is locked into column ${cols[0] + 1} inside ${unitLabel(box, puzzleSize)}.`,
+            `Every possible ${value} in ${unitLabel(
+              box,
+              puzzleSize,
+            )} sits on column ${cols[0] + 1}, so remove ${value} from ${listCells(
+              targets,
+              puzzleSize,
+            )}.`,
+          );
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function findClaimingCandidate(
+  grid: Grid,
+  puzzleSize: PuzzleSize,
+): Hint | null {
+  const config = boardConfigFor(puzzleSize);
+  const lineUnits = [
+    ...Array.from({ length: config.size }, (_, row) => rowUnit(row, puzzleSize)),
+    ...Array.from({ length: config.size }, (_, col) => columnUnit(col, puzzleSize)),
+  ];
+
+  for (const unit of lineUnits) {
+    for (const value of config.digits) {
+      const possibleCells = candidateCells(grid, unit, value, puzzleSize);
+      if (possibleCells.length < 2) continue;
+
+      const boxes = unique(possibleCells.map((index) => boxIndex(index, puzzleSize)));
+      if (boxes.length !== 1) continue;
+
+      const box = boxUnit(boxes[0], puzzleSize);
+      const targets = candidateCells(
+        grid,
+        box.filter((index) => !unit.includes(index)),
+        value,
+        puzzleSize,
+      );
+      if (targets.length === 0) continue;
+
+      return eliminationHint(
+        'Claiming candidate',
+        value,
+        possibleCells,
+        targets,
+        `Check where ${value} fits in ${unitLabel(unit, puzzleSize)}.`,
+        `${unitLabel(unit, puzzleSize)} claims ${value} inside ${unitLabel(box, puzzleSize)}.`,
+        `All ${value} candidates for ${unitLabel(
+          unit,
+          puzzleSize,
+        )} are inside ${unitLabel(box, puzzleSize)}, so remove ${value} from ${listCells(
+          targets,
+          puzzleSize,
+        )}.`,
+      );
+    }
+  }
+
+  return null;
+}
+
+function findNakedPair(grid: Grid, puzzleSize: PuzzleSize): Hint | null {
+  for (const unit of allUnits(puzzleSize)) {
+    const pairs = new Map<string, number[]>();
+
+    for (const index of unit) {
+      const candidates = candidatesFor(grid, index, puzzleSize);
+      if (candidates.length !== 2) continue;
+      const key = candidates.join('');
+      pairs.set(key, [...(pairs.get(key) ?? []), index]);
+    }
+
+    for (const [key, cells] of pairs) {
+      if (cells.length !== 2) continue;
+      const values = key.split('').map(Number);
+      const targets = unit.filter(
+        (index) =>
+          !cells.includes(index) &&
+          grid[index] === 0 &&
+          candidatesFor(grid, index, puzzleSize).some((value) => values.includes(value)),
+      );
+      if (targets.length === 0) continue;
+
+      return {
+        kind: 'elimination',
+        technique: 'Naked pair',
+        cells: [...cells, ...targets],
+        values,
+        nudge: `Two cells in ${unitLabel(unit, puzzleSize)} share the same two candidates.`,
+        message: `${listCells(cells, puzzleSize)} form a naked pair ${values.join('/')}.`,
+        detail: `Those two cells must contain ${values.join(
+          ' and ',
+        )}, so remove them from ${listCells(targets, puzzleSize)}.`,
+      };
+    }
+  }
+
+  return null;
 }
 
 export function removeRelatedNotes(
@@ -454,6 +628,88 @@ export function labelCell(
 ): string {
   const size = boardConfigFor(puzzleSize).size;
   return `r${Math.floor(index / size) + 1}c${(index % size) + 1}`;
+}
+
+function eliminationHint(
+  technique: string,
+  value: number,
+  sourceCells: number[],
+  targetCells: number[],
+  nudge: string,
+  message: string,
+  detail: string,
+): Hint {
+  return {
+    kind: 'elimination',
+    technique,
+    cells: [...sourceCells, ...targetCells],
+    values: [value],
+    nudge,
+    message,
+    detail,
+  };
+}
+
+function candidateCells(
+  grid: Grid,
+  cells: number[],
+  value: number,
+  puzzleSize: PuzzleSize,
+): number[] {
+  return cells.filter(
+    (index) => grid[index] === 0 && candidatesFor(grid, index, puzzleSize).includes(value),
+  );
+}
+
+function rowUnit(row: number, puzzleSize: PuzzleSize): number[] {
+  const config = boardConfigFor(puzzleSize);
+  return Array.from({ length: config.size }, (_, col) => row * config.size + col);
+}
+
+function columnUnit(col: number, puzzleSize: PuzzleSize): number[] {
+  const config = boardConfigFor(puzzleSize);
+  return Array.from({ length: config.size }, (_, row) => row * config.size + col);
+}
+
+function boxIndex(index: number, puzzleSize: PuzzleSize): number {
+  const config = boardConfigFor(puzzleSize);
+  const row = Math.floor(index / config.size);
+  const col = index % config.size;
+  const boxesPerRow = config.size / config.boxCols;
+  return (
+    Math.floor(row / config.boxRows) * boxesPerRow +
+    Math.floor(col / config.boxCols)
+  );
+}
+
+function boxUnit(box: number, puzzleSize: PuzzleSize): number[] {
+  const config = boardConfigFor(puzzleSize);
+  const boxesPerRow = config.size / config.boxCols;
+  const boxRow = Math.floor(box / boxesPerRow);
+  const boxCol = box % boxesPerRow;
+  const unit: number[] = [];
+
+  for (let row = boxRow * config.boxRows; row < boxRow * config.boxRows + config.boxRows; row += 1) {
+    for (let col = boxCol * config.boxCols; col < boxCol * config.boxCols + config.boxCols; col += 1) {
+      unit.push(row * config.size + col);
+    }
+  }
+
+  return unit;
+}
+
+function boxUnits(puzzleSize: PuzzleSize): number[][] {
+  const config = boardConfigFor(puzzleSize);
+  const boxCount = config.cellCount / config.size;
+  return Array.from({ length: boxCount }, (_, box) => boxUnit(box, puzzleSize));
+}
+
+function unique(values: number[]): number[] {
+  return [...new Set(values)];
+}
+
+function listCells(cells: number[], puzzleSize: PuzzleSize): string {
+  return cells.map((cell) => labelCell(cell, puzzleSize)).join(', ');
 }
 
 function allUnits(puzzleSize: PuzzleSize): number[][] {
@@ -539,10 +795,11 @@ function seededRandom(seed: number) {
 function unitLabel(unit: number[], puzzleSize: PuzzleSize): string {
   const config = boardConfigFor(puzzleSize);
   const first = unit[0];
-  const second = unit[1];
+  const rows = unique(unit.map((index) => Math.floor(index / config.size)));
+  const cols = unique(unit.map((index) => index % config.size));
 
-  if (second === first + 1) return `row ${Math.floor(first / config.size) + 1}`;
-  if (second === first + config.size) return `column ${(first % config.size) + 1}`;
+  if (rows.length === 1 && unit.length === config.size) return `row ${rows[0] + 1}`;
+  if (cols.length === 1 && unit.length === config.size) return `column ${cols[0] + 1}`;
 
   const row = Math.floor(first / config.size);
   const col = first % config.size;

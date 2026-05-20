@@ -9,6 +9,7 @@ import {
   generatePuzzle,
   isValidMove,
   labelCell,
+  nextHint,
   parseGrid,
   peers,
   pruneImpossibleNotes,
@@ -109,6 +110,52 @@ describe('sudoku candidates, notes, and solver', () => {
 
     expect(solution?.join('')).toBe(STARTER_SOLUTION);
     expect(STARTER_GRID).toEqual(before);
+  });
+
+  it('finds pointing candidate hints once singles are exhausted', () => {
+    const grid = parseGrid(
+      '609800500' +
+        '238100769' +
+        '000006000' +
+        '060720483' +
+        '027008600' +
+        '840061200' +
+        '000600000' +
+        '780003956' +
+        '006087104',
+    );
+
+    const hint = nextHint(grid, '9x9');
+
+    expect(hint).toMatchObject({
+      kind: 'elimination',
+      technique: 'Pointing candidate',
+      values: [4],
+      message: '4 is locked into row 3 inside box 1.',
+    });
+  });
+
+  it('finds claiming candidate hints once singles are exhausted', () => {
+    const grid = parseGrid(
+      '467319825' +
+        '010280670' +
+        '002760009' +
+        '625471398' +
+        '030526040' +
+        '174938256' +
+        '200657000' +
+        '041892060' +
+        '006143082',
+    );
+
+    const hint = nextHint(grid, '9x9');
+
+    expect(hint).toMatchObject({
+      kind: 'elimination',
+      technique: 'Claiming candidate',
+      values: [9],
+      message: 'column 2 claims 9 inside box 7.',
+    });
   });
 
   it('generates deterministic solvable puzzles for both board sizes', () => {

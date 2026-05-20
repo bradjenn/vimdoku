@@ -36,11 +36,34 @@ export type GameMeta = {
   variantId: VariantId;
 };
 
+export type SolveEventKind =
+  | 'check'
+  | 'clear'
+  | 'color'
+  | 'corner'
+  | 'entry'
+  | 'hint'
+  | 'note'
+  | 'pause'
+  | 'resume'
+  | 'reset';
+
+export type SolveEvent = {
+  atMs: number;
+  cells?: number[];
+  detail?: string;
+  id: string;
+  kind: SolveEventKind;
+  label: string;
+  value?: number;
+};
+
 export type GameRecord = Snapshot &
   GameMeta & {
     completion: number;
     elapsedMs: number;
     status: 'in-progress' | 'completed';
+    solveEvents: SolveEvent[];
     updatedAt: string;
     completedAt?: string;
   };
@@ -110,6 +133,7 @@ export function createGameRecord(
   givens: boolean[],
   completed: boolean,
   elapsedMs = 0,
+  solveEvents: SolveEvent[] = [],
 ): GameRecord {
   const now = new Date().toISOString();
   return {
@@ -122,6 +146,7 @@ export function createGameRecord(
     variantId: sanitizeVariantId(meta.variantId),
     completion: grid.filter(Boolean).length,
     elapsedMs: Math.max(0, Math.floor(elapsedMs)),
+    solveEvents: sanitizeSolveEvents(solveEvents, meta.puzzleSize),
     status: completed ? 'completed' : 'in-progress',
     updatedAt: now,
     completedAt: completed ? now : undefined,
@@ -373,6 +398,7 @@ function sanitizeGameRecord(record: GameRecord): GameRecord | null {
     grid: parseGrid(record.grid.join(''), puzzleSize),
     givens: record.givens.map(Boolean),
     notes: record.notes.map((cell) => sanitizeNoteCell(cell, maxDigit)),
+    solveEvents: sanitizeSolveEvents(record.solveEvents, puzzleSize),
     variantId: sanitizeVariantId(record.variantId),
   };
 }
@@ -399,6 +425,56 @@ function sanitizeNotes(notes: Notes | undefined, puzzleSize: PuzzleSize): Notes 
   const maxDigit = puzzleSize === '6x6' ? 6 : 9;
   if (!Array.isArray(notes) || notes.length !== cellCount) return emptyNotes(puzzleSize);
   return notes.map((cell) => sanitizeNoteCell(cell, maxDigit));
+}
+
+function sanitizeSolveEvents(
+  solveEvents: SolveEvent[] | undefined,
+  puzzleSize: PuzzleSize,
+): SolveEvent[] {
+  if (!Array.isArray(solveEvents)) return [];
+  const cellCount = puzzleSize === '6x6' ? 36 : 81;
+  const maxDigit = puzzleSize === '6x6' ? 6 : 9;
+  const kinds = new Set<SolveEventKind>([
+    'check',
+    'clear',
+    'color',
+    'corner',
+    'entry',
+    'hint',
+    'note',
+    'pause',
+    'resume',
+    'reset',
+  ]);
+
+  return solveEvents
+    .map((event, index) => {
+      const kind = kinds.has(event?.kind) ? event.kind : null;
+      const label = typeof event?.label === 'string' ? event.label.trim() : '';
+      if (!kind || !label) return null;
+      const cells = Array.isArray(event.cells)
+        ? [
+            ...new Set(
+              event.cells
+                .map((cell) => Math.floor(Number(cell)))
+                .filter((cell) => cell >= 0 && cell < cellCount),
+            ),
+          ].slice(0, cellCount)
+        : undefined;
+      const value = Number(event.value);
+      const sanitizedEvent: SolveEvent = {
+        atMs: Math.max(0, Math.floor(Number(event.atMs) || 0)),
+        cells,
+        detail: typeof event.detail === 'string' ? event.detail.slice(0, 160) : undefined,
+        id: typeof event.id === 'string' && event.id ? event.id : `event-${index}`,
+        kind,
+        label: label.slice(0, 80),
+        value: value >= 1 && value <= maxDigit ? Math.floor(value) : undefined,
+      };
+      return sanitizedEvent;
+    })
+    .filter((event): event is SolveEvent => event !== null)
+    .slice(-300);
 }
 
 function sanitizeNoteCell(cell: number[] | undefined, maxDigit: number) {

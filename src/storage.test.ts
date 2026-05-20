@@ -49,6 +49,16 @@ describe('storage helpers', () => {
       givens,
       false,
       -12,
+      [
+        {
+          atMs: 1200,
+          cells: [0, 99],
+          id: 'event-1',
+          kind: 'entry',
+          label: 'placed 1',
+          value: 1,
+        },
+      ],
     );
     grid[0] = 2;
     notes[1].push(3);
@@ -61,6 +71,17 @@ describe('storage helpers', () => {
     expect(record.cellColors[3]).toBe(2);
     expect(record.elapsedMs).toBe(0);
     expect(record.completion).toBe(1);
+    expect(record.solveEvents).toEqual([
+      {
+        atMs: 1200,
+        cells: [0],
+        detail: undefined,
+        id: 'event-1',
+        kind: 'entry',
+        label: 'placed 1',
+        value: 1,
+      },
+    ]);
     expect(record.status).toBe('in-progress');
   });
 

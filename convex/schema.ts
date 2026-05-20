@@ -97,6 +97,44 @@ export default defineSchema({
     .index('by_challengeId_and_elapsedMs', ['challengeId', 'elapsedMs'])
     .index('by_challengeId_and_updatedAt', ['challengeId', 'updatedAt']),
 
+  liveBattles: defineTable({
+    createdAt: v.string(),
+    creatorAnonId: v.string(),
+    creatorName: v.string(),
+    difficulty: v.optional(v.string()),
+    playMode: v.optional(v.string()),
+    puzzle: v.string(),
+    puzzleSize: v.optional(v.string()),
+    roomId: v.string(),
+    source: v.string(),
+    status: v.union(v.literal('waiting'), v.literal('live'), v.literal('finished')),
+    title: v.string(),
+    variantId: v.optional(v.string()),
+  })
+    .index('by_roomId', ['roomId'])
+    .index('by_creatorAnonId', ['creatorAnonId']),
+
+  liveBattlePresence: defineTable({
+    anonId: v.string(),
+    completion: v.number(),
+    elapsedMs: v.number(),
+    lastSeenAt: v.number(),
+    mistakes: v.optional(v.number()),
+    player: v.string(),
+    recordId: v.optional(v.string()),
+    roomId: v.string(),
+    selectedCell: v.optional(v.number()),
+    status: v.union(
+      v.literal('online'),
+      v.literal('ready'),
+      v.literal('solving'),
+      v.literal('finished'),
+    ),
+    updatedAt: v.string(),
+  })
+    .index('by_roomId', ['roomId'])
+    .index('by_roomId_and_anonId', ['roomId', 'anonId']),
+
   friendships: defineTable({
     createdAt: v.string(),
     recipientAnonId: v.string(),

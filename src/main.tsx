@@ -105,6 +105,12 @@ const challengeRoute = createRoute({
   component: () => null,
 })
 
+const liveBattleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/battle/live/$roomId',
+  component: () => null,
+})
+
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
@@ -145,6 +151,7 @@ const routeTree = rootRoute.addChildren([
   leaderboardDetailRoute,
   challengeSetupRoute,
   challengeRoute,
+  liveBattleRoute,
   profileRoute,
   publicProfileRoute,
   settingsRoute,
