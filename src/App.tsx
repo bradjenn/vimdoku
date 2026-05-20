@@ -1355,11 +1355,12 @@ function App() {
             ),
       );
       if (value !== 0) {
-        setCornerMarks((current) => {
-          const next = cloneNotes(current);
-          for (const index of targets) next[index] = [];
-          return next;
-        });
+        setCornerMarks((current) =>
+          targets.reduce(
+            (nextMarks, index) => removeRelatedNotes(nextMarks, index, value, activeSize),
+            current,
+          ),
+        );
       }
       setHint(null);
       if (activeSize === '6x6' && value !== 0 && targets.length === 1) {
