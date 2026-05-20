@@ -1,25 +1,21 @@
 import {
   AlertCircle,
-  Command,
   Check,
-  Eraser,
+  FileText,
   History,
   Home,
-  ImageUp,
-  Lightbulb,
   Menu,
+  Palette,
   Pause,
   Play,
   Plus,
-  Redo2,
-  RotateCcw,
   Search,
   Settings,
   Swords,
   Terminal,
   Trophy,
-  Undo2,
   UserRound,
+  Wrench,
 } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from 'convex/react';
@@ -132,8 +128,16 @@ type EditorMode = 'normal' | 'annotate' | 'corner' | 'color' | 'visual';
 type ToolMode = 'digit' | 'center' | 'corner' | 'color';
 type HintMode = 'nudge' | 'explain' | 'show';
 type CommandMode = 'command' | 'search';
-type MenuModal = 'menu' | 'settings' | 'commands' | 'new' | 'rules' | null;
-type RouteModal = 'menu' | 'settings' | 'commands' | 'rules';
+type MenuModal =
+  | 'menu'
+  | 'settings'
+  | 'commands'
+  | 'new'
+  | 'rules'
+  | 'theme'
+  | 'tools'
+  | null;
+type RouteModal = 'menu' | 'settings' | 'commands' | 'rules' | 'theme' | 'tools';
 type TimerPauseReason = 'manual' | 'auto' | null;
 type PageRoute =
   | 'dashboard'
@@ -145,7 +149,7 @@ type PageRoute =
   | 'profile';
 type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
 type ChallengePuzzleSource = 'daily' | 'generated' | 'current';
-type ThemeId = (typeof DARK_THEMES)[number]['id'];
+type ThemeId = (typeof CODE_THEMES)[number]['id'];
 type FriendshipRow = {
   direction: 'incoming' | 'outgoing';
   friend: FriendSummary;
@@ -183,6 +187,8 @@ const LEADER_BINDINGS: [key: string, label: string][] = [
   ['p', 'profile'],
   ['i', 'import image'],
   ['s', 'settings'],
+  ['t', 'tools'],
+  ['c', 'colorscheme'],
   ['m', 'menu'],
 ];
 
@@ -206,13 +212,15 @@ const DASHBOARD_ACTIONS: [key: string, label: string][] = [
   ['s', 'settings'],
 ];
 
-const DARK_THEMES = [
+const CODE_THEMES = [
   {
     id: 'tokyonight',
     name: 'Tokyo Night',
     swatches: ['#1a1b26', '#7aa2f7', '#bb9af7'],
     vars: {
-      '--app-bg': '#0c0e14',
+      // Canonical folke/tokyonight (night): bg #1a1b26, bg_dark #16161e,
+      // bg_highlight #292e42, fg #c0caf5, comment #565f89.
+      '--app-bg': '#1a1b26',
       '--app-text': '#c0caf5',
       '--workspace-bg': '#1a1b26',
       '--sidebar-bg': '#16161e',
@@ -221,13 +229,13 @@ const DARK_THEMES = [
       '--cell-bg': '#1a1b26',
       '--cell-peer': '#292e42',
       '--cell-selected': '#7aa2f7',
-      '--cell-same': '#2ac3de',
+      '--cell-same': '#7dcfff',
       '--cell-search': '#ff9e64',
       '--cell-hint': '#bb9af7',
       '--cell-conflict': '#f7768e',
-      '--grid-line': '#0c0e14',
+      '--grid-line': '#15161e',
       '--border': '#414868',
-      '--muted': '#737aa2',
+      '--muted': '#565f89',
       '--accent': '#7aa2f7',
       '--accent-2': '#bb9af7',
       '--danger': '#f7768e',
@@ -245,28 +253,30 @@ const DARK_THEMES = [
     name: 'Gruvbox',
     swatches: ['#282828', '#fabd2f', '#b8bb26'],
     vars: {
-      '--app-bg': '#1d2021',
+      // Canonical morhetz/gruvbox (dark, medium): bg0 #282828, bg1 #3c3836,
+      // bg2 #504945, bg3 #665c54, fg #ebdbb2, gray #928374.
+      '--app-bg': '#282828',
       '--app-text': '#ebdbb2',
       '--workspace-bg': '#282828',
       '--sidebar-bg': '#1d2021',
-      '--panel-bg': '#32302f',
+      '--panel-bg': '#282828',
       '--panel-soft': '#3c3836',
       '--cell-bg': '#282828',
       '--cell-peer': '#3c3836',
-      '--cell-selected': '#b8bb26',
+      '--cell-selected': '#fabd2f',
       '--cell-same': '#83a598',
       '--cell-search': '#fe8019',
       '--cell-hint': '#8ec07c',
       '--cell-conflict': '#fb4934',
       '--grid-line': '#1d2021',
-      '--border': '#665c54',
-      '--muted': '#a89984',
+      '--border': '#504945',
+      '--muted': '#928374',
       '--accent': '#fabd2f',
-      '--accent-2': '#83a598',
+      '--accent-2': '#b8bb26',
       '--danger': '#fb4934',
-      '--button-bg': '#282828',
+      '--button-bg': '#3c3836',
       '--input-bg': '#1d2021',
-      '--note': '#d5c4a1',
+      '--note': '#bdae93',
       '--given': '#fbf1c7',
       '--entry': '#83a598',
       '--status-bg': '#1d2021',
@@ -278,26 +288,28 @@ const DARK_THEMES = [
     name: 'Kanagawa',
     swatches: ['#1f1f28', '#7e9cd8', '#98bb6c'],
     vars: {
-      '--app-bg': '#16161d',
+      // Canonical rebelot/kanagawa (wave): sumiInk0..4 + crystalBlue (the
+      // wave) as the iconic primary, springGreen as the secondary accent.
+      '--app-bg': '#1f1f28',
       '--app-text': '#dcd7ba',
       '--workspace-bg': '#1f1f28',
-      '--sidebar-bg': '#181820',
-      '--panel-bg': '#2a2a37',
-      '--panel-soft': '#363646',
+      '--sidebar-bg': '#16161d',
+      '--panel-bg': '#1f1f28',
+      '--panel-soft': '#2a2a37',
       '--cell-bg': '#1f1f28',
       '--cell-peer': '#2a2a37',
-      '--cell-selected': '#98bb6c',
+      '--cell-selected': '#7e9cd8',
       '--cell-same': '#7fb4ca',
       '--cell-search': '#ffa066',
-      '--cell-hint': '#7e9cd8',
+      '--cell-hint': '#957fb8',
       '--cell-conflict': '#e46876',
       '--grid-line': '#16161d',
       '--border': '#54546d',
       '--muted': '#727169',
-      '--accent': '#98bb6c',
-      '--accent-2': '#7e9cd8',
+      '--accent': '#7e9cd8',
+      '--accent-2': '#98bb6c',
       '--danger': '#e46876',
-      '--button-bg': '#1f1f28',
+      '--button-bg': '#2a2a37',
       '--input-bg': '#16161d',
       '--note': '#c8c093',
       '--given': '#dcd7ba',
@@ -311,7 +323,10 @@ const DARK_THEMES = [
     name: 'Catppuccin',
     swatches: ['#1e1e2e', '#cba6f7', '#89b4fa'],
     vars: {
-      '--app-bg': '#11111b',
+      // Canonical Catppuccin Mocha: base #1e1e2e is the primary bg; mantle
+      // #181825 and crust #11111b are the darker layers; surface0..2 for
+      // hover/selection; overlay0 for muted text.
+      '--app-bg': '#1e1e2e',
       '--app-text': '#cdd6f4',
       '--workspace-bg': '#1e1e2e',
       '--sidebar-bg': '#181825',
@@ -325,18 +340,185 @@ const DARK_THEMES = [
       '--cell-hint': '#89b4fa',
       '--cell-conflict': '#f38ba8',
       '--grid-line': '#11111b',
-      '--border': '#585b70',
-      '--muted': '#a6adc8',
+      '--border': '#45475a',
+      '--muted': '#6c7086',
       '--accent': '#cba6f7',
       '--accent-2': '#89b4fa',
       '--danger': '#f38ba8',
-      '--button-bg': '#1e1e2e',
-      '--input-bg': '#11111b',
+      '--button-bg': '#313244',
+      '--input-bg': '#181825',
       '--note': '#bac2de',
       '--given': '#cdd6f4',
       '--entry': '#89dceb',
-      '--status-bg': '#11111b',
+      '--status-bg': '#181825',
       '--status-text': '#cdd6f4',
+    },
+  },
+  {
+    id: 'monokai',
+    name: 'Monokai Pro',
+    swatches: ['#2d2a2e', '#ffd866', '#ab9df2'],
+    vars: {
+      // Canonical Monokai Pro (filter dark): bg #2d2a2e, bgDark #221f22,
+      // bgDarkest #19181a, fg #fcfcfa, comment #727072.
+      '--app-bg': '#2d2a2e',
+      '--app-text': '#fcfcfa',
+      '--workspace-bg': '#2d2a2e',
+      '--sidebar-bg': '#221f22',
+      '--panel-bg': '#2d2a2e',
+      '--panel-soft': '#403e41',
+      '--cell-bg': '#2d2a2e',
+      '--cell-peer': '#403e41',
+      '--cell-selected': '#ffd866',
+      '--cell-same': '#78dce8',
+      '--cell-search': '#fc9867',
+      '--cell-hint': '#ab9df2',
+      '--cell-conflict': '#ff6188',
+      '--grid-line': '#19181a',
+      '--border': '#5b595c',
+      '--muted': '#727072',
+      '--accent': '#ffd866',
+      '--accent-2': '#ab9df2',
+      '--danger': '#ff6188',
+      '--button-bg': '#403e41',
+      '--input-bg': '#221f22',
+      '--note': '#c1c0c0',
+      '--given': '#fcfcfa',
+      '--entry': '#78dce8',
+      '--status-bg': '#221f22',
+      '--status-text': '#fcfcfa',
+    },
+  },
+  {
+    id: 'github-light',
+    name: 'GitHub Light',
+    swatches: ['#ffffff', '#0969da', '#8250df'],
+    vars: {
+      '--app-bg': '#f6f8fa',
+      '--app-text': '#24292f',
+      '--workspace-bg': '#ffffff',
+      '--sidebar-bg': '#f6f8fa',
+      '--panel-bg': '#ffffff',
+      '--panel-soft': '#eaeef2',
+      '--cell-bg': '#ffffff',
+      '--cell-peer': '#eaeef2',
+      '--cell-selected': '#0969da',
+      '--cell-same': '#1a7f37',
+      '--cell-search': '#fb8500',
+      '--cell-hint': '#8250df',
+      '--cell-conflict': '#cf222e',
+      '--grid-line': '#24292f',
+      '--border': '#d0d7de',
+      '--muted': '#57606a',
+      '--accent': '#0969da',
+      '--accent-2': '#8250df',
+      '--danger': '#cf222e',
+      '--button-bg': '#ffffff',
+      '--input-bg': '#f6f8fa',
+      '--note': '#57606a',
+      '--given': '#24292f',
+      '--entry': '#0969da',
+      '--status-bg': '#eaeef2',
+      '--status-text': '#24292f',
+    },
+  },
+  {
+    id: 'solarized-light',
+    name: 'Solarized Light',
+    swatches: ['#fdf6e3', '#268bd2', '#859900'],
+    vars: {
+      '--app-bg': '#eee8d5',
+      '--app-text': '#586e75',
+      '--workspace-bg': '#fdf6e3',
+      '--sidebar-bg': '#eee8d5',
+      '--panel-bg': '#fdf6e3',
+      '--panel-soft': '#eee8d5',
+      '--cell-bg': '#fdf6e3',
+      '--cell-peer': '#eee8d5',
+      '--cell-selected': '#268bd2',
+      '--cell-same': '#2aa198',
+      '--cell-search': '#cb4b16',
+      '--cell-hint': '#6c71c4',
+      '--cell-conflict': '#dc322f',
+      '--grid-line': '#073642',
+      '--border': '#93a1a1',
+      '--muted': '#839496',
+      '--accent': '#268bd2',
+      '--accent-2': '#859900',
+      '--danger': '#dc322f',
+      '--button-bg': '#fdf6e3',
+      '--input-bg': '#eee8d5',
+      '--note': '#657b83',
+      '--given': '#073642',
+      '--entry': '#268bd2',
+      '--status-bg': '#eee8d5',
+      '--status-text': '#586e75',
+    },
+  },
+  {
+    id: 'papercolor-light',
+    name: 'PaperColor Light',
+    swatches: ['#eeeeee', '#005f87', '#d75f00'],
+    vars: {
+      '--app-bg': '#d7d7d7',
+      '--app-text': '#444444',
+      '--workspace-bg': '#eeeeee',
+      '--sidebar-bg': '#e4e4e4',
+      '--panel-bg': '#eeeeee',
+      '--panel-soft': '#d7d7d7',
+      '--cell-bg': '#eeeeee',
+      '--cell-peer': '#d7d7d7',
+      '--cell-selected': '#005f87',
+      '--cell-same': '#00875f',
+      '--cell-search': '#d75f00',
+      '--cell-hint': '#5f5faf',
+      '--cell-conflict': '#af0000',
+      '--grid-line': '#1c1c1c',
+      '--border': '#878787',
+      '--muted': '#6c6c6c',
+      '--accent': '#005f87',
+      '--accent-2': '#00875f',
+      '--danger': '#af0000',
+      '--button-bg': '#eeeeee',
+      '--input-bg': '#e4e4e4',
+      '--note': '#5f5f5f',
+      '--given': '#1c1c1c',
+      '--entry': '#005f87',
+      '--status-bg': '#d7d7d7',
+      '--status-text': '#444444',
+    },
+  },
+  {
+    id: 'quiet-light',
+    name: 'Quiet Light',
+    swatches: ['#f5f5f5', '#007acc', '#c586c0'],
+    vars: {
+      '--app-bg': '#f3f3f3',
+      '--app-text': '#1f1f1f',
+      '--workspace-bg': '#ffffff',
+      '--sidebar-bg': '#f3f3f3',
+      '--panel-bg': '#ffffff',
+      '--panel-soft': '#e8e8e8',
+      '--cell-bg': '#ffffff',
+      '--cell-peer': '#e8e8e8',
+      '--cell-selected': '#007acc',
+      '--cell-same': '#16825d',
+      '--cell-search': '#ca5010',
+      '--cell-hint': '#795e9f',
+      '--cell-conflict': '#a31515',
+      '--grid-line': '#1f1f1f',
+      '--border': '#c8c8c8',
+      '--muted': '#6a6a6a',
+      '--accent': '#007acc',
+      '--accent-2': '#795e9f',
+      '--danger': '#a31515',
+      '--button-bg': '#ffffff',
+      '--input-bg': '#f3f3f3',
+      '--note': '#555555',
+      '--given': '#1f1f1f',
+      '--entry': '#007acc',
+      '--status-bg': '#e8e8e8',
+      '--status-text': '#1f1f1f',
     },
   },
 ] as const;
@@ -379,7 +561,7 @@ function App() {
   const [hintMode, setHintMode] = useState<HintMode>('explain');
   const [review, setReview] = useState<ReviewCell[] | null>(null);
   const [reviewSelected, setReviewSelected] = useState(0);
-  const [ocrStatus, setOcrStatus] = useState('');
+  const [_ocrStatus, setOcrStatus] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [commandMode, setCommandMode] = useState<CommandMode | null>(null);
   const [commandValue, setCommandValue] = useState('');
@@ -777,7 +959,7 @@ function App() {
     [selected, visualCells],
   );
   const activeTheme = useMemo(
-    () => DARK_THEMES.find((theme) => theme.id === themeId) ?? DARK_THEMES[0],
+    () => CODE_THEMES.find((theme) => theme.id === themeId) ?? CODE_THEMES[0],
     [themeId],
   );
   const themeStyle = activeTheme.vars as CSSProperties;
@@ -788,6 +970,10 @@ function App() {
     for (const [key, value] of Object.entries(activeTheme.vars)) {
       root.style.setProperty(key, value);
     }
+    root.style.background = activeTheme.vars['--app-bg'];
+    root.style.color = activeTheme.vars['--app-text'];
+    document.body.style.background = activeTheme.vars['--app-bg'];
+    document.body.style.color = activeTheme.vars['--app-text'];
   }, [activeTheme]);
 
   useEffect(() => {
@@ -2193,7 +2379,13 @@ function App() {
       } else if (['import', 'image'].includes(command)) {
         fileInputRef.current?.click();
         setStatusLine('Choose a puzzle image to import.');
-      } else if (['settings', 'theme', 'colorscheme'].includes(command)) {
+      } else if (['tools', 'tool'].includes(command)) {
+        openModalRoute('tools');
+        setStatusLine('Opened tools.');
+      } else if (['theme', 'colorscheme', 'colors', 'colours'].includes(command)) {
+        openModalRoute('theme');
+        setStatusLine('Opened colorscheme.');
+      } else if (['settings'].includes(command)) {
         openModalRoute('settings');
         setStatusLine('Opened settings.');
       } else if (['solve'].includes(command)) {
@@ -2473,6 +2665,10 @@ function App() {
           setStatusLine('Choose a puzzle image to import.');
         } else if (leaderKey === 's') {
           openModalRoute('settings');
+        } else if (leaderKey === 't') {
+          openModalRoute('tools');
+        } else if (leaderKey === 'c') {
+          openModalRoute('theme');
         } else if (leaderKey === 'm') {
           openModalRoute('menu');
         } else {
@@ -3042,20 +3238,41 @@ function App() {
             onMenu={() => openModalRoute('menu')}
             title={`${labelCell(selected, activeSize)} · ${completion}/${activeCellCount}`}
             extraActions={
-              <button
-                type="button"
-                aria-label="Hint"
-                disabled={!hintsEnabled}
-                onClick={() => {
-                  if (!hintsEnabled) return;
-                  resumeTimerFromActivity();
-                  setHintRailOpen(true);
-                  askForHint();
-                }}
-                className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] transition hover:border-[var(--accent)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                ?
-              </button>
+              <>
+                <button
+                  type="button"
+                  aria-label="Rules"
+                  title="Rules"
+                  onClick={() => openModalRoute('rules')}
+                  className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
+                >
+                  <FileText size={16} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Tools"
+                  title="Tools"
+                  onClick={() => openModalRoute('tools')}
+                  className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
+                >
+                  <Palette size={16} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Hint"
+                  title="Hint"
+                  disabled={!hintsEnabled}
+                  onClick={() => {
+                    if (!hintsEnabled) return;
+                    resumeTimerFromActivity();
+                    setHintRailOpen(true);
+                    askForHint();
+                  }}
+                  className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] transition hover:border-[var(--accent)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ?
+                </button>
+              </>
             }
           />
           <div
@@ -3642,6 +3859,7 @@ function App() {
         <TuiModal
           title={modalTitle(activeMenuModal)}
           narrow={activeMenuModal === 'menu'}
+          wide={activeMenuModal === 'theme' || activeMenuModal === 'tools'}
           onClose={closeMenuModal}
         >
           {activeMenuModal === 'menu' && (
@@ -3700,147 +3918,30 @@ function App() {
               >
                 <UserRound size={15} />
               </MenuItem>
-              <MenuItem
-                label="import image"
-                onClick={() => {
-                  closeMenuModal();
-                  fileInputRef.current?.click();
-                }}
-              >
-                <ImageUp size={15} />
-              </MenuItem>
               <div className="my-1 border-t border-[var(--border)]" />
               <MenuItem
-                label="hint"
-                hint="?"
-                onClick={() => {
-                  closeMenuModal();
-                  askForHint();
-                }}
+                label="tools"
+                hint=":tools"
+                onClick={() => openModalRoute('tools')}
               >
-                <Lightbulb size={15} />
+                <Wrench size={15} />
               </MenuItem>
               <MenuItem
-                label="check"
-                hint=":check"
-                onClick={() => {
-                  closeMenuModal();
-                  runCheck();
-                }}
+                label="theme"
+                hint=":theme"
+                onClick={() => openModalRoute('theme')}
               >
-                <Check size={15} />
+                <Palette size={15} />
               </MenuItem>
-              <MenuItem
-                label="rules"
-                hint=":rules"
-                onClick={() => openModalRoute('rules')}
-              >
-                <Command size={15} />
+              <MenuItem label="settings" onClick={() => openModalRoute('settings')}>
+                <Settings size={15} />
               </MenuItem>
-              <MenuItem
-                label="copy puzzle link"
-                hint=":share"
-                onClick={() => {
-                  closeMenuModal();
-                  copyPuzzleLink();
-                }}
-              >
-                <Terminal size={15} />
-              </MenuItem>
-              <div className="my-1 border-t border-[var(--border)]" />
-              <MenuItem
-                label="digit tool"
-                hint="z"
-                active={toolMode === 'digit'}
-                onClick={() => chooseToolMode('digit')}
-              >
-                <Command size={15} />
-              </MenuItem>
-              <MenuItem
-                label="centre notes"
-                hint="m"
-                active={toolMode === 'center'}
-                onClick={() => chooseToolMode('center')}
-              >
-                <Command size={15} />
-              </MenuItem>
-              <MenuItem
-                label="corners tool"
-                hint="a"
-                active={toolMode === 'corner'}
-                onClick={() => chooseToolMode('corner')}
-              >
-                <Command size={15} />
-              </MenuItem>
-              <MenuItem
-                label="colour tool"
-                hint="c"
-                active={toolMode === 'color'}
-                onClick={() => chooseToolMode('color')}
-              >
-                <Command size={15} />
-              </MenuItem>
-              <MenuItem
-                label="undo"
-                hint="u"
-                disabled={!history.length}
-                onClick={() => {
-                  closeMenuModal();
-                  undo();
-                }}
-              >
-                <Undo2 size={15} />
-              </MenuItem>
-              <MenuItem
-                label="redo"
-                hint="C-r"
-                disabled={!future.length}
-                onClick={() => {
-                  closeMenuModal();
-                  redo();
-                }}
-              >
-                <Redo2 size={15} />
-              </MenuItem>
-              <MenuItem
-                label="reset entries"
-                onClick={() => {
-                  closeMenuModal();
-                  resetPuzzle();
-                }}
-              >
-                <RotateCcw size={15} />
-              </MenuItem>
-              <MenuItem
-                label="clear puzzle"
-                onClick={() => {
-                  closeMenuModal();
-                  clearAll();
-                }}
-              >
-                <Eraser size={15} />
-              </MenuItem>
-              <div className="my-1 border-t border-[var(--border)]" />
               <MenuItem
                 label="commands"
                 hint=":"
                 onClick={() => openModalRoute('commands')}
               >
                 <Terminal size={15} />
-              </MenuItem>
-              <MenuItem label="settings" onClick={() => openModalRoute('settings')}>
-                <Settings size={15} />
-              </MenuItem>
-              <MenuItem
-                label="hint engine"
-                hint={hintRailOpen ? 'on' : 'off'}
-                active={hintRailOpen}
-                onClick={() => {
-                  closeMenuModal();
-                  setHintRailOpen((current) => !current);
-                }}
-              >
-                <Command size={15} />
               </MenuItem>
             </div>
           )}
@@ -3889,12 +3990,34 @@ function App() {
 
           {activeMenuModal === 'settings' && (
             <div className="space-y-5">
-              <section>
-                <p className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-                  colorscheme
+              <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+                  leaderboard identity
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {DARK_THEMES.map((theme) => (
+                <label className="mt-3 flex items-center gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+                  <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+                    player
+                  </span>
+                  <input
+                    className="min-w-0 flex-1 bg-transparent font-mono text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--muted)]"
+                    maxLength={32}
+                    placeholder="anonymous"
+                    value={playerName}
+                    onChange={(event) => updatePlayerName(event.target.value)}
+                  />
+                </label>
+              </section>
+            </div>
+          )}
+
+          {activeMenuModal === 'theme' && (
+            <div className="space-y-4">
+              <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+                  :colorscheme
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {CODE_THEMES.map((theme) => (
                     <button
                       type="button"
                       key={theme.id}
@@ -3922,46 +4045,64 @@ function App() {
                   ))}
                 </div>
               </section>
+            </div>
+          )}
 
+          {activeMenuModal === 'tools' && (
+            <div className="space-y-4">
               <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
                 <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-                  leaderboard identity
+                  tool mode
                 </p>
-                <label className="mt-3 flex items-center gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
-                  <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
-                    player
-                  </span>
-                  <input
-                    className="min-w-0 flex-1 bg-transparent font-mono text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--muted)]"
-                    maxLength={32}
-                    placeholder="anonymous"
-                    value={playerName}
-                    onChange={(event) => updatePlayerName(event.target.value)}
+                <div className="mt-3">
+                  <ToolModeBar
+                    activeColor={activeColor}
+                    colors={CELL_COLORS}
+                    layout="panel"
+                    onColorChange={(index) => {
+                      setActiveColor(index);
+                      setToolMode('color');
+                      applyColor(index);
+                    }}
+                    onModeChange={chooseToolMode}
+                    toolMode={toolMode}
                   />
-                </label>
+                </div>
               </section>
 
-              <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
-                <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-                  puzzle input
-                </p>
-                <p className="mt-2 text-sm text-[var(--muted)]">
-                  Upload a straight puzzle photo. OCR guesses the givens, then opens
-                  a keyboard-editable review grid.
-                </p>
-                <button
-                  type="button"
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 border border-[var(--border)] bg-[var(--cell-search)] px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--app-bg)]"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <ImageUp size={18} />
-                  Upload puzzle
-                </button>
-                {ocrStatus && (
-                  <p className="mt-3 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-                    {ocrStatus}
-                  </p>
-                )}
+              <section className="grid gap-2 sm:grid-cols-2">
+                {[
+                  ['hint', '?', () => askForHint(), !hintsEnabled],
+                  ['check board', ':check', runCheck, false],
+                  ['rules', ':rules', () => openModalRoute('rules'), false],
+                  ['copy puzzle link', ':share', copyPuzzleLink, false],
+                  ['undo', 'u', undo, !history.length],
+                  ['redo', 'C-r', redo, !future.length],
+                  ['clear centre notes', ':clear-notes', clearNotesAcrossBlock, false],
+                  ['clear corners', 'x in corners', clearCornerMarksAcrossSelection, false],
+                  ['clear colour', ':color clear', () => applyColor(null), false],
+                  [
+                    timerPaused ? 'resume timer' : 'pause timer',
+                    'Shift+p',
+                    toggleTimerPaused,
+                    !timerEnabled || !pauseEnabled || isSolved,
+                  ],
+                  ['reset entries', ':reset', resetPuzzle, false],
+                  ['clear puzzle', ':clear', clearAll, false],
+                ].map(([label, hint, action, disabled]) => (
+                  <button
+                    type="button"
+                    key={String(label)}
+                    disabled={Boolean(disabled)}
+                    onClick={() => {
+                      (action as () => void)();
+                    }}
+                    className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-[var(--app-text)] transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span>{String(label)}</span>
+                    <span className="text-[var(--muted)]">{String(hint)}</span>
+                  </button>
+                ))}
               </section>
             </div>
           )}
@@ -3975,7 +4116,7 @@ function App() {
                 <div className="mt-3 grid gap-2 text-sm text-[var(--muted)] sm:grid-cols-4">
                   {[
                     ['z', 'Digit'],
-                    ['m', 'Notes'],
+                    ['m', 'Centre'],
                     ['a', 'Corners'],
                     ['c', 'Colour'],
                   ].map(([key, label]) => (
@@ -3997,6 +4138,8 @@ function App() {
                   [':games', 'open puzzle log'],
                   [':scores', 'open leaderboards'],
                   [':profile', 'open player profile'],
+                  [':tools', 'open tool palette'],
+                  [':theme', 'open colorscheme picker'],
                   [':pause', 'pause puzzle timer'],
                   [':resume', 'resume puzzle timer'],
                   [':check', 'check visible conflicts'],
@@ -4028,7 +4171,7 @@ function App() {
                   ['gg / G', 'first / last cell'],
                   ['C-d / C-u', 'jump 3 rows down / up'],
                   ['u / C-r', 'undo / redo'],
-                  ['SPC', 'leader menu (e h n g l i s m)'],
+                  ['SPC', 'leader menu (e h n g l p i s t c m)'],
                 ].map(([key, value]) => (
                   <div key={key} className="flex items-baseline gap-2.5 py-1">
                     <span className="w-28 shrink-0 whitespace-nowrap font-bold text-[var(--accent)]">
@@ -7049,6 +7192,8 @@ function modalTitle(modal: Exclude<MenuModal, null>) {
   if (modal === 'new') return 'new-game';
   if (modal === 'settings') return 'settings';
   if (modal === 'rules') return 'rules';
+  if (modal === 'theme') return 'colorscheme';
+  if (modal === 'tools') return 'tools';
   return 'commands';
 }
 
@@ -7307,9 +7452,9 @@ function formatDuration(value: number) {
 
 function loadTheme(): ThemeId {
   const stored = localStorage.getItem(THEME_KEY);
-  return DARK_THEMES.some((theme) => theme.id === stored)
+  return CODE_THEMES.some((theme) => theme.id === stored)
     ? (stored as ThemeId)
-    : DARK_THEMES[0].id;
+    : CODE_THEMES[0].id;
 }
 
 function loadPausedGameId() {
