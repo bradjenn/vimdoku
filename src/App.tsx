@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   Check,
+  Eraser,
   FileText,
   History,
   Home,
@@ -150,6 +151,11 @@ type PageRoute =
 type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
 type ChallengePuzzleSource = 'daily' | 'generated' | 'current';
 type ThemeId = (typeof CODE_THEMES)[number]['id'];
+type CommandSuggestion = {
+  command: string;
+  description: string;
+  keywords?: string;
+};
 type FriendshipRow = {
   direction: 'incoming' | 'outgoing';
   friend: FriendSummary;
@@ -211,6 +217,43 @@ const DASHBOARD_ACTIONS: [key: string, label: string][] = [
   ['p', 'profile'],
   ['s', 'settings'],
 ];
+
+const COMMAND_SUGGESTIONS: CommandSuggestion[] = [
+  { command: 'hint', description: 'ask the hint engine for the next useful move' },
+  { command: 'tools', description: 'open the tool palette' },
+  { command: 'theme', description: 'open the colorscheme picker', keywords: 'colorscheme colour color' },
+  { command: 'rules', description: 'open puzzle rules and variant checks' },
+  { command: 'share', description: 'copy a clean puzzle link' },
+  { command: 'share-state', description: 'copy puzzle with notes, colours, timer, and progress' },
+  { command: 'pause', description: 'pause the puzzle timer' },
+  { command: 'resume', description: 'resume the puzzle timer' },
+  { command: 'check', description: 'check classic and variant conflicts' },
+  { command: 'notes', description: 'fill centre candidates' },
+  { command: 'prune', description: 'remove impossible centre candidates' },
+  { command: 'clear-notes', description: 'clear centre and corner notes' },
+  { command: 'row', description: 'select the current row' },
+  { command: 'col', description: 'select the current column' },
+  { command: 'box', description: 'select the current box' },
+  { command: 'all', description: 'select every cell' },
+  { command: 'color 1', description: 'colour selected cells' },
+  { command: 'color clear', description: 'clear selected colour' },
+  { command: 'anti-knight', description: 'switch variant checks to anti-knight' },
+  { command: 'anti-king', description: 'switch variant checks to anti-king' },
+  { command: 'diagonal', description: 'switch variant checks to diagonal' },
+  { command: 'non-consecutive', description: 'switch variant checks to non-consecutive' },
+  { command: 'classic', description: 'switch back to classic rules' },
+  { command: 'new', description: 'open new game' },
+  { command: 'daily', description: 'open today daily' },
+  { command: 'yesterday', description: 'open yesterday daily' },
+  { command: 'games', description: 'open puzzle library' },
+  { command: 'leaderboards', description: 'open leaderboards' },
+  { command: 'challenge', description: 'open challenges' },
+  { command: 'profile', description: 'open profile' },
+  { command: 'settings', description: 'open settings' },
+  { command: 'import', description: 'import a puzzle image' },
+  { command: 'solve', description: 'fill the solution' },
+  { command: 'reset', description: 'reset player entries' },
+] as const;
 
 const CODE_THEMES = [
   {
@@ -565,6 +608,7 @@ function App() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [commandMode, setCommandMode] = useState<CommandMode | null>(null);
   const [commandValue, setCommandValue] = useState('');
+  const [commandCursor, setCommandCursor] = useState(0);
   const [statusLine, setStatusLine] = useState('Ready. Press : for commands.');
   const [highlightDigit, setHighlightDigit] = useState<number | null>(null);
   const [themeId, setThemeId] = useState<ThemeId>(() => loadTheme());
@@ -579,6 +623,8 @@ function App() {
   const [timerPaused, setTimerPaused] = useState(false);
   const [timerPauseReason, setTimerPauseReason] =
     useState<TimerPauseReason>(null);
+  const [hintUses, setHintUses] = useState(0);
+  const [manualPauseCount, setManualPauseCount] = useState(0);
   const [activeGame, setActiveGame] = useState<GameMeta>(() =>
     loadInitialGameMeta(),
   );
@@ -608,6 +654,7 @@ function App() {
     useState<PuzzleDifficulty>('medium');
   const [newGameMode, setNewGameMode] = useState<PlayMode>('classic');
   const [newGameSize, setNewGameSize] = useState<PuzzleSize>('9x9');
+  const [newGameVariant, setNewGameVariant] = useState<VariantId>('classic');
   const [dailyDateKey, setDailyDateKey] = useState(() => todayDateKey());
   const [dashboardDifficulty, setDashboardDifficulty] =
     useState<PuzzleDifficulty>('easy');
@@ -898,6 +945,13 @@ function App() {
   const selectedGameRecord =
     filteredGameRecords[Math.min(gameCursor, Math.max(0, filteredGameRecords.length - 1))] ??
     null;
+  const commandSuggestions = useMemo(
+    () => filterCommandSuggestions(commandValue),
+    [commandValue],
+  );
+  const selectedCommandSuggestion =
+    commandSuggestions[Math.min(commandCursor, Math.max(0, commandSuggestions.length - 1))] ??
+    null;
   const editorMode: EditorMode =
     visualAnchor !== null || explicitSelection !== null
       ? 'visual'
@@ -929,6 +983,7 @@ function App() {
       setStatusLine('Solved puzzles keep their final time.');
       return;
     }
+    if (!timerPaused) setManualPauseCount((count) => count + 1);
     setTimerPaused((current) => {
       const next = !current;
       setTimerPauseReason(next ? 'manual' : null);
@@ -1326,6 +1381,37 @@ function App() {
     ],
   );
 
+  const clearCellsCompletely = useCallback(() => {
+    const targets = [...activeCells].filter((index) => !givens[index]);
+    if (targets.length === 0) return;
+    resumeTimerFromActivity();
+    pushHistory();
+    setGrid((current) => {
+      const next = [...current];
+      for (const index of targets) next[index] = 0;
+      return next;
+    });
+    setNotes((current) => {
+      const next = cloneNotes(current);
+      for (const index of targets) next[index] = [];
+      return next;
+    });
+    setCornerMarks((current) => {
+      const next = cloneNotes(current);
+      for (const index of targets) next[index] = [];
+      return next;
+    });
+    setCellColors((current) => {
+      const next = [...current];
+      for (const index of targets) next[index] = null;
+      return next;
+    });
+    setHint(null);
+    setStatusLine(
+      `Cleared ${targets.length} cell${targets.length === 1 ? '' : 's'} completely.`,
+    );
+  }, [activeCells, givens, pushHistory, resumeTimerFromActivity]);
+
   const toggleNote = useCallback(
     (value: number) => {
       if (!notesEnabled) {
@@ -1533,6 +1619,7 @@ function App() {
     const next = nextHint(grid, activeSize);
     setHintMode(mode);
     setHint(next);
+    setHintUses((count) => count + 1);
     if ('cell' in next && mode !== 'nudge') setSelected(next.cell);
   }, [activeSize, grid, hintMode, hintsEnabled]);
 
@@ -1578,6 +1665,8 @@ function App() {
     setElapsedMs(0);
     setTimerPaused(false);
     setTimerPauseReason(null);
+    setHintUses(0);
+    setManualPauseCount(0);
     setChallengeMistakes(0);
     setActiveGame(
       createGameMeta(
@@ -1624,6 +1713,8 @@ function App() {
     setElapsedMs(0);
     setTimerPaused(false);
     setTimerPauseReason(null);
+    setHintUses(0);
+    setManualPauseCount(0);
     setChallengeMistakes(0);
     setNoteMode(false);
     setToolMode('digit');
@@ -1670,6 +1761,8 @@ function App() {
     setGameCursor(0);
     setTimerPaused(false);
     setTimerPauseReason(null);
+    setHintUses(0);
+    setManualPauseCount(0);
     setNoteMode(false);
     setToolMode('digit');
     setVariantId(record.variantId);
@@ -1687,6 +1780,7 @@ function App() {
       daily = false,
       puzzleSize: PuzzleSize = newGameSize,
       playMode: PlayMode = newGameMode,
+      variant: VariantId = newGameVariant,
     ) => {
       if (daily) {
         openDailyPuzzle(difficulty, todayDateKey(), puzzleSize, playMode);
@@ -1695,19 +1789,35 @@ function App() {
         return;
       }
       const seed = daily ? dailySeed(difficulty) : Date.now();
-      const nextPuzzle = generatePuzzle(difficulty, seed, puzzleSize);
+      const nextPuzzle = generatePuzzleForVariant(difficulty, seed, puzzleSize, variant);
       startNewPuzzle(
         nextPuzzle,
-        `Generated a ${puzzleSize} ${playMode} ${difficulty} puzzle.`,
+        `Generated a ${puzzleSize} ${playMode} ${VARIANTS[variant].label} ${difficulty} puzzle.`,
         'local generated',
         difficulty,
         puzzleSize,
         playMode,
+        createGameMeta(
+          nextPuzzle,
+          'local generated',
+          difficulty,
+          puzzleSize,
+          playMode,
+          variant,
+        ),
       );
       closeMenuModal();
       setNewGameStatus('');
     },
-    [closeMenuModal, newGameDifficulty, newGameMode, newGameSize, openDailyPuzzle, startNewPuzzle],
+    [
+      closeMenuModal,
+      newGameDifficulty,
+      newGameMode,
+      newGameSize,
+      newGameVariant,
+      openDailyPuzzle,
+      startNewPuzzle,
+    ],
   );
 
   const fetchSudokuMountainPuzzle = useCallback(
@@ -1829,7 +1939,9 @@ function App() {
     }
     startNewPuzzle(
       shared.grid,
-      `Opened shared ${shared.puzzleSize} puzzle.`,
+      shared.kind === 'state'
+        ? `Opened shared ${shared.puzzleSize} puzzle state.`
+        : `Opened shared ${shared.puzzleSize} puzzle.`,
       shared.title ?? 'shared puzzle',
       'custom',
       shared.puzzleSize,
@@ -1844,6 +1956,12 @@ function App() {
       ),
       false,
     );
+    if (shared.kind === 'state') {
+      setNotes(shared.notes ?? emptyNotes(shared.puzzleSize));
+      setCornerMarks(shared.cornerMarks ?? emptyNotes(shared.puzzleSize));
+      setCellColors(shared.cellColors ?? Array(shared.grid.length).fill(null));
+      setElapsedMs(shared.elapsedMs ?? 0);
+    }
     void navigate({ to: '/play', replace: true });
   }, [navigate, sharedPuzzlePayload, startNewPuzzle, storageReady]);
 
@@ -1951,6 +2069,7 @@ function App() {
   const openCommand = useCallback((mode: CommandMode) => {
     setCommandMode(mode);
     setCommandValue('');
+    setCommandCursor(0);
     setStatusLine(mode === 'command' ? 'Command mode' : 'Search digit');
   }, []);
 
@@ -2012,6 +2131,38 @@ function App() {
     setStatusLine('Puzzle link copied.');
     return url;
   }, [activeGame.source, activeSize, givens, grid, variantId]);
+
+  const copyStateLink = useCallback(() => {
+    const payload = encodePuzzleLinkData({
+      cellColors,
+      cornerMarks,
+      elapsedMs,
+      givens: givens.map(Boolean),
+      grid,
+      kind: 'state',
+      notes,
+      puzzleSize: activeSize,
+      rules: puzzleRules(activeSize, variantId),
+      title: `${activeGame.source} state`,
+      variantId,
+    });
+    const url = `${window.location.origin}/p/${payload}`;
+    void navigator.clipboard?.writeText(url).catch(() => {
+      setStatusLine('State link is ready, but clipboard access failed.');
+    });
+    setStatusLine('Puzzle state link copied.');
+    return url;
+  }, [
+    activeGame.source,
+    activeSize,
+    cellColors,
+    cornerMarks,
+    elapsedMs,
+    givens,
+    grid,
+    notes,
+    variantId,
+  ]);
 
   const createRaceChallenge = useCallback((template?: {
     challengeKind?: ChallengeKind;
@@ -2299,6 +2450,8 @@ function App() {
         setStatusLine('Opened puzzle rules.');
       } else if (['share', 'copy-link', 'puzzle-link'].includes(command)) {
         copyPuzzleLink();
+      } else if (['share-state', 'copy-state', 'state-link'].includes(command)) {
+        copyStateLink();
       } else if (['select-row', 'row'].includes(command)) {
         selectCells(rowSelection(selected, activeSize), 'Selected current row.');
       } else if (['select-col', 'select-column', 'col', 'column'].includes(command)) {
@@ -2405,6 +2558,7 @@ function App() {
       applyColor,
       selected,
       copyPuzzleLink,
+      copyStateLink,
       chooseToolMode,
       chooseVariant,
       clearAll,
@@ -2598,7 +2752,9 @@ function App() {
           pendingKeyRef.current = '';
           setVisualAnchor(null);
           setExplicitSelection(null);
-          setStatusLine('Visual mode off.');
+          setToolMode('digit');
+          setNoteMode(false);
+          setStatusLine('Visual mode off. Digit mode restored.');
           return;
         }
         const visualDigit = digitFromKeyEvent(event);
@@ -2615,7 +2771,12 @@ function App() {
           }
           return;
         }
-        if (['0', 'backspace', 'delete', 'x'].includes(visualKey)) {
+        if (['backspace', 'delete'].includes(visualKey)) {
+          event.preventDefault();
+          clearCellsCompletely();
+          return;
+        }
+        if (['0', 'x'].includes(visualKey)) {
           event.preventDefault();
           if (toolMode === 'color') applyColor(null);
           else if (toolMode === 'digit' && !event.shiftKey) setCell(0);
@@ -2776,7 +2937,10 @@ function App() {
         return;
       }
 
-      if (['0', 'backspace', 'delete', 'x'].includes(key)) {
+      if (['backspace', 'delete'].includes(key)) {
+        event.preventDefault();
+        clearCellsCompletely();
+      } else if (['0', 'x'].includes(key)) {
         event.preventDefault();
         if (toolMode === 'color') applyColor(null);
         else if (event.shiftKey || toolMode === 'corner') clearCornerMarksAcrossSelection();
@@ -2858,6 +3022,7 @@ function App() {
     applyColor,
     askForHint,
     chooseToolMode,
+    clearCellsCompletely,
     clearCornerMarksAcrossSelection,
     clearHintState,
     clearNotesAcrossBlock,
@@ -3076,9 +3241,11 @@ function App() {
             difficulty={newGameDifficulty}
             isFetchingPuzzle={isFetchingPuzzle}
             mode={newGameMode}
+            variant={newGameVariant}
             onDateChange={setDailyDateKey}
             onDifficultyChange={setNewGameDifficulty}
             onModeChange={setNewGameMode}
+            onVariantChange={setNewGameVariant}
             onSizeChange={setNewGameSize}
             onImage={() => fileInputRef.current?.click()}
             onLoadPasted={startPastedPuzzle}
@@ -3259,6 +3426,15 @@ function App() {
                 </button>
                 <button
                   type="button"
+                  aria-label="Tools"
+                  title="Tools"
+                  onClick={() => openModalRoute('tools')}
+                  className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
+                >
+                  <Wrench size={16} />
+                </button>
+                <button
+                  type="button"
                   aria-label="Hint"
                   title="Hint"
                   disabled={!hintsEnabled}
@@ -3427,11 +3603,17 @@ function App() {
               setToolMode('color');
               applyColor(index);
             }}
+            onColorClear={() => {
+              setToolMode('color');
+              applyColor(null);
+            }}
             onModeChange={chooseToolMode}
             toolMode={toolMode}
           />
 
           <NumberPad
+            activeColor={activeColor}
+            activeColorValue={CELL_COLORS[activeColor]}
             digits={activeDigits}
             notesEnabled={notesEnabled}
             noteMode={noteMode || toolMode === 'center'}
@@ -3444,7 +3626,10 @@ function App() {
             }}
             onErase={() => {
               resumeTimerFromActivity();
-              setCell(0);
+              if (toolMode === 'color') applyColor(null);
+              else if (toolMode === 'corner') clearCornerMarksAcrossSelection();
+              else if ((noteMode || toolMode === 'center') && notesEnabled) clearNotesAcrossBlock();
+              else setCell(0);
             }}
             onToggleNotes={() => {
               resumeTimerFromActivity();
@@ -3456,6 +3641,7 @@ function App() {
                 });
               }
             }}
+            toolMode={toolMode}
           />
 
           <StatusLine
@@ -3580,6 +3766,10 @@ function App() {
                 setActiveColor(index);
                 setToolMode('color');
                 applyColor(index);
+              }}
+              onColorClear={() => {
+                setToolMode('color');
+                applyColor(null);
               }}
               onModeChange={chooseToolMode}
               toolMode={toolMode}
@@ -3728,7 +3918,7 @@ function App() {
                 setCommandMode(null);
                 setCommandValue('');
               } else {
-                executeCommand(commandValue);
+                executeCommand(selectedCommandSuggestion?.command ?? commandValue);
               }
             }}
           >
@@ -3748,7 +3938,10 @@ function App() {
                     : `type 1-${activeConfig.size}`
                 }
                 value={commandValue}
-                onChange={(event) => setCommandValue(event.target.value)}
+                onChange={(event) => {
+                  setCommandValue(event.target.value);
+                  setCommandCursor(0);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') {
                     event.preventDefault();
@@ -3765,8 +3958,22 @@ function App() {
                       setCommandMode(null);
                       setCommandValue('');
                     } else {
-                      executeCommand(commandValue);
+                      executeCommand(selectedCommandSuggestion?.command ?? commandValue);
                     }
+                    return;
+                  }
+
+                  if (commandMode === 'command' && event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setCommandCursor((current) =>
+                      Math.min(current + 1, Math.max(0, commandSuggestions.length - 1)),
+                    );
+                    return;
+                  }
+
+                  if (commandMode === 'command' && event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    setCommandCursor((current) => Math.max(0, current - 1));
                     return;
                   }
 
@@ -3782,6 +3989,35 @@ function App() {
                 }}
               />
             </div>
+            {commandMode === 'command' && (
+              <div className="border-t border-[var(--border)] bg-[var(--input-bg)] p-2">
+                {commandSuggestions.slice(0, 8).map((suggestion) => (
+                  <button
+                    type="button"
+                    key={suggestion.command}
+                    onClick={() => executeCommand(suggestion.command)}
+                    className={`grid w-full grid-cols-[minmax(0,160px)_minmax(0,1fr)] gap-3 px-2 py-1.5 text-left text-xs ${
+                      selectedCommandSuggestion?.command === suggestion.command
+                        ? 'bg-[var(--accent)] text-[var(--app-bg)]'
+                        : 'text-[var(--app-text)] hover:bg-[var(--panel-soft)]'
+                    }`}
+                  >
+                    <span className="truncate font-black uppercase tracking-[0.12em]">
+                      :{suggestion.command}
+                    </span>
+                    <span
+                      className={`truncate ${
+                        selectedCommandSuggestion?.command === suggestion.command
+                          ? 'text-[var(--app-bg)]'
+                          : 'text-[var(--muted)]'
+                      }`}
+                    >
+                      {suggestion.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </form>
         </div>
       )}
@@ -3958,14 +4194,22 @@ function App() {
             difficulty={newGameDifficulty}
             isFetchingPuzzle={isFetchingPuzzle}
             mode={newGameMode}
+            variant={newGameVariant}
             onDateChange={setDailyDateKey}
             onDifficultyChange={setNewGameDifficulty}
             onModeChange={setNewGameMode}
+            onVariantChange={setNewGameVariant}
             onSizeChange={setNewGameSize}
               onImage={() => fileInputRef.current?.click()}
               onLoadPasted={startPastedPuzzle}
               onLocal={() =>
-                startGeneratedPuzzle(newGameDifficulty, false, newGameSize, newGameMode)
+                startGeneratedPuzzle(
+                  newGameDifficulty,
+                  false,
+                  newGameSize,
+                  newGameMode,
+                  newGameVariant,
+                )
               }
               onMountain={() => void fetchSudokuMountainPuzzle(false)}
               onMountainDaily={() => void fetchSudokuMountainPuzzle(true)}
@@ -4064,6 +4308,10 @@ function App() {
                       setToolMode('color');
                       applyColor(index);
                     }}
+                    onColorClear={() => {
+                      setToolMode('color');
+                      applyColor(null);
+                    }}
                     onModeChange={chooseToolMode}
                     toolMode={toolMode}
                   />
@@ -4076,6 +4324,7 @@ function App() {
                   ['check board', ':check', runCheck, false],
                   ['rules', ':rules', () => openModalRoute('rules'), false],
                   ['copy puzzle link', ':share', copyPuzzleLink, false],
+                  ['copy state link', ':share-state', copyStateLink, false],
                   ['undo', 'u', undo, !history.length],
                   ['redo', 'C-r', redo, !future.length],
                   ['clear centre notes', ':clear-notes', clearNotesAcrossBlock, false],
@@ -4145,6 +4394,7 @@ function App() {
                   [':check', 'check visible conflicts'],
                   [':rules', 'open puzzle rules'],
                   [':share', 'copy puzzle link'],
+                  [':share-state', 'copy current board state'],
                   [':row / :col', 'select current unit'],
                   [':box / :all', 'select box / board'],
                   [':color 1', 'colour selected cells'],
@@ -4199,9 +4449,13 @@ function App() {
 
       {showSolved && (
         <SolvedModal
+          completion={completion}
           difficulty={activeGame.difficulty}
           elapsedMs={elapsedMs}
+          hintUses={hintUses}
+          mistakes={challengeMistakes}
           needsName={needsSolvedNamePrompt}
+          pauseCount={manualPauseCount}
           onNameChange={updatePlayerName}
           onNameConfirm={() => {
             if (!isCustomPlayerName(playerName)) {
@@ -4234,22 +4488,40 @@ function App() {
 
 // Touch number entry — mobile/tablet only; desktop uses the keyboard.
 function NumberPad({
+  activeColor,
+  activeColorValue,
   digits,
   notesEnabled,
   noteMode,
   onDigit,
   onErase,
   onToggleNotes,
+  toolMode,
 }: {
+  activeColor: number;
+  activeColorValue: string;
   digits: number[];
   notesEnabled: boolean;
   noteMode: boolean;
   onDigit: (digit: number) => void;
   onErase: () => void;
   onToggleNotes: () => void;
+  toolMode: ToolMode;
 }) {
   return (
     <div className="shrink-0 border-t border-[var(--border)] bg-[var(--status-bg)] p-2 lg:hidden">
+      <div className="mb-2 flex items-center justify-between gap-2 border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 font-mono text-[0.64rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+        <span>
+          mode <span className="text-[var(--accent)]">{toolModeLabel(toolMode)}</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          colour {activeColor + 1}
+          <span
+            className="h-3 w-5 border border-[var(--border)]"
+            style={{ backgroundColor: activeColorValue }}
+          />
+        </span>
+      </div>
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `repeat(${digits.length}, minmax(0, 1fr))` }}
@@ -4380,6 +4652,7 @@ function ToolModeBar({
   colors,
   layout = 'bar',
   onColorChange,
+  onColorClear,
   onModeChange,
   toolMode,
 }: {
@@ -4387,6 +4660,7 @@ function ToolModeBar({
   colors: readonly string[];
   layout?: 'bar' | 'panel';
   onColorChange: (index: number) => void;
+  onColorClear: () => void;
   onModeChange: (mode: ToolMode) => void;
   toolMode: ToolMode;
 }) {
@@ -4427,6 +4701,18 @@ function ToolModeBar({
     />
   );
 
+  const clearButton = (
+    <button
+      type="button"
+      aria-label="Clear colour from selected cells"
+      onClick={onColorClear}
+      className="grid h-6 w-full place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--app-text)]"
+      title="clear colour"
+    >
+      <Eraser className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  );
+
   if (layout === 'panel') {
     return (
       <div className="font-mono">
@@ -4436,9 +4722,14 @@ function ToolModeBar({
         <p className="mt-3 mb-1.5 text-[0.6rem] uppercase tracking-[0.2em] text-[var(--muted)]">
           colour
         </p>
-        <div className="grid grid-cols-6 gap-1">
+        <div className="grid grid-cols-7 gap-1">
           {colors.map((color, index) => colorButton(color, index))}
+          {clearButton}
         </div>
+        <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
+          Use the eraser swatch or press x in colour mode to remove colour from the selected cell.
+          Backspace clears the cell completely.
+        </p>
       </div>
     );
   }
@@ -4455,6 +4746,7 @@ function ToolModeBar({
               {colorButton(color, index)}
             </div>
           ))}
+          <div className="h-6 w-6 shrink-0">{clearButton}</div>
         </div>
       </div>
     </div>
@@ -4462,9 +4754,13 @@ function ToolModeBar({
 }
 
 function SolvedModal({
+  completion,
   difficulty,
   elapsedMs,
+  hintUses,
+  mistakes,
   needsName,
+  pauseCount,
   onLeaderboards,
   onNewGame,
   onNameChange,
@@ -4474,9 +4770,13 @@ function SolvedModal({
   playerName,
   source,
 }: {
+  completion: number;
   difficulty?: PuzzleDifficulty | 'custom';
   elapsedMs: number;
+  hintUses: number;
+  mistakes: number;
   needsName: boolean;
+  pauseCount: number;
   onLeaderboards: () => void;
   onNewGame: () => void;
   onNameChange: (value: string) => void;
@@ -4517,6 +4817,12 @@ function SolvedModal({
             {source}
             {difficulty ? ` · ${difficulty}` : ''}
           </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 border-b border-[var(--border)] bg-[var(--input-bg)] p-3 sm:grid-cols-4">
+          <SolvedMetric label="filled" value={String(completion)} />
+          <SolvedMetric label="hints" value={String(hintUses)} />
+          <SolvedMetric label="pauses" value={String(pauseCount)} />
+          <SolvedMetric label="misses" value={String(mistakes)} />
         </div>
         {needsName && (
           <div className="border-b border-[var(--border)] bg-[var(--input-bg)] p-3">
@@ -4572,6 +4878,17 @@ function SolvedModal({
   );
 }
 
+function SolvedMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-[var(--border)] bg-[var(--status-bg)] px-2 py-2 text-center">
+      <p className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-[var(--muted)]">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-lg font-black text-[var(--accent)]">{value}</p>
+    </div>
+  );
+}
+
 function NewGameSection({
   children,
   title,
@@ -4612,9 +4929,11 @@ function NewGamePanel({
   difficulty,
   isFetchingPuzzle,
   mode,
+  variant,
   onDateChange,
   onDifficultyChange,
   onModeChange,
+  onVariantChange,
   onImage,
   onLoadPasted,
   onLocal,
@@ -4634,9 +4953,11 @@ function NewGamePanel({
   difficulty: PuzzleDifficulty;
   isFetchingPuzzle: boolean;
   mode: PlayMode;
+  variant: VariantId;
   onDateChange: (dateKey: string) => void;
   onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
   onModeChange: (mode: PlayMode) => void;
+  onVariantChange: (variant: VariantId) => void;
   onImage: () => void;
   onLoadPasted: () => void;
   onLocal: () => void;
@@ -4738,6 +5059,24 @@ function NewGamePanel({
                     onClick={() => onDifficultyChange(option)}
                   >
                     {option}
+                  </button>
+                ))}
+              </div>
+            </NewGameField>
+            <NewGameField label="variant">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {(Object.keys(VARIANTS) as VariantId[]).map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] transition ${
+                      variant === option
+                        ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                        : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
+                    }`}
+                    onClick={() => onVariantChange(option)}
+                  >
+                    {VARIANTS[option].label}
                   </button>
                 ))}
               </div>
@@ -7264,11 +7603,37 @@ function puzzleRules(puzzleSize: PuzzleSize, variantId: VariantId = 'classic') {
   ).digits.join(', ')}.`;
 }
 
+function generatePuzzleForVariant(
+  difficulty: PuzzleDifficulty,
+  seed: number,
+  puzzleSize: PuzzleSize,
+  variantId: VariantId,
+) {
+  if (variantId === 'classic') return generatePuzzle(difficulty, seed, puzzleSize);
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const puzzle = generatePuzzle(difficulty, seed + attempt * 7919, puzzleSize);
+    const solution = solveGrid(puzzle, puzzleSize);
+    if (solution && checkVariant(solution, puzzleSize, variantId).length === 0) {
+      return puzzle;
+    }
+  }
+
+  return generatePuzzle(difficulty, seed, puzzleSize);
+}
+
 function toolModeMessage(mode: ToolMode) {
   if (mode === 'digit') return 'Digit tool.';
   if (mode === 'center') return 'Centre notes tool.';
   if (mode === 'corner') return 'Corner notes tool.';
   return 'Colour tool. Press 1-6 or Alt+number.';
+}
+
+function toolModeLabel(mode: ToolMode) {
+  if (mode === 'center') return 'centre';
+  if (mode === 'corner') return 'corners';
+  if (mode === 'color') return 'colour';
+  return 'digit';
 }
 
 function editorModeLabel(mode: EditorMode) {
@@ -7380,6 +7745,21 @@ function filterGameRecords(records: GameRecord[], query: string) {
       .join(' ')
       .toLowerCase();
 
+    return terms.every((term) => haystack.includes(term));
+  });
+}
+
+function filterCommandSuggestions(query: string) {
+  const terms = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (terms.length === 0) return COMMAND_SUGGESTIONS;
+  return COMMAND_SUGGESTIONS.filter((suggestion) => {
+    const haystack = `${suggestion.command} ${suggestion.description} ${
+      suggestion.keywords ?? ''
+    }`.toLowerCase();
     return terms.every((term) => haystack.includes(term));
   });
 }
