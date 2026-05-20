@@ -3250,9 +3250,9 @@ function App() {
                 </button>
                 <button
                   type="button"
-                  aria-label="Tools"
-                  title="Tools"
-                  onClick={() => openModalRoute('tools')}
+                  aria-label="Colorscheme"
+                  title="Colorscheme"
+                  onClick={() => openModalRoute('theme')}
                   className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
                 >
                   <Palette size={16} />
