@@ -98,6 +98,7 @@ export default defineSchema({
     .index('by_challengeId_and_updatedAt', ['challengeId', 'updatedAt']),
 
   liveBattles: defineTable({
+    battleKind: v.optional(v.union(v.literal('race'), v.literal('turns'))),
     createdAt: v.string(),
     creatorAnonId: v.string(),
     creatorName: v.string(),
@@ -109,7 +110,13 @@ export default defineSchema({
     source: v.string(),
     status: v.union(v.literal('waiting'), v.literal('live'), v.literal('finished')),
     title: v.string(),
+    turnAnonId: v.optional(v.string()),
+    turnEndsAt: v.optional(v.number()),
+    turnNumber: v.optional(v.number()),
+    turnSeconds: v.optional(v.number()),
+    turnStartedAt: v.optional(v.number()),
     variantId: v.optional(v.string()),
+    winnerAnonId: v.optional(v.string()),
   })
     .index('by_roomId', ['roomId'])
     .index('by_creatorAnonId', ['creatorAnonId']),
@@ -119,6 +126,7 @@ export default defineSchema({
     completion: v.number(),
     elapsedMs: v.number(),
     lastSeenAt: v.number(),
+    lives: v.optional(v.number()),
     mistakes: v.optional(v.number()),
     player: v.string(),
     recordId: v.optional(v.string()),

@@ -108,7 +108,9 @@ import {
   liveBattlePath,
   makeLiveBattleId,
   type LiveBattleCreateRequest,
+  type LiveBattleKind,
   type LiveBattleRoom,
+  type LiveBattleTurnRequest,
 } from './liveBattles';
 import { ConvexBridge, type CloudProfile, type CloudStats } from './ConvexBridge';
 import { hasConvexBackend } from './convexClient';
@@ -662,6 +664,8 @@ function App() {
   const [liveBattleShareUrl, setLiveBattleShareUrl] = useState('');
   const [liveBattleCreateRequest, setLiveBattleCreateRequest] =
     useState<LiveBattleCreateRequest | null>(null);
+  const [liveBattleTurnRequest, setLiveBattleTurnRequest] =
+    useState<LiveBattleTurnRequest | null>(null);
   const [cloudProfile, setCloudProfile] = useState<CloudProfile | null>(null);
   const [cloudStats, setCloudStats] = useState<CloudStats | null>(null);
   const [guestId] = useState(() => getOrCreateGuestId());
@@ -725,6 +729,14 @@ function App() {
     activePage === 'live-battle' &&
     Boolean(routeLiveBattleId) &&
     activeLiveBattleId === routeLiveBattleId;
+  const activeLiveBattleRoom =
+    activeLiveBattleId && liveBattleRoom?.roomId === activeLiveBattleId
+      ? liveBattleRoom
+      : null;
+  const isTurnBattlePlay =
+    isLiveBattlePlay && activeLiveBattleRoom?.battleKind === 'turns';
+  const isMyTurnBattleTurn =
+    !isTurnBattlePlay || activeLiveBattleRoom?.turnAnonId === guestId;
   const showBoard = activePage === 'play' || isLiveBattlePlay;
   const activeConfig = boardConfigFor(activeSize);
   const activeDigits = activeConfig.digits;
@@ -865,6 +877,10 @@ function App() {
   const conflicts = useMemo(() => findConflicts(grid, activeSize), [activeSize, grid]);
   const visibleConflicts = policy.hidesConflicts ? new Set<number>() : conflicts;
   const solved = useMemo(() => solveGrid(grid, activeSize), [activeSize, grid]);
+  const puzzleSolution = useMemo(
+    () => solveGrid(parseGrid(activeGame.puzzle, activeSize), activeSize),
+    [activeGame.puzzle, activeSize],
+  );
   const completion = grid.filter(Boolean).length;
   const isSolved = Boolean(
     solved && grid.every((value, index) => value === solved[index]),
@@ -993,6 +1009,20 @@ function App() {
   const selectedCommandSuggestion =
     commandSuggestions[Math.min(commandCursor, Math.max(0, commandSuggestions.length - 1))] ??
     null;
+  const liveOpponentCursors = useMemo(() => {
+    if (!activeLiveBattleId || !liveBattleRoom) return new Map<number, string[]>();
+    const now = Date.now();
+    const cursors = new Map<number, string[]>();
+    for (const player of liveBattleRoom.presence) {
+      if (player.anonId === guestId) continue;
+      if (typeof player.selectedCell !== 'number') continue;
+      if (now - player.lastSeenAt >= 8000) continue;
+      const names = cursors.get(player.selectedCell) ?? [];
+      names.push(player.player);
+      cursors.set(player.selectedCell, names);
+    }
+    return cursors;
+  }, [activeLiveBattleId, guestId, liveBattleRoom]);
   const editorMode: EditorMode =
     visualAnchor !== null || explicitSelection !== null
       ? 'visual'
@@ -1422,6 +1452,38 @@ function App() {
       const targets = [...activeCells].filter((index) => !givens[index]);
       if (targets.length === 0) return;
       resumeTimerFromActivity();
+      if (isTurnBattlePlay && value !== 0) {
+        if (!isMyTurnBattleTurn) {
+          setStatusLine('Turn battle: wait for your turn.');
+          return;
+        }
+        if (targets.length !== 1) {
+          setStatusLine('Turn battle: enter one cell at a time.');
+          return;
+        }
+        if (!activeLiveBattleRoom || !puzzleSolution) {
+          setStatusLine('Turn battle: solution check is not ready yet.');
+          return;
+        }
+        const target = targets[0];
+        const correct = puzzleSolution[target] === value;
+        if (!correct) {
+          setChallengeMistakes((count) => count + 1);
+          setLiveBattleTurnRequest({
+            completion,
+            correct: false,
+            elapsedMs,
+            player: playerName,
+            recordId: currentRecord.id,
+            requestId: `${activeLiveBattleRoom.roomId}-${Date.now().toString(36)}-${target}`,
+            roomId: activeLiveBattleRoom.roomId,
+            selectedCell: target,
+          });
+          setStatusLine('Turn battle: bad entry, life lost.');
+          triggerBattleImpact(16, 0.42, 0.78);
+          return;
+        }
+      }
       pushHistory();
       const mistakes =
         activeChallengeKind === 'streak' && value !== 0
@@ -1435,6 +1497,18 @@ function App() {
       }
       const nextGrid = [...grid];
       for (const index of targets) nextGrid[index] = value;
+      if (isTurnBattlePlay && value !== 0 && activeLiveBattleRoom) {
+        setLiveBattleTurnRequest({
+          completion: nextGrid.filter(Boolean).length,
+          correct: true,
+          elapsedMs,
+          player: playerName,
+          recordId: currentRecord.id,
+          requestId: `${activeLiveBattleRoom.roomId}-${Date.now().toString(36)}-${targets[0]}`,
+          roomId: activeLiveBattleRoom.roomId,
+          selectedCell: targets[0],
+        });
+      }
       setGrid(nextGrid);
       recordSolveEvent({
         cells: targets,
@@ -1472,9 +1546,17 @@ function App() {
       activeChallengeKind,
       activeSize,
       activeCells,
+      activeLiveBattleRoom,
+      completion,
+      currentRecord.id,
+      elapsedMs,
       givens,
       grid,
+      isMyTurnBattleTurn,
+      isTurnBattlePlay,
+      playerName,
       pushHistory,
+      puzzleSolution,
       recordSolveEvent,
       resumeTimerFromActivity,
       selected,
@@ -2472,15 +2554,16 @@ function App() {
     );
   }, [startNewPuzzle]);
 
-  const createLiveBattleRoom = useCallback(() => {
+  const createLiveBattleRoom = useCallback((battleKind: LiveBattleKind = 'race') => {
     if (!hasConvexBackend()) {
       setLiveBattleStatus('Live battles need the Convex backend.');
       setStatusLine('Live battles need the Convex backend.');
       return;
     }
 
-    const roomId = makeLiveBattleId();
+    const roomId = makeLiveBattleId(battleKind);
     const request: LiveBattleCreateRequest = {
+      battleKind,
       creatorName: playerName,
       difficulty: activeGame.difficulty,
       playMode: activeMode,
@@ -2492,7 +2575,11 @@ function App() {
       variantId,
     };
     setLiveBattleCreateRequest(request);
-    setLiveBattleStatus('Creating live battle room...');
+    setLiveBattleStatus(
+      battleKind === 'turns'
+        ? 'Creating turn battle room...'
+        : 'Creating live battle room...',
+    );
     void navigate({ to: '/battle/live/$roomId', params: { roomId } });
   }, [activeGame, activeMode, activeSize, navigate, playerName, variantId]);
 
@@ -2508,18 +2595,23 @@ function App() {
   );
 
   const startLiveBattle = useCallback((room: LiveBattleRoom) => {
+    const label = room.battleKind === 'turns' ? 'turn battle' : 'live race';
     const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize);
     startNewPuzzle(
       puzzleGrid,
-      `Joined live race ${room.roomId}.`,
-      `live race ${room.roomId}`,
+      `Joined ${label} ${room.roomId}.`,
+      `${label} ${room.roomId}`,
       room.difficulty,
       room.puzzleSize,
       room.playMode,
       createLiveBattleGameMeta(room),
       false,
     );
-    setLiveBattleStatus('Live race joined. Presence is updating.');
+    setLiveBattleStatus(
+      room.battleKind === 'turns'
+        ? 'Turn battle joined. Wait for your turn.'
+        : 'Live race joined. Presence is updating.',
+    );
   }, [startNewPuzzle]);
 
   const dashboardSelect = useCallback(
@@ -3441,9 +3533,15 @@ function App() {
               );
             }}
             onStatus={setLiveBattleStatus}
+            onTurnRequestHandled={(requestId) => {
+              setLiveBattleTurnRequest((current) =>
+                current?.requestId === requestId ? null : current,
+              );
+            }}
             playerName={playerName}
             roomId={routeLiveBattleId}
             selectedCell={selected}
+            turnRequest={liveBattleTurnRequest}
           />
         </>
       )}
@@ -3598,13 +3696,20 @@ function App() {
                   <button
                     type="button"
                     className="w-full border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
-                    onClick={createLiveBattleRoom}
+                    onClick={() => createLiveBattleRoom('race')}
                   >
-                    new live battle
+                    new live race
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
+                    onClick={() => createLiveBattleRoom('turns')}
+                  >
+                    new turn battle
                   </button>
                   <p className="text-sm leading-relaxed text-[var(--muted)]">
-                    Create async challenges or a live race room with presence,
-                    then send the link to a friend.
+                    Create async challenges, live races, or turn battles with
+                    lives and a move clock. Then send the link to a friend.
                   </p>
                   {challengeStatus && (
                     <p className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--accent)]">
@@ -3783,85 +3888,99 @@ function App() {
                 style={{ gridTemplateColumns: `repeat(${activeConfig.size}, minmax(0, 1fr))` }}
                 aria-label={`${activeSize} Sudoku board`}
               >
-                {grid.map((value, index) => (
-                  <button
-                    type="button"
-                    key={labelCell(index, activeSize)}
-                    aria-label={`${labelCell(index, activeSize)} ${value || 'empty'}`}
-                    onClick={(event) => {
-                      resumeTimerFromActivity();
-                      setSelected(index);
-                      event.currentTarget.blur();
-                    }}
-                    className={cellClassName(
-                      index,
-                      selected,
-                      grid,
-                      givens,
-                      visibleConflicts,
-                      hint,
-                      highlightDigit,
-                      visualCells,
-                      cellColors[index],
-                      activeConfig,
-                    )}
-                    style={
-                      cellColors[index] !== null
-                        ? ({
-                            '--cell-user-color': CELL_COLORS[cellColors[index] ?? 0],
-                          } as CSSProperties)
-                        : undefined
-                    }
-                  >
-                    {!value && cornerMarks[index].length > 0 && (
-                      <span
-                        className={`absolute left-[8%] top-[7%] flex gap-[0.18em] font-mono text-[clamp(0.46rem,1.25vw,0.82rem)] font-black leading-none ${
-                          visualCells?.has(index) ||
-                          index === selected ||
-                          hintFocusCells(hint).includes(index)
-                            ? 'text-[var(--app-bg)]'
-                            : 'text-[var(--accent-2)]'
-                        }`}
-                      >
-                        {cornerMarks[index].map((mark) => (
-                          <span key={mark}>{mark}</span>
-                        ))}
-                      </span>
-                    )}
-                    {value ? (
-                      <span className="text-[clamp(1.32rem,6.25vw,3.9rem)] leading-none sm:text-[clamp(1.55rem,7vw,3.9rem)]">
-                        {value}
-                      </span>
-                    ) : (
-                      <span
-                        className={`flex h-[70%] w-[72%] flex-wrap content-center items-center justify-center gap-x-[0.08em] gap-y-0 self-center justify-self-center font-mono text-[clamp(0.82rem,3.6vw,1.6rem)] font-medium leading-[0.92] sm:text-[clamp(1rem,2.6vw,1.9rem)] ${
-                          visualCells?.has(index) ||
-                          index === selected ||
-                          hintFocusCells(hint).includes(index)
-                            ? 'text-[var(--app-bg)]'
-                            : 'text-[var(--note)]'
-                        }`}
-                      >
-                        {notes[index].map((note, noteIndex) => (
-                          <span
-                            key={note}
-                            className={
-                              visualCells?.has(index) ||
-                              index === selected ||
-                              hintFocusCells(hint).includes(index)
-                                ? 'text-[var(--app-bg)]'
-                                : noteIndex % 2 === 0
-                                ? 'text-[var(--accent)]'
-                                : 'text-[var(--danger)]'
-                            }
-                          >
-                            {note}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {grid.map((value, index) => {
+                  const opponentNames = liveOpponentCursors.get(index) ?? [];
+                  const hasOpponentCursor = opponentNames.length > 0;
+                  return (
+                    <button
+                      type="button"
+                      key={labelCell(index, activeSize)}
+                      aria-label={`${labelCell(index, activeSize)} ${value || 'empty'}${
+                        hasOpponentCursor
+                          ? ` opponent ${opponentNames.join(', ')}`
+                          : ''
+                      }`}
+                      onClick={(event) => {
+                        resumeTimerFromActivity();
+                        setSelected(index);
+                        event.currentTarget.blur();
+                      }}
+                      className={cellClassName(
+                        index,
+                        selected,
+                        grid,
+                        givens,
+                        visibleConflicts,
+                        hint,
+                        highlightDigit,
+                        visualCells,
+                        cellColors[index],
+                        activeConfig,
+                        hasOpponentCursor,
+                      )}
+                      style={
+                        cellColors[index] !== null
+                          ? ({
+                              '--cell-user-color': CELL_COLORS[cellColors[index] ?? 0],
+                            } as CSSProperties)
+                          : undefined
+                      }
+                    >
+                      {hasOpponentCursor && (
+                        <span className="pointer-events-none absolute top-1 right-1 z-20 bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-1 font-mono text-[0.48rem] font-black uppercase leading-tight tracking-[0.08em] text-[var(--accent)]">
+                          {opponentCursorLabel(opponentNames)}
+                        </span>
+                      )}
+                      {!value && cornerMarks[index].length > 0 && (
+                        <span
+                          className={`absolute left-[8%] top-[7%] flex gap-[0.18em] font-mono text-[clamp(0.46rem,1.25vw,0.82rem)] font-black leading-none ${
+                            visualCells?.has(index) ||
+                            index === selected ||
+                            hintFocusCells(hint).includes(index)
+                              ? 'text-[var(--app-bg)]'
+                              : 'text-[var(--accent-2)]'
+                          }`}
+                        >
+                          {cornerMarks[index].map((mark) => (
+                            <span key={mark}>{mark}</span>
+                          ))}
+                        </span>
+                      )}
+                      {value ? (
+                        <span className="text-[clamp(1.32rem,6.25vw,3.9rem)] leading-none sm:text-[clamp(1.55rem,7vw,3.9rem)]">
+                          {value}
+                        </span>
+                      ) : (
+                        <span
+                          className={`flex h-[70%] w-[72%] flex-wrap content-center items-center justify-center gap-x-[0.08em] gap-y-0 self-center justify-self-center font-mono text-[clamp(0.82rem,3.6vw,1.6rem)] font-medium leading-[0.92] sm:text-[clamp(1rem,2.6vw,1.9rem)] ${
+                            visualCells?.has(index) ||
+                            index === selected ||
+                            hintFocusCells(hint).includes(index)
+                              ? 'text-[var(--app-bg)]'
+                              : 'text-[var(--note)]'
+                          }`}
+                        >
+                          {notes[index].map((note, noteIndex) => (
+                            <span
+                              key={note}
+                              className={
+                                visualCells?.has(index) ||
+                                index === selected ||
+                                hintFocusCells(hint).includes(index)
+                                  ? 'text-[var(--app-bg)]'
+                                  : noteIndex % 2 === 0
+                                    ? 'text-[var(--accent)]'
+                                    : 'text-[var(--danger)]'
+                              }
+                            >
+                              {note}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </section>
             </div>
             {timerPaused && (
@@ -7437,16 +7556,19 @@ function LiveBattleRoomPanel({
 
   const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize);
   const isActiveRoom = activeRoomId === room.roomId;
+  const roomLabel = room.battleKind === 'turns' ? 'turn battle' : 'live race';
   const actionLabel = isCurrentSolved
     ? 'finished'
     : isActiveRoom
-      ? 'continue live race'
-      : 'join live race';
+      ? `continue ${roomLabel}`
+      : `join ${roomLabel}`;
   const cellCount = boardConfigFor(room.puzzleSize).cellCount;
   const now = Date.now();
   const me = room.presence.find((player) => player.anonId === currentAnonId) ?? null;
   const opponents = room.presence.filter((player) => player.anonId !== currentAnonId);
   const onlineOpponents = opponents.filter((player) => now - player.lastSeenAt < 8000);
+  const currentTurnPlayer =
+    room.turnAnonId ? room.presence.find((player) => player.anonId === room.turnAnonId) : null;
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -7454,7 +7576,7 @@ function LiveBattleRoomPanel({
         <header className="grid gap-3 border-b border-[var(--border)] bg-[var(--status-bg)] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div className="min-w-0">
             <p className="font-mono text-[0.65rem] font-black uppercase tracking-[0.2em] text-[var(--accent)]">
-              [live-race-room]
+              [{room.battleKind === 'turns' ? 'turn-battle-room' : 'live-race-room'}]
             </p>
             <h2 className="mt-1 truncate font-mono text-xl font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
               {room.roomId}
@@ -7464,6 +7586,9 @@ function LiveBattleRoomPanel({
                 ? `${onlineOpponents.length} opponent${onlineOpponents.length === 1 ? '' : 's'} online`
                 : 'waiting for opponent'}
               {me ? ` · you are ${me.status}` : ' · joining presence'}
+              {room.battleKind === 'turns' && currentTurnPlayer
+                ? ` · turn: ${currentTurnPlayer.player}`
+                : ''}
             </p>
           </div>
           <button
@@ -7487,6 +7612,14 @@ function LiveBattleRoomPanel({
               <ChallengeMeta label="state" value={room.status} />
               <ChallengeMeta label="grid" value={room.puzzleSize} />
               <ChallengeMeta label="mode" value={modeLabel(room.playMode)} />
+              <ChallengeMeta
+                label="battle"
+                value={
+                  room.battleKind === 'turns'
+                    ? `turns / ${room.turnSeconds}s`
+                    : 'race'
+                }
+              />
               <ChallengeMeta
                 label="difficulty"
                 value={room.difficulty ?? 'custom'}
@@ -7549,7 +7682,11 @@ function LiveBattleRoomPanel({
               return (
                 <div
                   key={player.anonId}
-                  className="grid gap-2 px-3 py-3 font-mono"
+                  className={`grid gap-2 px-3 py-3 font-mono ${
+                    room.turnAnonId === player.anonId
+                      ? 'bg-[var(--cell-peer)] text-[var(--app-bg)]'
+                      : ''
+                  }`}
                 >
                   <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-baseline gap-2">
                     <span className="text-xs font-black text-[var(--accent)]">
@@ -7562,6 +7699,7 @@ function LiveBattleRoomPanel({
                       </p>
                       <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
                         {online ? 'online' : 'away'} · {player.status}
+                        {room.turnAnonId === player.anonId ? ' · turn' : ''}
                         {typeof player.selectedCell === 'number'
                           ? ` · ${labelCell(player.selectedCell, room.puzzleSize)}`
                           : ''}
@@ -7580,6 +7718,9 @@ function LiveBattleRoomPanel({
                   <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
                     {player.completion}/{cellCount} filled
                     {player.mistakes > 0 ? ` · ${player.mistakes} misses` : ''}
+                    {room.battleKind === 'turns'
+                      ? ` · ${player.lives ?? 3} lives`
+                      : ''}
                   </p>
                 </div>
               );
@@ -7621,22 +7762,37 @@ function LiveBattlePresencePanel({
   }
 
   const opponents = room.presence.filter((player) => player.anonId !== currentAnonId);
+  const currentTurn = room.turnAnonId
+    ? room.presence.find((player) => player.anonId === room.turnAnonId)
+    : null;
+  const remainingMs = room.turnEndsAt
+    ? Math.max(0, room.turnEndsAt - now)
+    : 0;
 
   return (
     <div className="space-y-2 font-mono">
       <div className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
-        {opponents.length === 0
-          ? 'waiting for opponent'
-          : `${opponents.length} opponent${opponents.length === 1 ? '' : 's'}`}
+        {room.battleKind === 'turns'
+          ? currentTurn
+            ? `${currentTurn.anonId === currentAnonId ? 'your' : currentTurn.player} turn · ${Math.ceil(remainingMs / 1000)}s`
+            : 'waiting to assign turn'
+          : opponents.length === 0
+            ? 'waiting for opponent'
+            : `${opponents.length} opponent${opponents.length === 1 ? '' : 's'}`}
       </div>
       <div className="space-y-2">
         {room.presence.map((player) => {
           const online = now - player.lastSeenAt < 8000;
           const percent = Math.round((player.completion / cellCount) * 100);
+          const hasTurn = room.turnAnonId === player.anonId;
           return (
             <div
               key={player.anonId}
-              className="border border-[var(--border)] bg-[var(--panel-bg)] p-2"
+              className={`border p-2 ${
+                hasTurn
+                  ? 'border-[var(--accent)] bg-[var(--cell-peer)]'
+                  : 'border-[var(--border)] bg-[var(--panel-bg)]'
+              }`}
             >
               <div className="flex items-baseline justify-between gap-2">
                 <p className="truncate text-xs font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
@@ -7644,11 +7800,14 @@ function LiveBattlePresencePanel({
                   {player.anonId === currentAnonId ? ' / you' : ''}
                 </p>
                 <span className="text-[0.65rem] text-[var(--accent)]">
-                  {formatDuration(player.elapsedMs)}
+                  {room.battleKind === 'turns'
+                    ? `${player.lives ?? 3} lives`
+                    : formatDuration(player.elapsedMs)}
                 </span>
               </div>
               <p className="mt-1 text-[0.62rem] uppercase tracking-[0.14em] text-[var(--muted)]">
                 {online ? 'online' : 'away'} · {player.status}
+                {hasTurn ? ' · turn' : ''}
                 {typeof player.selectedCell === 'number'
                   ? ` · ${labelCell(player.selectedCell, puzzleSize)}`
                   : ''}
@@ -8468,6 +8627,7 @@ function cellClassName(
   visualCells: Set<number> | null,
   cellColor: number | null,
   config: BoardConfig,
+  hasOpponentCursor = false,
 ) {
   const row = Math.floor(index / config.size);
   const col = index % config.size;
@@ -8508,6 +8668,8 @@ function cellClassName(
             ? 'bg-[var(--cell-search)]'
           : sameValue
             ? 'bg-[var(--cell-same)]'
+          : hasOpponentCursor
+            ? 'bg-[color-mix(in_srgb,var(--accent)_12%,var(--cell-bg))]'
           : cellColor !== null
             ? 'bg-[var(--cell-user-color)]'
           : sameRow || sameCol
@@ -8519,6 +8681,23 @@ function cellClassName(
         ? 'text-[var(--given)]'
         : 'text-[var(--entry)]',
   ].join(' ');
+}
+
+function opponentCursorLabel(names: string[]) {
+  if (names.length === 0) return '';
+  const initials = names.map((name) => playerInitials(name));
+  if (initials.length <= 2) return initials.join('/');
+  return `${initials.slice(0, 2).join('/')}+${initials.length - 2}`;
+}
+
+function playerInitials(name: string) {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
 }
 
 function filterGameRecords(records: GameRecord[], query: string) {
