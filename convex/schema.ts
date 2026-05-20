@@ -64,12 +64,15 @@ export default defineSchema({
     playMode: v.optional(v.string()),
     puzzle: v.string(),
     puzzleSize: v.optional(v.string()),
+    recipientAnonId: v.optional(v.string()),
+    recipientName: v.optional(v.string()),
     source: v.string(),
     status: v.union(v.literal('open'), v.literal('closed')),
     title: v.string(),
   })
     .index('by_challengeId', ['challengeId'])
-    .index('by_creatorAnonId', ['creatorAnonId']),
+    .index('by_creatorAnonId', ['creatorAnonId'])
+    .index('by_recipientAnonId', ['recipientAnonId']),
 
   challengeAttempts: defineTable({
     anonId: v.string(),

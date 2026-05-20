@@ -1,5 +1,6 @@
 import { mutationGeneric as mutation, queryGeneric as query } from 'convex/server';
 import { v } from 'convex/values';
+import type { MutationCtx } from './_generated/server';
 
 export const createRace = mutation({
   args: {
@@ -11,6 +12,8 @@ export const createRace = mutation({
     playMode: v.optional(v.string()),
     puzzle: v.string(),
     puzzleSize: v.optional(v.string()),
+    recipientAnonId: v.optional(v.string()),
+    recipientName: v.optional(v.string()),
     source: v.string(),
   },
   handler: async (ctx, args) => {
@@ -29,6 +32,18 @@ export const createRace = mutation({
     const difficulty = args.difficulty
       ? cleanText(args.difficulty, 24)
       : undefined;
+    const recipientAnonId = cleanOptionalId(args.recipientAnonId);
+    const recipientName = args.recipientName
+      ? cleanName(args.recipientName)
+      : undefined;
+    if (recipientAnonId) {
+      const isFriend = await acceptedFriendshipExists(
+        ctx,
+        args.creatorAnonId,
+        recipientAnonId,
+      );
+      if (!isFriend) throw new Error('Direct challenges can only be sent to friends.');
+    }
     const titleParts = [puzzleSize, playMode, difficulty].filter(Boolean);
 
     await ctx.db.insert('challenges', {
@@ -41,6 +56,8 @@ export const createRace = mutation({
       playMode,
       puzzle: cleanPuzzle(args.puzzle, puzzleSize),
       puzzleSize,
+      recipientAnonId,
+      recipientName,
       source,
       status: 'open',
       title: `${challengeKind === 'streak' ? 'Streak battle' : 'Race'} ${titleParts.join(' / ')}`,
@@ -80,6 +97,8 @@ export const getRace = query({
       playMode: challenge.playMode ?? 'classic',
       puzzle: challenge.puzzle,
       puzzleSize: challenge.puzzleSize ?? '9x9',
+      recipientAnonId: challenge.recipientAnonId,
+      recipientName: challenge.recipientName,
       source: challenge.source,
       status: challenge.status,
       title: challenge.title,
@@ -106,10 +125,14 @@ export const listMine = query({
     anonId: v.string(),
   },
   handler: async (ctx, args) => {
-    const [created, attemptRows] = await Promise.all([
+    const [created, received, attemptRows] = await Promise.all([
       ctx.db
         .query('challenges')
         .withIndex('by_creatorAnonId', (q) => q.eq('creatorAnonId', args.anonId))
+        .collect(),
+      ctx.db
+        .query('challenges')
+        .withIndex('by_recipientAnonId', (q) => q.eq('recipientAnonId', args.anonId))
         .collect(),
       ctx.db
         .query('challengeAttempts')
@@ -117,16 +140,19 @@ export const listMine = query({
         .order('desc')
         .collect(),
     ]);
+    const visibleChallenges = [...created, ...received];
     const createdIds = new Set(created.map((challenge) => challenge.challengeId));
+    const receivedIds = new Set(received.map((challenge) => challenge.challengeId));
     const challengeIds = new Set([
       ...createdIds,
+      ...receivedIds,
       ...attemptRows.map((attempt) => attempt.challengeId),
     ]);
 
     const rows = await Promise.all(
       [...challengeIds].map(async (challengeId) => {
         const challenge =
-          created.find((item) => item.challengeId === challengeId) ??
+          visibleChallenges.find((item) => item.challengeId === challengeId) ??
           (await ctx.db
             .query('challenges')
             .withIndex('by_challengeId', (q) => q.eq('challengeId', challengeId))
@@ -164,9 +190,12 @@ export const listMine = query({
           creatorName: challenge.creatorName,
           difficulty: challenge.difficulty,
           isCreator: challenge.creatorAnonId === args.anonId,
+          isRecipient: challenge.recipientAnonId === args.anonId,
           myAttempt: mine,
           playMode: challenge.playMode ?? 'classic',
           puzzleSize: challenge.puzzleSize ?? '9x9',
+          recipientAnonId: challenge.recipientAnonId,
+          recipientName: challenge.recipientName,
           source: challenge.source,
           status: challenge.status,
           title: challenge.title,
@@ -322,6 +351,11 @@ function cleanChallengeId(value: string) {
   return value.replace(/[^a-z0-9-]/gi, '').slice(0, 48) || 'race';
 }
 
+function cleanOptionalId(value: string | undefined) {
+  const cleaned = value?.replace(/[^a-z0-9-]/gi, '').slice(0, 80);
+  return cleaned || undefined;
+}
+
 function cleanChallengeKind(value: string | undefined) {
   return value === 'streak' ? 'streak' : 'race';
 }
@@ -347,4 +381,34 @@ function cleanPlayMode(value: string | undefined) {
   return value === 'speedrun' || value === 'zen' || value === 'no-check'
     ? value
     : 'classic';
+}
+
+async function acceptedFriendshipExists(
+  ctx: MutationCtx,
+  anonId: string,
+  friendAnonId: string,
+) {
+  const outgoing = await ctx.db
+    .query('friendships')
+    .withIndex('by_requesterAnonId', (q) => q.eq('requesterAnonId', anonId))
+    .collect();
+  if (
+    outgoing.some(
+      (friendship) =>
+        friendship.recipientAnonId === friendAnonId &&
+        friendship.status === 'accepted',
+    )
+  ) {
+    return true;
+  }
+
+  const incoming = await ctx.db
+    .query('friendships')
+    .withIndex('by_recipientAnonId', (q) => q.eq('recipientAnonId', anonId))
+    .collect();
+  return incoming.some(
+    (friendship) =>
+      friendship.requesterAnonId === friendAnonId &&
+      friendship.status === 'accepted',
+  );
 }

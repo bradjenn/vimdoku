@@ -6,6 +6,7 @@ import type { FunctionReference } from 'convex/server';
 import { getOrCreateGuestId } from './identity';
 
 export type PublicProfile = {
+  anonId: string;
   createdAt: string;
   friendCode: string;
   friends: PublicProfileFriend[];
@@ -160,10 +161,13 @@ export function PublicProfilePanel({
             />
             <button
               type="button"
-              className="border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)]"
+              disabled={profile.friendshipStatus !== 'accepted'}
+              className="border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--button-bg)] disabled:text-[var(--muted)]"
               onClick={() => onChallenge(profile)}
             >
-              challenge
+              {profile.friendshipStatus === 'accepted'
+                ? 'challenge'
+                : 'friend to challenge'}
             </button>
             <button
               type="button"

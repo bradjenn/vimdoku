@@ -18,6 +18,8 @@ type CreateRaceArgs = {
   playMode?: string;
   puzzle: string;
   puzzleSize?: string;
+  recipientAnonId?: string;
+  recipientName?: string;
   source: string;
 };
 
@@ -119,6 +121,8 @@ export function ChallengeBridge({
       playMode: createRequest.playMode,
       puzzle: createRequest.puzzle,
       puzzleSize: createRequest.puzzleSize,
+      recipientAnonId: createRequest.recipientAnonId,
+      recipientName: createRequest.recipientName,
       source: createRequest.source,
     })
       .then((createdId) => onCreateResult(createdId, createRequest.requestId))

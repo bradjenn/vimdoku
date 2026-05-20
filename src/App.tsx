@@ -4,6 +4,7 @@ import {
   Check,
   Eraser,
   History,
+  Home,
   ImageUp,
   Lightbulb,
   Menu,
@@ -21,6 +22,9 @@ import {
   UserRound,
 } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { useQuery } from 'convex/react';
+import { makeFunctionReference } from 'convex/server';
+import type { FunctionReference } from 'convex/server';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import Tesseract from 'tesseract.js';
@@ -129,11 +133,22 @@ type PageRoute =
 type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
 type ChallengePuzzleSource = 'daily' | 'generated' | 'current';
 type ThemeId = (typeof DARK_THEMES)[number]['id'];
+type FriendshipRow = {
+  direction: 'incoming' | 'outgoing';
+  friend: FriendSummary;
+  friendshipId: string;
+  status: 'pending' | 'accepted';
+};
 
 const THEME_KEY = 'vimdoku-theme-v1';
 const TIMER_PAUSED_GAME_KEY = 'vimdoku-paused-game-v1';
 const NEW_GAME_DIFFICULTIES: PuzzleDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
 const PUZZLE_SIZES: PuzzleSize[] = ['9x9', '6x6'];
+const listFriendsRef = makeFunctionReference<
+  'query',
+  { anonId: string },
+  FriendshipRow[]
+>('friends:list');
 
 // Single source of truth for the Space-leader menu — drives both the
 // which-key popup and the keydown resolution below.
@@ -364,6 +379,10 @@ function App() {
   const [challengeRace, setChallengeRace] = useState<ChallengeRace | null>(null);
   const [challengeStatus, setChallengeStatus] = useState('');
   const [challengeShareUrl, setChallengeShareUrl] = useState('');
+  const [challengeSetupOpen, setChallengeSetupOpen] = useState(false);
+  const [challengeRecipient, setChallengeRecipient] = useState<FriendSummary | null>(
+    null,
+  );
   const [challengeMistakes, setChallengeMistakes] = useState(0);
   const [challengeCreateRequest, setChallengeCreateRequest] =
     useState<ChallengeCreateRequest | null>(null);
@@ -420,6 +439,11 @@ function App() {
   const activeConfig = boardConfigFor(activeSize);
   const activeDigits = activeConfig.digits;
   const activeCellCount = activeConfig.cellCount;
+  const {
+    flashStyle: battleImpactFlashStyle,
+    impactStyle: battleImpactStyle,
+    triggerImpact: triggerBattleImpact,
+  } = useScreenImpact();
   const policy = useMemo(() => modePolicy(activeMode), [activeMode]);
   const { notesEnabled, hintsEnabled, pauseEnabled, timerEnabled, scoreEnabled } = policy;
 
@@ -527,6 +551,14 @@ function App() {
     void navigate({ to: '/new' });
     setStatusLine('Opened new game page.');
   }, [activePage, navigate, routeModal]);
+
+  const openChallengeSetup = useCallback((friend?: FriendSummary | null) => {
+    setChallengeRecipient(friend ?? null);
+    setChallengeSetupOpen(true);
+    setChallengeStatus(
+      friend ? `Creating direct challenge for ${friend.name}.` : '',
+    );
+  }, []);
 
   const closeMenuModal = useCallback(() => {
     setMenuModal(null);
@@ -902,6 +934,7 @@ function App() {
       ) {
         setChallengeMistakes((count) => count + 1);
         setStatusLine('Streak battle: bad entry recorded.');
+        triggerBattleImpact(12, 0.34, 0.78);
       }
       setGrid((current) => {
         const next = [...current];
@@ -922,6 +955,7 @@ function App() {
       resumeTimerFromActivity,
       selected,
       solved,
+      triggerBattleImpact,
     ],
   );
 
@@ -1468,11 +1502,14 @@ function App() {
       playMode: raceTemplate.playMode,
       puzzle: raceTemplate.puzzle,
       puzzleSize: raceTemplate.puzzleSize,
+      recipientAnonId: challengeRecipient?.anonId,
+      recipientName: challengeRecipient?.name,
       requestId: `${challengeId}-${Date.now().toString(36)}`,
       source: raceTemplate.source,
     };
     setChallengeCreateRequest(request);
     setChallengeStatus(`Creating ${challengeKindLabel(nextChallengeKind)} link...`);
+    setChallengeSetupOpen(false);
     closeMenuModal();
     void navigate({ to: '/challenge/$challengeId', params: { challengeId } });
   }, [
@@ -1480,6 +1517,7 @@ function App() {
     activeMode,
     activeSize,
     challengeKind,
+    challengeRecipient,
     closeMenuModal,
     navigate,
     playerName,
@@ -1529,9 +1567,13 @@ function App() {
         current?.requestId === requestId ? null : current,
       );
       copyChallengeLink(challengeId);
-      setChallengeStatus('Challenge link copied. Send it to a friend.');
+      setChallengeStatus(
+        challengeRecipient
+          ? `Direct challenge sent to ${challengeRecipient.name}. Link copied too.`
+          : 'Challenge link copied. Send it to a friend.',
+      );
     },
-    [copyChallengeLink],
+    [challengeRecipient, copyChallengeLink],
   );
 
   const startChallengeRace = useCallback((challenge: ChallengeRace) => {
@@ -2410,24 +2452,8 @@ function App() {
               shareUrl={challengeShareUrl}
               status={challengeStatus}
             />
-          ) : (
-            <div className="grid gap-3 xl:grid-cols-[420px_minmax(0,1fr)]">
-                <ChallengeSetupPanel
-                  currentGame={activeGame}
-                  difficulty={challengeDifficulty}
-                  kind={challengeKind}
-                  mode={challengeMode}
-                  onCreate={createConfiguredRaceChallenge}
-                  onCreateCurrent={() => createRaceChallenge()}
-                  onDifficultyChange={setChallengeDifficulty}
-                  onKindChange={setChallengeKind}
-                  onModeChange={setChallengeMode}
-                onSizeChange={setChallengeSize}
-                onSourceChange={setChallengeSource}
-                puzzleSize={challengeSize}
-                source={challengeSource}
-                status={challengeStatus}
-              />
+              ) : (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
               {hasConvexBackend() ? (
                 <ChallengeHistoryPanel
                   onCopyLink={copyChallengeLink}
@@ -2449,6 +2475,29 @@ function App() {
                   </p>
                 </section>
               )}
+              <section className="border border-[var(--border)] bg-[var(--input-bg)]">
+                <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+                  [challenge-actions]
+                </header>
+                <div className="space-y-3 p-3">
+                  <button
+                    type="button"
+                    className="w-full border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] transition active:translate-y-px"
+                    onClick={() => openChallengeSetup()}
+                  >
+                    new challenge
+                  </button>
+                  <p className="text-sm leading-relaxed text-[var(--muted)]">
+                    Create a race or streak battle link, then send it to a friend.
+                    Results collect here.
+                  </p>
+                  {challengeStatus && (
+                    <p className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--accent)]">
+                      {challengeStatus}
+                    </p>
+                  )}
+                </div>
+              </section>
             </div>
           )}
         </AppPageFrame>
@@ -2469,8 +2518,12 @@ function App() {
                 friendCode={publicFriendCode}
                 onBack={goToProfile}
                 onChallenge={(profile) => {
-                  setChallengeStatus(`Create a challenge link for ${profile.name}.`);
                   navigateToPage('challenge');
+                  openChallengeSetup({
+                    anonId: profile.anonId,
+                    friendCode: profile.friendCode,
+                    name: profile.name,
+                  });
                 }}
               />
             ) : (
@@ -2483,8 +2536,8 @@ function App() {
               guestId={guestId}
               localStats={localProfileStats}
               onChallengeFriend={(friend) => {
-                setChallengeStatus(`Create a challenge link for ${friend.name}.`);
                 navigateToPage('challenge');
+                openChallengeSetup(friend);
               }}
               onNameChange={updatePlayerName}
               onViewFriendProfile={(friend) => openPublicProfile(friend.friendCode)}
@@ -2510,9 +2563,14 @@ function App() {
         >
           <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2.5 lg:hidden">
             <div className="flex min-w-0 items-baseline gap-2 font-mono">
-              <span className="shrink-0 text-sm font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
+              <button
+                type="button"
+                aria-label="Home"
+                onClick={goToDashboard}
+                className="shrink-0 text-sm font-bold uppercase tracking-[0.16em] text-[var(--accent)] transition hover:brightness-125"
+              >
                 vimdoku
-              </span>
+              </button>
               <span className="truncate text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
                 {labelCell(selected, activeSize)} · {completion}/{activeCellCount}
               </span>
@@ -2543,7 +2601,15 @@ function App() {
             </div>
           </header>
 
-          <div className="grid min-h-0 place-items-center px-3 py-3 sm:px-5 lg:flex-1 lg:px-8 lg:py-4">
+          <div
+            className="relative grid min-h-0 place-items-center overflow-hidden px-3 py-3 sm:px-5 lg:flex-1 lg:px-8 lg:py-4"
+            style={battleImpactStyle}
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-10 bg-[var(--danger)] mix-blend-screen"
+              style={battleImpactFlashStyle}
+            />
             <div className="w-full max-w-[min(76vh,calc(100vh-176px),820px,100%)]">
               <section
                 className="board-settle grid aspect-square border-4 border-[var(--grid-line)] bg-[var(--grid-line)]"
@@ -2647,12 +2713,19 @@ function App() {
         >
           <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto p-3 lg:w-[340px]">
           <section className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3">
-            <div>
+            <button
+              type="button"
+              aria-label="Home"
+              onClick={goToDashboard}
+              className="group text-left transition"
+            >
               <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
                 Vim-first sudoku
               </p>
-              <h1 className="text-2xl font-black tracking-normal">Vimdoku</h1>
-            </div>
+              <h1 className="text-2xl font-black tracking-normal group-hover:text-[var(--accent)]">
+                Vimdoku
+              </h1>
+            </button>
             <button
               type="button"
               aria-label="Open menu"
@@ -2987,6 +3060,35 @@ function App() {
         </div>
       )}
 
+      {challengeSetupOpen && (
+        <TuiModal
+          footer="esc closes · create copies the link"
+          onClose={() => setChallengeSetupOpen(false)}
+          title="new-challenge"
+          wide
+        >
+          <ChallengeSetupPanel
+            currentGame={activeGame}
+            difficulty={challengeDifficulty}
+            kind={challengeKind}
+            mode={challengeMode}
+            onCreate={createConfiguredRaceChallenge}
+            onCreateCurrent={() => createRaceChallenge()}
+            onDifficultyChange={setChallengeDifficulty}
+            onKindChange={setChallengeKind}
+            onModeChange={setChallengeMode}
+            onRecipientChange={setChallengeRecipient}
+            onRecipientClear={() => setChallengeRecipient(null)}
+            onSizeChange={setChallengeSize}
+            onSourceChange={setChallengeSource}
+            puzzleSize={challengeSize}
+            recipient={challengeRecipient}
+            source={challengeSource}
+            status={challengeStatus}
+          />
+        </TuiModal>
+      )}
+
       {activeMenuModal && (
         <TuiModal
           title={modalTitle(activeMenuModal)}
@@ -2995,6 +3097,15 @@ function App() {
         >
           {activeMenuModal === 'menu' && (
             <div className="flex flex-col gap-0.5">
+              <MenuItem
+                label="home"
+                onClick={() => {
+                  closeMenuModal();
+                  goToDashboard();
+                }}
+              >
+                <Home size={15} />
+              </MenuItem>
               <MenuItem label="new game" onClick={openNewGame}>
                 <Plus size={15} />
               </MenuItem>
@@ -3004,7 +3115,13 @@ function App() {
               <MenuItem label="leaderboards" onClick={openLeaderboards}>
                 <Trophy size={15} />
               </MenuItem>
-              <MenuItem label="challenge" onClick={createRaceChallenge}>
+              <MenuItem
+                label="challenges"
+                onClick={() => {
+                  closeMenuModal();
+                  void navigate({ to: '/challenge' });
+                }}
+              >
                 <Swords size={15} />
               </MenuItem>
               <MenuItem label="profile" onClick={goToProfile}>
@@ -4052,7 +4169,7 @@ function AppPageFrame({
     ['play', 'play'],
     ['games', 'puzzles'],
     ['leaderboards', 'scores'],
-    ['challenge', 'race'],
+    ['challenge', 'challenge'],
     ['profile', 'profile'],
   ];
 
@@ -4710,9 +4827,12 @@ function ChallengeSetupPanel({
   onDifficultyChange,
   onKindChange,
   onModeChange,
+  onRecipientChange,
+  onRecipientClear,
   onSizeChange,
   onSourceChange,
   puzzleSize,
+  recipient,
   source,
   status,
 }: {
@@ -4725,9 +4845,12 @@ function ChallengeSetupPanel({
   onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
   onKindChange: (kind: ChallengeKind) => void;
   onModeChange: (mode: PlayMode) => void;
+  onRecipientChange: (friend: FriendSummary | null) => void;
+  onRecipientClear: () => void;
   onSizeChange: (puzzleSize: PuzzleSize) => void;
   onSourceChange: (source: ChallengePuzzleSource) => void;
   puzzleSize: PuzzleSize;
+  recipient: FriendSummary | null;
   source: ChallengePuzzleSource;
   status: string;
 }) {
@@ -4762,17 +4885,24 @@ function ChallengeSetupPanel({
   ];
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="flex flex-col">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section className="border border-[var(--border)] bg-[var(--input-bg)]">
-        <header className="border-b border-[var(--border)] bg-[var(--status-bg)] p-3">
-          <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
-            challenge setup
-          </p>
-          <h2 className="mt-1 font-mono text-xl font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
-            create a challenge link
-          </h2>
-        </header>
-        <div className="space-y-4 p-3">
+        <div className="space-y-3 p-3">
+          {hasConvexBackend() ? (
+            <ChallengeTargetPicker
+              onRecipientChange={onRecipientChange}
+              onRecipientClear={onRecipientClear}
+              recipient={recipient}
+            />
+          ) : (
+            <NewGameField label="target">
+              <div className="border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+                open link only · friend targets need Convex
+              </div>
+            </NewGameField>
+          )}
+
           <NewGameField label="challenge mode">
             <div className="grid gap-2 md:grid-cols-2">
               {challengeKinds.map(([kindId, label, description]) => (
@@ -4911,36 +5041,138 @@ function ChallengeSetupPanel({
             grid={previewGrid}
             givens={previewGrid.map((value) => value !== 0)}
           />
-          <div className="grid gap-2">
-          <ChallengeMeta label="source" value={source} />
-          <ChallengeMeta label="mode" value={challengeKindLabel(kind)} />
-          <ChallengeMeta label="grid" value={activeSize} />
-            <ChallengeMeta label="rules" value={modeLabel(activeMode)} />
-            <ChallengeMeta label="difficulty" value={activeDifficulty} />
-            <ChallengeMeta
-              label="filled"
-              value={`${previewGrid.filter(Boolean).length}/${boardConfigFor(activeSize).cellCount}`}
-            />
-          </div>
-          <button
-            type="button"
-            className="w-full border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)]"
-            onClick={onCreate}
-          >
-            create {challengeKindLabel(kind)} link
-          </button>
-          {source !== 'current' && (
-            <button
-              type="button"
-              className="w-full border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]"
-              onClick={onCreateCurrent}
-            >
-              challenge current puzzle
-            </button>
-          )}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
+            <span className="font-bold text-[var(--accent)]">
+              {challengeKindLabel(kind)}
+            </span>
+            {recipient && (
+              <>
+                <span className="text-[var(--border)]">·</span>
+                <span className="text-[var(--app-text)]">{recipient.name}</span>
+              </>
+            )}
+            <span className="text-[var(--border)]">·</span>
+            <span>{source}</span>
+            <span className="text-[var(--border)]">·</span>
+            <span>{activeSize}</span>
+            <span className="text-[var(--border)]">·</span>
+            <span>{modeLabel(activeMode)}</span>
+            <span className="text-[var(--border)]">·</span>
+            <span>{activeDifficulty}</span>
+            <span className="text-[var(--border)]">·</span>
+            <span className="text-[var(--app-text)]">
+              {previewGrid.filter(Boolean).length}/
+              {boardConfigFor(activeSize).cellCount}
+            </span>
+            <span>filled</span>
+          </p>
         </div>
       </section>
+      </div>
+
+      <div className="sticky bottom-0 z-10 -mx-3 -mb-3 mt-3 flex flex-col gap-2 border-t border-[var(--border)] bg-[var(--status-bg)] p-3 sm:flex-row">
+        <button
+          type="button"
+          className="border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] sm:flex-1"
+          onClick={onCreate}
+        >
+          {recipient
+            ? `send ${challengeKindLabel(kind)}`
+            : `create ${challengeKindLabel(kind)} link`}
+        </button>
+        {source !== 'current' && (
+          <button
+            type="button"
+            className="border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)] sm:flex-1"
+            onClick={onCreateCurrent}
+          >
+            challenge current puzzle
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ChallengeTargetPicker({
+  onRecipientChange,
+  onRecipientClear,
+  recipient,
+}: {
+  onRecipientChange: (friend: FriendSummary | null) => void;
+  onRecipientClear: () => void;
+  recipient: FriendSummary | null;
+}) {
+  const anonId = useMemo(() => getOrCreateGuestId(), []);
+  const rows = useQuery(listFriendsRef as FunctionReference<'query'>, {
+    anonId,
+  }) as FriendshipRow[] | undefined;
+  const friends = rows?.filter((row) => row.status === 'accepted') ?? [];
+
+  return (
+    <NewGameField label="target">
+      <div className="grid gap-2">
+        <button
+          type="button"
+          className={`border p-3 text-left font-mono transition ${
+            recipient === null
+              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+              : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
+          }`}
+          onClick={onRecipientClear}
+        >
+          <span className="block text-xs font-black uppercase tracking-[0.16em]">
+            open challenge link
+          </span>
+          <span
+            className={`mt-2 block text-xs leading-relaxed ${
+              recipient === null ? 'text-[var(--app-bg)] opacity-80' : 'text-[var(--muted)]'
+            }`}
+          >
+            anyone with the link can join
+          </span>
+        </button>
+
+        {rows === undefined ? (
+          <div className="border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+            loading friends...
+          </div>
+        ) : friends.length === 0 ? (
+          <div className="border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--muted)]">
+            Add a friend from your profile before sending a direct challenge.
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {friends.map((row) => {
+              const selected = recipient?.anonId === row.friend.anonId;
+              return (
+                <button
+                  type="button"
+                  key={row.friend.anonId}
+                  className={`border p-3 text-left font-mono transition ${
+                    selected
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
+                  }`}
+                  onClick={() => onRecipientChange(row.friend)}
+                >
+                  <span className="block truncate text-xs font-black uppercase tracking-[0.16em]">
+                    {row.friend.name}
+                  </span>
+                  <span
+                    className={`mt-2 block text-[0.65rem] uppercase tracking-[0.14em] ${
+                      selected ? 'text-[var(--app-bg)] opacity-80' : 'text-[var(--muted)]'
+                    }`}
+                  >
+                    {row.friend.friendCode || 'friend'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </NewGameField>
   );
 }
 
@@ -5054,6 +5286,10 @@ function ChallengeRacePanel({
           <div className="min-w-0 space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <ChallengeMeta label="created by" value={challenge.creatorName} />
+              <ChallengeMeta
+                label="target"
+                value={challenge.recipientName ?? 'open link'}
+              />
               <ChallengeMeta label="challenge" value={modeName} />
               <ChallengeMeta label="grid" value={challenge.puzzleSize} />
               <ChallengeMeta label="rules" value={modeLabel(challenge.playMode)} />
@@ -5650,6 +5886,90 @@ function StatusLine({
       </div>
     </div>
   );
+}
+
+function useScreenImpact() {
+  const [frame, setFrame] = useState({ flash: 0, x: 0, y: 0 });
+  const animationRef = useRef<number | null>(null);
+  const decayRef = useRef(0.8);
+  const flashRef = useRef(0);
+  const intensityRef = useRef(0);
+  const reducedMotionRef = useRef(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotionRef.current = media.matches;
+
+    function onChange() {
+      reducedMotionRef.current = media.matches;
+    }
+
+    media.addEventListener('change', onChange);
+    return () => {
+      media.removeEventListener('change', onChange);
+      if (animationRef.current !== null) {
+        window.cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+
+  const tick = useCallback(() => {
+    intensityRef.current *= decayRef.current;
+    flashRef.current *= 0.84;
+
+    if (intensityRef.current < 0.35) intensityRef.current = 0;
+    if (flashRef.current < 0.015) flashRef.current = 0;
+
+    if (intensityRef.current === 0 && flashRef.current === 0) {
+      animationRef.current = null;
+      setFrame({ flash: 0, x: 0, y: 0 });
+      return;
+    }
+
+    const intensity = intensityRef.current;
+    setFrame({
+      flash: flashRef.current,
+      x: (Math.random() - 0.5) * intensity * 2,
+      y: (Math.random() - 0.5) * intensity * 2,
+    });
+    animationRef.current = window.requestAnimationFrame(tick);
+  }, []);
+
+  const triggerImpact = useCallback(
+    (intensity = 8, flash = 0.25, decay = 0.82) => {
+      if (reducedMotionRef.current) return;
+
+      intensityRef.current = Math.max(intensityRef.current, intensity);
+      flashRef.current = Math.max(flashRef.current, flash);
+      decayRef.current = decay;
+
+      if (animationRef.current === null) {
+        animationRef.current = window.requestAnimationFrame(tick);
+      }
+    },
+    [tick],
+  );
+
+  const impactStyle = useMemo<CSSProperties>(
+    () => ({
+      transform:
+        frame.x === 0 && frame.y === 0
+          ? undefined
+          : `translate3d(${frame.x.toFixed(2)}px, ${frame.y.toFixed(2)}px, 0)`,
+      willChange: frame.x === 0 && frame.y === 0 ? undefined : 'transform',
+    }),
+    [frame.x, frame.y],
+  );
+
+  const flashStyle = useMemo<CSSProperties>(
+    () => ({
+      opacity: frame.flash,
+      transition: frame.flash === 0 ? 'opacity 120ms ease-out' : undefined,
+    }),
+    [frame.flash],
+  );
+
+  return { flashStyle, impactStyle, triggerImpact };
 }
 
 function Wedge({

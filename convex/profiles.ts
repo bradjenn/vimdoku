@@ -97,6 +97,7 @@ export const publicByFriendCode = query({
     );
 
     return {
+      anonId: profile.anonId,
       createdAt: profile.createdAt,
       friendCode: profile.friendCode ?? friendCode,
       friends: publicFriends.filter((friend) => friend !== null),

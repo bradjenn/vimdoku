@@ -27,6 +27,8 @@ export type ChallengeRace = {
   playMode: PlayMode;
   puzzle: string;
   puzzleSize: PuzzleSize;
+  recipientAnonId?: string;
+  recipientName?: string;
   source: string;
   status: 'open' | 'closed';
   title: string;
@@ -40,6 +42,8 @@ export type ChallengeCreateRequest = {
   playMode: PlayMode;
   puzzle: string;
   puzzleSize: PuzzleSize;
+  recipientAnonId?: string;
+  recipientName?: string;
   requestId: string;
   source: string;
 };

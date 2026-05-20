@@ -28,9 +28,12 @@ type ChallengeSummary = {
   creatorName: string;
   difficulty?: PuzzleDifficulty | 'custom';
   isCreator: boolean;
+  isRecipient: boolean;
   myAttempt?: ChallengeAttemptSummary;
   playMode: PlayMode;
   puzzleSize: PuzzleSize;
+  recipientAnonId?: string;
+  recipientName?: string;
   source: string;
   status: 'open' | 'closed';
   title: string;
@@ -121,7 +124,17 @@ export function ChallengeHistoryPanel({
               <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 <ChallengeFact
                   label="role"
-                  value={challenge.isCreator ? 'creator' : 'racer'}
+                  value={
+                    challenge.isRecipient
+                      ? 'challenged'
+                      : challenge.isCreator
+                        ? 'creator'
+                        : 'racer'
+                  }
+                />
+                <ChallengeFact
+                  label="opponent"
+                  value={challenge.recipientName ?? 'open link'}
                 />
                 <ChallengeFact
                   label="type"
