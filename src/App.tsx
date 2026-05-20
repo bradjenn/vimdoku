@@ -2329,12 +2329,7 @@ function App() {
       )}
 
       {activePage === 'games' && (
-        <AppPageFrame
-          activePage="games"
-          onNavigate={navigateToPage}
-          subtitle="archive · filter · resume"
-          title="Puzzle Log"
-        >
+        <AppPageFrame title="puzzle log">
           <GameLibrary
             activeGameId={activeGame.id}
             completedCount={completedGames.length}
@@ -2352,12 +2347,7 @@ function App() {
       )}
 
       {activePage === 'new' && (
-        <AppPageFrame
-          activePage="new"
-          onNavigate={navigateToPage}
-          subtitle="daily · generated · import"
-          title="New Game"
-        >
+        <AppPageFrame title="new game">
           <NewGamePanel
             dailyRecord={findDailyRecord(
               gameFinderRecords,
@@ -2402,16 +2392,7 @@ function App() {
       )}
 
       {activePage === 'leaderboards' && (
-        <AppPageFrame
-          activePage="leaderboards"
-          onNavigate={navigateToPage}
-          subtitle={
-            hasConvexBackend()
-              ? 'live Convex leaderboard'
-              : 'local best times · global endpoint optional'
-          }
-          title="Leaderboards"
-        >
+        <AppPageFrame title="leaderboards">
           <Leaderboards
             globalScores={globalScores}
             localScores={localLeaderboard}
@@ -2425,16 +2406,7 @@ function App() {
       )}
 
       {activePage === 'challenge' && (
-        <AppPageFrame
-          activePage="challenge"
-          onNavigate={navigateToPage}
-          subtitle={
-            routeChallengeId
-              ? 'share link · same puzzle · compare results'
-              : 'choose rules · create link · challenge friends'
-          }
-          title="Challenges"
-        >
+        <AppPageFrame title="challenge">
           {routeChallengeId ? (
             <ChallengeRacePanel
               activeChallengeId={activeChallengeId}
@@ -2505,12 +2477,7 @@ function App() {
 
       {activePage === 'profile' && (
         <AppPageFrame
-          activePage="profile"
-          onNavigate={navigateToPage}
-          subtitle={
-            publicFriendCode ? 'public stats · recent solves' : 'identity · progress · sync'
-          }
-          title={publicFriendCode ? 'Player Profile' : 'Profile'}
+          title={publicFriendCode ? 'player profile' : 'profile'}
         >
           {publicFriendCode ? (
             hasConvexBackend() ? (
@@ -4151,56 +4118,72 @@ function DashboardPage({
   );
 }
 
-function AppPageFrame({
-  activePage,
-  children,
-  onNavigate,
-  subtitle,
+// One canonical header for every page: brand (→ home) + burger.
+// Pages can inject contextual buttons via `extraActions`.
+function AppShellHeader({
+  extraActions,
+  onHome,
+  onMenu,
   title,
 }: {
-  activePage: PageRoute;
-  children: ReactNode;
-  onNavigate: (page: PageRoute) => void;
-  subtitle: string;
-  title: string;
+  extraActions?: ReactNode;
+  onHome: () => void;
+  onMenu: () => void;
+  title?: string;
 }) {
-  const navItems: [PageRoute, string][] = [
-    ['dashboard', 'home'],
-    ['play', 'play'],
-    ['games', 'puzzles'],
-    ['leaderboards', 'scores'],
-    ['challenge', 'challenge'],
-    ['profile', 'profile'],
-  ];
+  return (
+    <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+      <div className="flex min-w-0 items-baseline gap-2 font-mono">
+        <button
+          type="button"
+          onClick={onHome}
+          aria-label="Home"
+          className="shrink-0 text-sm font-bold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:brightness-125"
+        >
+          vimdoku
+        </button>
+        {title && (
+          <>
+            <span className="shrink-0 text-[var(--border)]">/</span>
+            <span className="truncate text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+              {title}
+            </span>
+          </>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {extraActions}
+        <button
+          type="button"
+          aria-label="Open menu"
+          onClick={onMenu}
+          className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] transition hover:border-[var(--accent)] active:translate-y-px"
+        >
+          <Menu size={18} />
+        </button>
+      </div>
+    </header>
+  );
+}
 
+function AppPageFrame({
+  children,
+  extraActions,
+  title,
+}: {
+  children: ReactNode;
+  extraActions?: ReactNode;
+  title?: string;
+}) {
+  const navigate = useNavigate();
   return (
     <section className="flex min-h-screen flex-col bg-[var(--workspace-bg)] font-mono lg:h-screen">
-      <header className="grid h-auto shrink-0 gap-2 border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 md:h-11 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-4">
-        <div className="flex min-w-0 items-baseline gap-3">
-          <h1 className="truncate text-sm font-black uppercase tracking-[0.18em] text-[var(--app-text)]">
-            {title}
-          </h1>
-          <span className="hidden truncate text-xs uppercase tracking-[0.14em] text-[var(--muted)] sm:inline">
-            {subtitle}
-          </span>
-        </div>
-        <nav className="flex min-w-0 gap-1 overflow-x-auto">
-          {navItems.map(([page, label]) => (
-            <button
-              type="button"
-              key={page}
-              className={`shrink-0 border px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.14em] transition ${
-                activePage === page
-                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                  : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]'
-              }`}
-              onClick={() => onNavigate(page)}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-      </header>
+      <AppShellHeader
+        extraActions={extraActions}
+        onHome={() => void navigate({ to: '/' })}
+        onMenu={() => void navigate({ to: '/menu' })}
+        title={title}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
         <div className="mx-auto w-full max-w-6xl">{children}</div>
       </div>
