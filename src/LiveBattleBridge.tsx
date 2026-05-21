@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { makeFunctionReference } from 'convex/server'
 import type { FunctionReference } from 'convex/server'
-import { getOrCreateGuestId } from './identity'
 import type {
   LiveBattleCreateRequest,
   LiveBattleRoom,
@@ -82,6 +81,7 @@ const claimTimeoutRef = makeFunctionReference<
 
 export function LiveBattleBridge({
   activeRoomId,
+  anonId,
   createRequest,
   currentGrid,
   currentMistakes,
@@ -96,6 +96,7 @@ export function LiveBattleBridge({
   turnRequest,
 }: {
   activeRoomId: string | null
+  anonId: string
   createRequest: LiveBattleCreateRequest | null
   currentGrid: string
   currentMistakes: number
@@ -109,7 +110,6 @@ export function LiveBattleBridge({
   selectedCell: number
   turnRequest: LiveBattleTurnRequest | null
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), [])
   const handledCreateRequest = useRef<string | null>(null)
   const handledTurnRequest = useRef<string | null>(null)
   const room = useQuery(

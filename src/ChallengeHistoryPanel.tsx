@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { makeFunctionReference } from 'convex/server'
 import type { FunctionReference } from 'convex/server'
-import { getOrCreateGuestId } from './identity'
 import { challengeKindLabel, type ChallengeKind } from './challenges'
 import { modeLabel, type PlayMode } from './playModes'
 import type { PuzzleDifficulty, PuzzleSize } from './sudoku'
@@ -40,6 +39,37 @@ type ChallengeSummary = {
   updatedAt: string
 }
 
+type LiveBattlePresenceSummary = {
+  anonId: string
+  completion: number
+  elapsedMs: number
+  lastSeenAt: number
+  lives?: number
+  mistakes: number
+  player: string
+  recordId?: string
+  selectedCell?: number
+  status: 'online' | 'ready' | 'solving' | 'finished'
+  updatedAt: string
+}
+
+type LiveBattleResultSummary = {
+  battleKind: 'race' | 'turns'
+  createdAt: string
+  creatorName: string
+  difficulty?: PuzzleDifficulty | 'custom'
+  playMode: PlayMode
+  presence: LiveBattlePresenceSummary[]
+  puzzleSize: PuzzleSize
+  roomId: string
+  source: string
+  status: 'finished'
+  title: string
+  updatedAt: string
+  variantId?: string
+  winnerAnonId?: string
+}
+
 const listMineRef = makeFunctionReference<
   'query',
   { anonId: string },
@@ -52,16 +82,23 @@ const listResultsRef = makeFunctionReference<
   ChallengeSummary[]
 >('challenges:listResults')
 
+const listLiveResultsRef = makeFunctionReference<
+  'query',
+  { anonId: string },
+  LiveBattleResultSummary[]
+>('liveBattles:listResults')
+
 export function ChallengeHistoryPanel({
+  anonId,
   onCopyLink,
   onOpenChallenge,
   onOpenResults,
 }: {
+  anonId: string
   onCopyLink: (challengeId: string) => void
   onOpenChallenge: (challengeId: string) => void
   onOpenResults: () => void
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), [])
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const challenges = useQuery(listMineRef as FunctionReference<'query'>, {
     anonId,
@@ -176,22 +213,32 @@ export function ChallengeHistoryPanel({
 }
 
 export function ChallengeResultsView({
+  anonId,
   onCopyLink,
+  onCopyLiveBattle,
   onNewChallenge,
   onOpenChallenge,
+  onOpenLiveBattle,
 }: {
+  anonId: string
   onCopyLink: (challengeId: string) => void
+  onCopyLiveBattle: (roomId: string) => void
   onNewChallenge: () => void
   onOpenChallenge: (challengeId: string) => void
+  onOpenLiveBattle: (roomId: string) => void
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), [])
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedRoomId, setCopiedRoomId] = useState<string | null>(null)
   const challenges = useQuery(listResultsRef as FunctionReference<'query'>, {
     anonId,
   }) as ChallengeSummary[] | undefined
+  const liveBattles = useQuery(
+    listLiveResultsRef as FunctionReference<'query'>,
+    { anonId },
+  ) as LiveBattleResultSummary[] | undefined
   const results = useMemo(
-    () => summarizeChallengeResults(challenges ?? []),
-    [challenges],
+    () => summarizeChallengeResults(challenges ?? [], liveBattles ?? []),
+    [challenges, liveBattles],
   )
 
   function copyLink(challengeId: string) {
@@ -200,7 +247,13 @@ export function ChallengeResultsView({
     window.setTimeout(() => setCopiedId(null), 1600)
   }
 
-  if (challenges === undefined) {
+  function copyLiveBattle(roomId: string) {
+    onCopyLiveBattle(roomId)
+    setCopiedRoomId(roomId)
+    window.setTimeout(() => setCopiedRoomId(null), 1600)
+  }
+
+  if (challenges === undefined || liveBattles === undefined) {
     return (
       <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
         <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -210,7 +263,7 @@ export function ChallengeResultsView({
     )
   }
 
-  if (challenges.length === 0) {
+  if (challenges.length === 0 && liveBattles.length === 0) {
     return (
       <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
         <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -253,22 +306,34 @@ export function ChallengeResultsView({
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="space-y-3">
-          {results.matchCards.length === 0 ? (
+          {results.matchCards.length === 0 &&
+          results.liveBattleCards.length === 0 ? (
             <section className="border border-[var(--border)] bg-[var(--input-bg)] p-4">
               <p className="font-mono text-sm text-[var(--muted)]">
                 No completed results yet.
               </p>
             </section>
           ) : (
-            results.matchCards.map((match) => (
-              <MatchResultCard
-                copiedId={copiedId}
-                key={match.challenge.challengeId}
-                match={match}
-                onCopyLink={copyLink}
-                onOpenChallenge={onOpenChallenge}
-              />
-            ))
+            <>
+              {results.liveBattleCards.map((match) => (
+                <LiveBattleResultCard
+                  copiedId={copiedRoomId}
+                  key={match.room.roomId}
+                  match={match}
+                  onCopyLink={copyLiveBattle}
+                  onOpenBattle={onOpenLiveBattle}
+                />
+              ))}
+              {results.matchCards.map((match) => (
+                <MatchResultCard
+                  copiedId={copiedId}
+                  key={match.challenge.challengeId}
+                  match={match}
+                  onCopyLink={copyLink}
+                  onOpenChallenge={onOpenChallenge}
+                />
+              ))}
+            </>
           )}
         </section>
 
@@ -384,6 +449,60 @@ function MatchResultCard({
             }`}
           >
             {copiedId === match.challenge.challengeId ? 'copied' : 'copy'}
+          </button>
+        </div>
+      </header>
+    </article>
+  )
+}
+
+function LiveBattleResultCard({
+  copiedId,
+  match,
+  onCopyLink,
+  onOpenBattle,
+}: {
+  copiedId: string | null
+  match: LiveBattleCard
+  onCopyLink: (roomId: string) => void
+  onOpenBattle: (roomId: string) => void
+}) {
+  const winnerTime = liveBattleWinnerTime(match.room, match.winner)
+  const opponent = match.opponent
+
+  return (
+    <article className="border border-[var(--border)] bg-[var(--input-bg)]">
+      <header className="grid gap-3 bg-[var(--status-bg)] p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="min-w-0 font-mono">
+          <p className="truncate text-sm uppercase tracking-wide text-[var(--accent)]">
+            {liveBattleSummaryLabel(match.room)}
+          </p>
+          <h3 className="mt-2 truncate text-xl font-semibold text-[var(--app-text)]">
+            {match.winner.player} won in {formatDuration(winnerTime)}
+          </h3>
+          <p className="mt-1 truncate text-sm text-[var(--muted)]">
+            {opponent ? `vs ${opponent.player}` : 'opponent unavailable'} /{' '}
+            {formatDate(match.date)} / {match.room.roomId}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenBattle(match.room.roomId)}
+            className="border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2 font-mono text-xs font-black uppercase tracking-[0.14em] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            open
+          </button>
+          <button
+            type="button"
+            onClick={() => onCopyLink(match.room.roomId)}
+            className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.14em] transition ${
+              copiedId === match.room.roomId
+                ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                : 'border-[var(--border)] bg-[var(--button-bg)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+            }`}
+          >
+            {copiedId === match.room.roomId ? 'copied' : 'copy'}
           </button>
         </div>
       </header>
@@ -514,9 +633,39 @@ function challengeSummaryLabel(challenge: ChallengeSummary) {
     .join(' / ')
 }
 
+function liveBattleSummaryLabel(room: LiveBattleResultSummary) {
+  return [
+    room.battleKind === 'turns' ? 'turn battle' : 'live race',
+    room.puzzleSize,
+    modeLabel(room.playMode),
+    room.variantId && room.variantId !== 'classic' ? room.variantId : null,
+    room.difficulty,
+  ]
+    .filter(Boolean)
+    .join(' / ')
+}
+
 function matchOpponentLabel(match: MatchCard) {
   if (match.runnerUp) return `vs ${match.runnerUp.player}`
   return 'awaiting another player'
+}
+
+function liveBattleWinner(room: LiveBattleResultSummary) {
+  if (room.winnerAnonId) {
+    const winner = room.presence.find(
+      (player) => player.anonId === room.winnerAnonId,
+    )
+    if (winner) return winner
+  }
+  return room.presence.find((player) => player.status === 'finished') ?? null
+}
+
+function liveBattleWinnerTime(
+  room: LiveBattleResultSummary,
+  winner: LiveBattlePresenceSummary,
+) {
+  if (winner.elapsedMs > 0) return winner.elapsedMs
+  return Math.max(0, winner.lastSeenAt - new Date(room.createdAt).getTime())
 }
 
 type MatchCard = {
@@ -528,6 +677,13 @@ type MatchCard = {
   winner: ChallengeAttemptSummary
 }
 
+type LiveBattleCard = {
+  date: string
+  opponent: LiveBattlePresenceSummary | null
+  room: LiveBattleResultSummary
+  winner: LiveBattlePresenceSummary
+}
+
 type StandingRecord = {
   draws: number
   losses: number
@@ -536,11 +692,38 @@ type StandingRecord = {
   wins: number
 }
 
-function summarizeChallengeResults(challenges: ChallengeSummary[]) {
+function summarizeChallengeResults(
+  challenges: ChallengeSummary[],
+  liveBattles: LiveBattleResultSummary[],
+) {
   const matchCards: MatchCard[] = []
+  const liveBattleCards: LiveBattleCard[] = []
   const standings = new Map<string, StandingRecord>()
   let activeAttempts = 0
   let totalFinishes = 0
+
+  for (const room of liveBattles) {
+    const winner = liveBattleWinner(room)
+    if (!winner) continue
+    const opponent =
+      room.presence.find((player) => player.anonId !== winner.anonId) ?? null
+    const date = winner.updatedAt
+    liveBattleCards.push({
+      date,
+      opponent,
+      room,
+      winner,
+    })
+
+    if (opponent) {
+      const winnerRecord = standingFor(standings, winner.player)
+      const opponentRecord = standingFor(standings, opponent.player)
+      winnerRecord.played += 1
+      winnerRecord.wins += 1
+      opponentRecord.played += 1
+      opponentRecord.losses += 1
+    }
+  }
 
   for (const challenge of challenges) {
     const completed = challenge.attempts.filter(
@@ -598,11 +781,15 @@ function summarizeChallengeResults(challenges: ChallengeSummary[]) {
       a.player.localeCompare(b.player),
   )
   const sortedCards = matchCards.sort((a, b) => b.date.localeCompare(a.date))
+  const sortedLiveCards = liveBattleCards.sort((a, b) =>
+    b.date.localeCompare(a.date),
+  )
 
   return {
     activeAttempts,
     completedMatches: matchCards.filter((match) => match.runnerUp),
     latestResult: sortedCards[0] ?? null,
+    liveBattleCards: sortedLiveCards,
     matchCards: sortedCards,
     openMatches: challenges
       .filter((challenge) => {

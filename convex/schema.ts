@@ -1,7 +1,10 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { authTables } from '@convex-dev/auth/server'
 
 export default defineSchema({
+  ...authTables,
+
   profiles: defineTable({
     anonId: v.string(),
     authSubject: v.optional(v.string()),
@@ -11,6 +14,7 @@ export default defineSchema({
     updatedAt: v.string(),
   })
     .index('by_anonId', ['anonId'])
+    .index('by_authSubject', ['authSubject'])
     .index('by_friendCode', ['friendCode']),
 
   games: defineTable({
@@ -150,7 +154,8 @@ export default defineSchema({
     updatedAt: v.string(),
   })
     .index('by_roomId', ['roomId'])
-    .index('by_roomId_and_anonId', ['roomId', 'anonId']),
+    .index('by_roomId_and_anonId', ['roomId', 'anonId'])
+    .index('by_anonId_and_updatedAt', ['anonId', 'updatedAt']),
 
   friendships: defineTable({
     createdAt: v.string(),
@@ -162,4 +167,21 @@ export default defineSchema({
     .index('by_requesterAnonId', ['requesterAnonId'])
     .index('by_recipientAnonId', ['recipientAnonId'])
     .index('by_status', ['status']),
+
+  notifications: defineTable({
+    actorAnonId: v.optional(v.string()),
+    actorName: v.string(),
+    body: v.string(),
+    challengeId: v.optional(v.string()),
+    createdAt: v.string(),
+    readAt: v.optional(v.string()),
+    recipientAnonId: v.string(),
+    title: v.string(),
+    type: v.union(v.literal('challenge')),
+  })
+    .index('by_recipientAnonId_and_createdAt', [
+      'recipientAnonId',
+      'createdAt',
+    ])
+    .index('by_recipientAnonId_and_readAt', ['recipientAnonId', 'readAt']),
 })

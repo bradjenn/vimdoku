@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { useConvexAuth } from '@convex-dev/auth/react';
 import { useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
@@ -6,7 +7,6 @@ import type { LeaderboardEntry } from './leaderboard';
 import type { PlayMode } from './playModes';
 import type { GameRecord } from './storage';
 import type { PuzzleSize } from './sudoku';
-import { getOrCreateGuestId } from './identity';
 import type { VariantId } from './variants';
 
 export type CloudProfile = {
@@ -73,17 +73,17 @@ const submitScoreRef = makeFunctionReference<'mutation', SubmitScoreArgs, string
   'leaderboards:submitScore',
 );
 
-const upsertProfileRef = makeFunctionReference<
+const claimGuestProfileRef = makeFunctionReference<
   'mutation',
   { anonId: string; name: string },
-  string
->('profiles:upsert');
-
-const currentProfileRef = makeFunctionReference<
-  'query',
-  { anonId: string },
   CloudProfile | null
->('profiles:current');
+>('profiles:claimGuest');
+
+const currentSessionProfileRef = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  CloudProfile | null
+>('profiles:currentForSession');
 
 const upsertGameRef = makeFunctionReference<'mutation', UpsertGameArgs, string>(
   'games:upsert',
@@ -96,6 +96,7 @@ const statsRef = makeFunctionReference<'query', { anonId: string }, CloudStats>(
 export function ConvexBridge({
   currentRecord,
   gameRecords,
+  guestId,
   leaderboardOpen,
   leaderboardMode,
   leaderboardSize,
@@ -110,6 +111,7 @@ export function ConvexBridge({
 }: {
   currentRecord: GameRecord;
   gameRecords: GameRecord[];
+  guestId: string;
   leaderboardOpen: boolean;
   leaderboardMode: PlayMode;
   leaderboardSize: PuzzleSize;
@@ -122,7 +124,7 @@ export function ConvexBridge({
   scoreRecordId: string | null;
   scoreSubmissionsEnabled: boolean;
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), []);
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const submittedIds = useRef(new Set<string>());
   const syncedGameIds = useRef(new Set<string>());
   const lastGameSyncAt = useRef(0);
@@ -137,38 +139,56 @@ export function ConvexBridge({
         }
       : 'skip',
   ) as LeaderboardEntry[] | undefined;
-  const profile = useQuery(
-    currentProfileRef as FunctionReference<'query'>,
-    { anonId },
+  const sessionProfile = useQuery(
+    currentSessionProfileRef as FunctionReference<'query'>,
+    isAuthenticated ? {} : 'skip',
   ) as CloudProfile | null | undefined;
-  const stats = useQuery(statsRef as FunctionReference<'query'>, { anonId }) as
-    | CloudStats
-    | undefined;
+  const activeProfile = isAuthenticated ? sessionProfile : null;
+  const anonId = activeProfile?.anonId ?? guestId;
+  const cloudSyncEnabled = isAuthenticated && Boolean(activeProfile?.authSubject);
+  const stats = useQuery(
+    statsRef as FunctionReference<'query'>,
+    cloudSyncEnabled ? { anonId } : 'skip',
+  ) as CloudStats | undefined;
   const submitScore = useMutation(
     submitScoreRef as FunctionReference<'mutation'>,
   ) as (args: SubmitScoreArgs) => Promise<string>;
-  const upsertProfile = useMutation(
-    upsertProfileRef as FunctionReference<'mutation'>,
-  ) as (args: { anonId: string; name: string }) => Promise<string>;
+  const claimGuestProfile = useMutation(
+    claimGuestProfileRef as FunctionReference<'mutation'>,
+  ) as (args: { anonId: string; name: string }) => Promise<CloudProfile | null>;
   const upsertGame = useMutation(
     upsertGameRef as FunctionReference<'mutation'>,
   ) as (args: UpsertGameArgs) => Promise<string>;
 
   useEffect(() => {
-    void upsertProfile({ anonId, name: playerName }).catch(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) return;
+    void claimGuestProfile({ anonId: guestId, name: playerName }).catch(() => {
       onStatus('Could not sync Convex profile.');
     });
-  }, [anonId, onStatus, playerName, upsertProfile]);
+  }, [
+    claimGuestProfile,
+    guestId,
+    isAuthenticated,
+    isLoading,
+    onStatus,
+    playerName,
+  ]);
 
   useEffect(() => {
-    if (profile === undefined) return;
-    onProfile(profile);
-  }, [onProfile, profile]);
+    if (activeProfile === undefined) return;
+    onProfile(activeProfile);
+  }, [activeProfile, onProfile]);
 
   useEffect(() => {
     if (!stats) return;
     onStats(stats);
   }, [onStats, stats]);
+
+  useEffect(() => {
+    if (cloudSyncEnabled) return;
+    onStats(null);
+  }, [cloudSyncEnabled, onStats]);
 
   useEffect(() => {
     if (!topScores) return;
@@ -177,6 +197,7 @@ export function ConvexBridge({
   }, [onScores, onStatus, topScores]);
 
   useEffect(() => {
+    if (!cloudSyncEnabled) return;
     const now = Date.now();
     const isFinal = currentRecord.status === 'completed';
     if (!isFinal && now - lastGameSyncAt.current < 15000) return;
@@ -185,9 +206,10 @@ export function ConvexBridge({
     void upsertGame(toGameArgs(currentRecord, anonId)).catch(() => {
       onStatus('Could not sync current game to Convex.');
     });
-  }, [anonId, currentRecord, onStatus, upsertGame]);
+  }, [anonId, cloudSyncEnabled, currentRecord, onStatus, upsertGame]);
 
   useEffect(() => {
+    if (!cloudSyncEnabled) return;
     const recordsToSync = gameRecords
       .filter((record) => !syncedGameIds.current.has(syncKey(record)))
       .slice(0, 8);
@@ -200,9 +222,10 @@ export function ConvexBridge({
         onStatus('Could not backfill game history to Convex.');
       });
     }
-  }, [anonId, gameRecords, onStatus, upsertGame]);
+  }, [anonId, cloudSyncEnabled, gameRecords, onStatus, upsertGame]);
 
   useEffect(() => {
+    if (!cloudSyncEnabled) return;
     if (!scoreSubmissionsEnabled) return;
     if (currentRecord.status !== 'completed') return;
     if (scoreRecordId !== currentRecord.id) return;
@@ -215,6 +238,7 @@ export function ConvexBridge({
     });
   }, [
     anonId,
+    cloudSyncEnabled,
     currentRecord,
     onStatus,
     playerName,

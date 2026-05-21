@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  Bell,
   ChevronDown,
   Check,
   Eraser,
@@ -20,12 +21,13 @@ import {
   Wrench,
 } from 'lucide-react'
 import * as SelectPrimitive from '@radix-ui/react-select'
+import { useAuthActions, useConvexAuth } from '@convex-dev/auth/react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { makeFunctionReference } from 'convex/server'
 import type { FunctionReference } from 'convex/server'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import Tesseract from 'tesseract.js'
 import {
   EMPTY_NOTES,
@@ -208,6 +210,41 @@ const listFriendsRef = makeFunctionReference<
   { anonId: string },
   FriendshipRow[]
 >('friends:list')
+
+type NotificationRow = {
+  _id: string
+  actorName: string
+  body: string
+  challengeId?: string
+  createdAt: string
+  readAt?: string
+  title: string
+  type: 'challenge'
+}
+
+const listNotificationsRef = makeFunctionReference<
+  'query',
+  { limit?: number; recipientAnonId: string },
+  NotificationRow[]
+>('notifications:list')
+
+const unreadNotificationsRef = makeFunctionReference<
+  'query',
+  { recipientAnonId: string },
+  number
+>('notifications:unreadCount')
+
+const markNotificationReadRef = makeFunctionReference<
+  'mutation',
+  { notificationId: string; recipientAnonId: string },
+  string | null
+>('notifications:markRead')
+
+const markAllNotificationsReadRef = makeFunctionReference<
+  'mutation',
+  { recipientAnonId: string },
+  number
+>('notifications:markAllRead')
 
 // Single source of truth for the Space-leader menu — drives both the
 // which-key popup and the keydown resolution below.
@@ -779,6 +816,7 @@ function App() {
   const handledLiveRaceFinishRef = useRef<string | null>(null)
   const activeMenuModal = menuModal ?? routeModal
   const hasCustomPlayerName = isCustomPlayerName(playerName)
+  const playerId = cloudProfile?.anonId ?? guestId
   const activeSize = activeGame.puzzleSize ?? puzzleSizeFromGrid(grid)
   const activeMode = activeGame.playMode ?? 'classic'
   const activeChallengeId = challengeIdFromGameId(activeGame.id)
@@ -802,7 +840,7 @@ function App() {
     activeLiveBattleRoom?.battleKind !== 'coop'
   const showSidebarTools = !isCompetitiveBattlePlay
   const isMyTurnBattleTurn =
-    !isTurnBattlePlay || activeLiveBattleRoom?.turnAnonId === guestId
+    !isTurnBattlePlay || activeLiveBattleRoom?.turnAnonId === playerId
   const showBoard = activePage === 'play' || isLiveBattlePlay
   const activeConfig = boardConfigFor(activeSize)
   const activeDigits = activeConfig.digits
@@ -951,6 +989,21 @@ function App() {
     if (routeModal) goToPlay()
   }, [goToPlay, routeModal])
 
+  const headerNotifications =
+    hasConvexBackend() && cloudProfile?.authSubject ? (
+      <NotificationsButton
+        recipientAnonId={playerId}
+        onOpenChallenge={(challengeId) => {
+          closeMenuModal()
+          setSolvedDismissed(true)
+          void navigate({
+            to: '/challenge/$challengeId',
+            params: { challengeId },
+          })
+        }}
+      />
+    ) : null
+
   const conflicts = useMemo(
     () => findConflicts(grid, activeSize),
     [activeSize, grid],
@@ -1012,19 +1065,29 @@ function App() {
     : null
   const liveRaceOpponent = liveRaceFinished
     ? (activeLiveBattleRoom?.presence.find(
-        (player) => player.anonId !== guestId,
+        (player) => player.anonId !== playerId,
       ) ?? null)
     : null
   const liveRaceWon = Boolean(
     liveRaceFinished &&
-      activeLiveBattleRoom?.winnerAnonId === guestId &&
+      activeLiveBattleRoom?.winnerAnonId === playerId &&
       currentRecord.status === 'completed',
   )
-  const liveRaceLost = Boolean(
-    liveRaceFinished &&
-      activeLiveBattleRoom?.winnerAnonId !== guestId &&
-      currentRecord.status !== 'completed',
+  const liveRaceLostResult = Boolean(
+    liveRaceFinished && activeLiveBattleRoom?.winnerAnonId !== playerId,
   )
+  const liveRaceLost = Boolean(
+    liveRaceLostResult && currentRecord.status !== 'completed',
+  )
+  const liveRaceWinnerElapsedMs =
+    liveRaceWinner?.elapsedMs && liveRaceWinner.elapsedMs > 0
+      ? liveRaceWinner.elapsedMs
+      : activeLiveBattleRoom?.raceStartsAt && liveRaceWinner?.lastSeenAt
+        ? Math.max(
+            0,
+            liveRaceWinner.lastSeenAt - activeLiveBattleRoom.raceStartsAt,
+          )
+        : undefined
   const boardObscured = timerPaused || liveRaceLost
   const needsSolvedNamePrompt =
     scoreEnabled &&
@@ -1130,7 +1193,7 @@ function App() {
     const now = Date.now()
     const cursors = new Map<number, string[]>()
     for (const player of liveBattleRoom.presence) {
-      if (player.anonId === guestId) continue
+      if (player.anonId === playerId) continue
       if (typeof player.selectedCell !== 'number') continue
       if (now - player.lastSeenAt >= 8000) continue
       const names = cursors.get(player.selectedCell) ?? []
@@ -1138,7 +1201,7 @@ function App() {
       cursors.set(player.selectedCell, names)
     }
     return cursors
-  }, [activeLiveBattleId, guestId, liveBattleRoom])
+  }, [activeLiveBattleId, liveBattleRoom, playerId])
   const editorMode: EditorMode =
     visualAnchor !== null || explicitSelection !== null
       ? 'visual'
@@ -3055,7 +3118,7 @@ function App() {
     if (liveBattleRoom.battleKind !== 'race') return
     if (liveBattleRoom.status === 'finished') return
     if (activeLiveBattleId === liveBattleRoom.roomId) return
-    if (!liveBattleRoom.presence.some((player) => player.anonId === guestId))
+    if (!liveBattleRoom.presence.some((player) => player.anonId === playerId))
       return
     const startsAt =
       liveBattleRoom.status === 'live'
@@ -3074,8 +3137,8 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [
     activeLiveBattleId,
-    guestId,
     liveBattleRoom,
+    playerId,
     routeLiveBattleId,
     startLiveBattle,
   ])
@@ -3092,7 +3155,7 @@ function App() {
     const winner = activeLiveBattleRoom.presence.find(
       (player) => player.anonId === activeLiveBattleRoom.winnerAnonId,
     )
-    const won = activeLiveBattleRoom.winnerAnonId === guestId
+    const won = activeLiveBattleRoom.winnerAnonId === playerId
     const message = won
       ? 'Race finished. You won.'
       : `Race finished. ${winner?.player ?? 'Your opponent'} completed first.`
@@ -3102,7 +3165,7 @@ function App() {
       setTimerPaused(false)
       setTimerPauseReason(null)
     }
-  }, [activeLiveBattleRoom, currentRecord.status, guestId])
+  }, [activeLiveBattleRoom, currentRecord.status, playerId])
 
   const dashboardSelect = useCallback(
     (key: string) => {
@@ -4031,6 +4094,7 @@ function App() {
           <ConvexBridge
             currentRecord={currentRecord}
             gameRecords={trackedGameRecords}
+            guestId={guestId}
             leaderboardMode={leaderboardMode}
             leaderboardOpen={activePage === 'leaderboards'}
             leaderboardSize={leaderboardSize}
@@ -4042,6 +4106,7 @@ function App() {
             playerName={playerName}
             scoreRecordId={showSolved ? currentRecord.id : null}
             scoreSubmissionsEnabled={
+              Boolean(cloudProfile?.authSubject) &&
               hasCustomPlayerName &&
               scoreEnabled &&
               solvedNamePromptGameId !== currentRecord.id
@@ -4049,6 +4114,7 @@ function App() {
           />
           <ChallengeBridge
             activeChallengeId={activeChallengeId}
+            anonId={playerId}
             challengeId={routeChallengeId}
             createRequest={challengeCreateRequest}
             currentRecord={currentRecord}
@@ -4069,6 +4135,7 @@ function App() {
           />
           <LiveBattleBridge
             activeRoomId={activeLiveBattleId}
+            anonId={playerId}
             createRequest={liveBattleCreateRequest}
             currentGrid={gridToString(grid, activeSize)}
             currentMistakes={challengeMistakes}
@@ -4100,7 +4167,9 @@ function App() {
       {showDashboard && (
         <DashboardPage
           difficulty={dashboardDifficulty}
+          localStats={localProfileStats}
           mode={dashboardMode}
+          notifications={headerNotifications}
           onModeChange={setDashboardMode}
           onSizeChange={setDashboardSize}
           onDifficultyChange={setDashboardDifficulty}
@@ -4119,6 +4188,7 @@ function App() {
 
       {activePage === 'games' && (
         <AppPageFrame
+          extraActions={headerNotifications}
           onOpenMenu={() => openModalRoute('menu')}
           title="puzzle log"
         >
@@ -4140,6 +4210,7 @@ function App() {
 
       {activePage === 'new' && (
         <AppPageFrame
+          extraActions={headerNotifications}
           onOpenMenu={() => openModalRoute('menu')}
           title="new game"
         >
@@ -4205,6 +4276,7 @@ function App() {
 
       {activePage === 'leaderboards' && (
         <AppPageFrame
+          extraActions={headerNotifications}
           onOpenMenu={() => openModalRoute('menu')}
           title="leaderboards"
         >
@@ -4225,6 +4297,7 @@ function App() {
 
       {activePage === 'challenge' && (
         <AppPageFrame
+          extraActions={headerNotifications}
           onOpenMenu={() => openModalRoute('menu')}
           title="challenge"
         >
@@ -4249,12 +4322,20 @@ function App() {
           ) : routeChallengeResults ? (
             hasConvexBackend() ? (
               <ChallengeResultsView
+                anonId={playerId}
                 onCopyLink={copyChallengeLink}
+                onCopyLiveBattle={copyLiveBattleLink}
                 onNewChallenge={() => openChallengeSetup('race')}
                 onOpenChallenge={(challengeId) => {
                   void navigate({
                     to: '/challenge/$challengeId',
                     params: { challengeId },
+                  })
+                }}
+                onOpenLiveBattle={(roomId) => {
+                  void navigate({
+                    to: '/battle/live/$roomId',
+                    params: { roomId },
                   })
                 }}
               />
@@ -4273,6 +4354,7 @@ function App() {
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
               {hasConvexBackend() ? (
                 <ChallengeHistoryPanel
+                  anonId={playerId}
                   onCopyLink={copyChallengeLink}
                   onOpenResults={() =>
                     void navigate({ to: '/challenge/results' })
@@ -4362,12 +4444,13 @@ function App() {
 
       {activePage === 'live-battle' && !isLiveBattlePlay && (
         <AppPageFrame
+          extraActions={headerNotifications}
           onOpenMenu={() => openModalRoute('menu')}
           title="live battle"
         >
           <LiveBattleRoomPanel
             activeRoomId={activeLiveBattleId}
-            currentAnonId={guestId}
+            currentAnonId={playerId}
             isCurrentSolved={
               Boolean(
                 activeLiveBattleId && activeLiveBattleId === routeLiveBattleId,
@@ -4388,6 +4471,7 @@ function App() {
 
       {activePage === 'profile' && (
         <AppPageFrame
+          extraActions={headerNotifications}
           onOpenMenu={() => openModalRoute('menu')}
           title={publicFriendCode ? 'player profile' : 'profile'}
         >
@@ -4404,6 +4488,7 @@ function App() {
                     name: profile.name,
                   })
                 }}
+                viewerAnonId={playerId}
               />
             ) : (
               <PublicProfileOffline onBack={goToProfile} />
@@ -4412,7 +4497,7 @@ function App() {
             <ProfilePanel
               cloudProfile={cloudProfile}
               cloudStats={cloudStats}
-              guestId={guestId}
+              guestId={playerId}
               localStats={localProfileStats}
               onChallengeFriend={(friend) => {
                 navigateToPage('challenge')
@@ -4436,6 +4521,7 @@ function App() {
             title={`${labelCell(selected, activeSize)} · ${completion}/${activeCellCount}`}
             extraActions={
               <>
+                {headerNotifications}
                 <button
                   type="button"
                   aria-label="Rules"
@@ -4523,7 +4609,7 @@ function App() {
                   style={battleImpactFlashStyle}
                 />
                 <div
-                  className={`w-full max-w-[min(68dvh,calc(100dvh-220px),820px,100%)] transition duration-200 sm:max-w-[min(76vh,calc(100vh-176px),820px,100%)] ${
+                  className={`w-full max-w-[min(64dvh,calc(100dvh-276px),820px,100%)] transition duration-200 sm:max-w-[min(76vh,calc(100vh-176px),820px,100%)] ${
                     timerPaused
                       ? 'scale-[0.98] blur-md brightness-50'
                       : liveRaceLost
@@ -4673,9 +4759,9 @@ function App() {
               />
 
               <NumberPad
-                activeColor={activeColor}
                 activeColorValue={CELL_COLORS[activeColor]}
                 digits={activeDigits}
+                elapsedMs={elapsedMs}
                 notesEnabled={notesEnabled}
                 noteMode={noteMode || toolMode === 'center'}
                 onDigit={(digit) => {
@@ -4706,6 +4792,9 @@ function App() {
                     })
                   }
                 }}
+                onToggleTimer={toggleTimerPaused}
+                timerEnabled={timerEnabled}
+                timerPaused={timerPaused}
                 toolMode={toolMode}
               />
 
@@ -4797,7 +4886,7 @@ function App() {
                   <Panel title="live battle">
                     <LiveBattlePresencePanel
                       cellCount={activeCellCount}
-                      currentAnonId={guestId}
+                      currentAnonId={playerId}
                       puzzleSize={activeSize}
                       room={liveBattleRoom}
                     />
@@ -4806,7 +4895,7 @@ function App() {
                 {isCompetitiveBattlePlay && (
                   <Panel title="battle">
                     <BattleSidebarPanel
-                      currentAnonId={guestId}
+                      currentAnonId={playerId}
                       liveRaceLost={liveRaceLost}
                       room={activeLiveBattleRoom}
                     />
@@ -5174,7 +5263,7 @@ function App() {
           wide
         >
           <ChallengeSetupPanel
-            currentGame={activeGame}
+            anonId={playerId}
             difficulty={challengeDifficulty}
             kind={challengeKind}
             mode={challengeMode}
@@ -5610,10 +5699,18 @@ function App() {
           elapsedMs={elapsedMs}
           hintUses={hintUses}
           mistakes={challengeMistakes}
-          needsName={needsSolvedNamePrompt}
+          needsName={liveRaceLostResult ? false : needsSolvedNamePrompt}
           opponentName={liveRaceWon ? liveRaceOpponent?.player : undefined}
-          outcome={liveRaceWon ? 'race-win' : 'solved'}
+          outcome={
+            liveRaceWon
+              ? 'race-win'
+              : liveRaceLostResult
+                ? 'race-loss'
+                : 'solved'
+          }
           pauseCount={manualPauseCount}
+          winnerElapsedMs={liveRaceWinnerElapsedMs}
+          winnerName={liveRaceLostResult ? liveRaceWinner?.player : undefined}
           onNameChange={updatePlayerName}
           onNameConfirm={() => {
             if (!isCustomPlayerName(playerName)) {
@@ -5632,11 +5729,22 @@ function App() {
             setSolvedDismissed(true)
             openNewGame()
           }}
-          onPuzzleLog={() => {
-            setSolvedDismissed(true)
-            navigateToPage('games')
-          }}
-          onReview={() => setSolvedDismissed(true)}
+          onChallengeAgain={
+            liveRaceFinished && activeLiveBattleRoom
+              ? () => {
+                  setSolvedDismissed(true)
+                  createLiveBattleRoom('race', {
+                    difficulty: activeLiveBattleRoom.difficulty,
+                    playMode: activeLiveBattleRoom.playMode,
+                    puzzle: activeLiveBattleRoom.puzzle,
+                    puzzleSize: activeLiveBattleRoom.puzzleSize,
+                    source: activeLiveBattleRoom.source,
+                    variantId: activeLiveBattleRoom.variantId,
+                  })
+                }
+              : undefined
+          }
+          onClose={() => setSolvedDismissed(true)}
         />
       )}
     </main>
@@ -5645,42 +5753,56 @@ function App() {
 
 // Touch number entry — mobile/tablet only; desktop uses the keyboard.
 function NumberPad({
-  activeColor,
   activeColorValue,
   digits,
+  elapsedMs,
   notesEnabled,
   noteMode,
   onDigit,
   onErase,
   onToggleNotes,
+  onToggleTimer,
+  timerEnabled,
+  timerPaused,
   toolMode,
 }: {
-  activeColor: number
   activeColorValue: string
   digits: number[]
+  elapsedMs: number
   notesEnabled: boolean
   noteMode: boolean
   onDigit: (digit: number) => void
   onErase: () => void
   onToggleNotes: () => void
+  onToggleTimer: () => void
+  timerEnabled: boolean
+  timerPaused: boolean
   toolMode: ToolMode
 }) {
   return (
-    <div className="shrink-0 border-t border-[var(--border)] bg-[var(--status-bg)] p-2 lg:hidden">
-      <div className="mb-2 flex items-center justify-between gap-2 border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 font-mono text-[0.64rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+    <div className="shrink-0 border-t border-[var(--border)] bg-[var(--status-bg)] p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] lg:hidden">
+      <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 font-mono text-[0.64rem] uppercase tracking-[0.14em] text-[var(--muted)]">
         <span>
           mode{' '}
           <span className="text-[var(--accent)]">
             {toolModeLabel(toolMode)}
           </span>
         </span>
-        <span className="flex items-center gap-1.5">
-          colour {activeColor + 1}
-          <span
-            className="h-3 w-5 border border-[var(--border)]"
-            style={{ backgroundColor: activeColorValue }}
-          />
-        </span>
+        <button
+          type="button"
+          disabled={!timerEnabled}
+          onClick={onToggleTimer}
+          className={`flex items-center gap-1.5 border border-[var(--border)] px-2 py-1 font-bold uppercase tracking-[0.12em] ${
+            !timerEnabled
+              ? 'opacity-50'
+              : timerPaused
+                ? 'bg-[var(--accent)] text-[var(--app-bg)]'
+                : 'bg-[var(--button-bg)] text-[var(--app-text)]'
+          }`}
+        >
+          {timerPaused ? <Play size={12} /> : <Pause size={12} />}
+          {timerEnabled ? formatDuration(elapsedMs) : 'zen'}
+        </button>
       </div>
       <div
         className="grid gap-1"
@@ -5699,7 +5821,7 @@ function NumberPad({
           </button>
         ))}
       </div>
-      <div className="mt-1 grid grid-cols-2 gap-1">
+      <div className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
         <button
           type="button"
           disabled={!notesEnabled}
@@ -5714,6 +5836,13 @@ function NumberPad({
         >
           centre {noteMode ? 'on' : 'off'}
         </button>
+        <div className="flex items-center justify-center gap-1.5 border border-[var(--border)] bg-[var(--input-bg)] px-2 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+          colour
+          <span
+            className="h-4 w-6 border border-[var(--border)]"
+            style={{ backgroundColor: activeColorValue }}
+          />
+        </div>
         <button
           type="button"
           onClick={onErase}
@@ -5996,12 +6125,14 @@ function SolvedModal({
   opponentName,
   outcome = 'solved',
   pauseCount,
+  winnerElapsedMs,
+  winnerName,
+  onChallengeAgain,
   onLeaderboards,
   onNewGame,
   onNameChange,
   onNameConfirm,
-  onPuzzleLog,
-  onReview,
+  onClose,
   playerName,
   source,
 }: {
@@ -6012,61 +6143,91 @@ function SolvedModal({
   mistakes: number
   needsName: boolean
   opponentName?: string
-  outcome?: 'solved' | 'race-win'
+  outcome?: 'solved' | 'race-win' | 'race-loss'
   pauseCount: number
+  winnerElapsedMs?: number
+  winnerName?: string
+  onChallengeAgain?: () => void
   onLeaderboards: () => void
   onNewGame: () => void
   onNameChange: (value: string) => void
   onNameConfirm: () => void
-  onPuzzleLog: () => void
-  onReview: () => void
+  onClose: () => void
   playerName: string
   source: string
 }) {
-  const actions: [key: string, label: string, run: () => void][] = [
+  const actions: [key: string, label: string, run: () => void][] = []
+  if (onChallengeAgain) {
+    actions.push(['click', 'challenge again', onChallengeAgain])
+  }
+  actions.push(
     ['click', 'new game', onNewGame],
-    ['click', 'puzzle log', onPuzzleLog],
     ['click', 'leaderboards', onLeaderboards],
-    ['esc', 'review board', onReview],
-  ]
+    ['esc', 'close', onClose],
+  )
   const playerNameValue =
     needsName && !isCustomPlayerName(playerName) ? '' : playerName
   const isRaceWin = outcome === 'race-win'
+  const isRaceLoss = outcome === 'race-loss'
+  const isRaceResult = isRaceWin || isRaceLoss
+  const displayTime =
+    isRaceResult && winnerElapsedMs !== undefined ? winnerElapsedMs : elapsedMs
+  const resultTitle = isRaceLoss
+    ? `${winnerName ?? 'Player'} won`
+    : isRaceWin
+      ? 'race won'
+      : 'puzzle solved'
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop returns to review when clicking outside the solved dialog.
+    // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop closes the solved dialog when clicking outside the panel.
     <div
       role="presentation"
       className="fixed inset-0 z-40 grid place-items-center bg-black/80 p-4 font-mono"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onReview()
+        if (event.target === event.currentTarget) onClose()
       }}
     >
       <section className="w-full max-w-4xl border border-[var(--accent)] bg-[var(--panel-bg)]">
         <div className="relative overflow-hidden border-b border-[var(--border)] px-6 py-8">
-          <CelebrationStrip tone={isRaceWin ? 'win' : 'solved'} />
+          <CelebrationStrip
+            tone={isRaceLoss ? 'lost' : isRaceWin ? 'win' : 'solved'}
+          />
           <div className="relative flex flex-col items-center gap-3">
-          <span className="text-5xl leading-none text-[var(--accent)]">✓</span>
-          <h2 className="text-xs font-black uppercase tracking-[0.34em] text-[var(--app-text)]">
-            {isRaceWin ? 'race won' : 'puzzle solved'}
-          </h2>
-          <p className="text-4xl font-black text-[var(--accent)]">
-            {formatDuration(elapsedMs)}
-          </p>
-          <p className="text-[0.7rem] uppercase tracking-[0.16em] text-[var(--muted)]">
-            {isRaceWin
-              ? `you beat ${opponentName ?? 'your opponent'}`
-              : source}
-            {difficulty ? ` · ${difficulty}` : ''}
-          </p>
+            <span
+              className={`text-5xl leading-none ${
+                isRaceLoss ? 'text-[var(--danger)]' : 'text-[var(--accent)]'
+              }`}
+            >
+              {isRaceLoss ? 'x' : '✓'}
+            </span>
+            <h2 className="text-xs font-black uppercase tracking-[0.34em] text-[var(--app-text)]">
+              {resultTitle}
+            </h2>
+            <p
+              className={`text-4xl font-black ${
+                isRaceLoss ? 'text-[var(--danger)]' : 'text-[var(--accent)]'
+              }`}
+            >
+              {formatDuration(displayTime)}
+            </p>
+            <p className="text-center text-[0.7rem] uppercase tracking-[0.16em] text-[var(--muted)]">
+              {isRaceLoss
+                ? 'race finished'
+                : isRaceWin
+                  ? `you beat ${opponentName ?? 'your opponent'}`
+                  : source}
+              {difficulty ? ` · ${difficulty}` : ''}
+            </p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 border-b border-[var(--border)] bg-[var(--input-bg)] p-3 sm:grid-cols-4">
-          <SolvedMetric label="filled" value={String(completion)} />
-          <SolvedMetric label="hints" value={String(hintUses)} />
-          <SolvedMetric label="pauses" value={String(pauseCount)} />
-          <SolvedMetric label="misses" value={String(mistakes)} />
-        </div>
+        {!isRaceResult && (
+          <div className="grid grid-cols-2 gap-2 border-b border-[var(--border)] bg-[var(--input-bg)] p-3 sm:grid-cols-4">
+            <SolvedMetric label="filled" value={String(completion)} />
+            <SolvedMetric label="hints" value={String(hintUses)} />
+            <SolvedMetric label="pauses" value={String(pauseCount)} />
+            <SolvedMetric label="misses" value={String(mistakes)} />
+          </div>
+        )}
         {needsName && (
           <div className="border-b border-[var(--border)] bg-[var(--input-bg)] p-3">
             <label className="block">
@@ -6102,7 +6263,7 @@ function SolvedModal({
           {actions.map(([key, label, run]) => (
             <button
               type="button"
-              key={key}
+              key={`${key}-${label}`}
               onClick={run}
               className="group flex items-center gap-3 px-3 py-2 text-left text-sm transition hover:bg-[var(--panel-soft)]"
             >
@@ -6564,7 +6725,9 @@ function DailyMeta({
 
 function DashboardPage({
   difficulty,
+  localStats,
   mode,
+  notifications,
   onDifficultyChange,
   onModeChange,
   onPlay,
@@ -6573,7 +6736,9 @@ function DashboardPage({
   puzzleSize,
 }: {
   difficulty: PuzzleDifficulty
+  localStats: ProfileStats
   mode: PlayMode
+  notifications?: ReactNode
   onDifficultyChange: (difficulty: PuzzleDifficulty) => void
   onModeChange: (mode: PlayMode) => void
   onPlay: () => void
@@ -6614,6 +6779,9 @@ function DashboardPage({
 
   return (
     <section className="flex min-h-screen flex-col bg-[var(--app-bg)] font-mono lg:h-screen lg:overflow-y-auto">
+      {notifications && (
+        <div className="fixed right-3 top-3 z-30">{notifications}</div>
+      )}
       <div className="grid flex-1 place-items-center px-4 py-10">
         <div className="w-full max-w-4xl">
           <pre className="overflow-hidden text-[0.4rem] leading-none text-[var(--accent)] sm:text-[0.62rem] md:text-[0.78rem]">
@@ -6622,6 +6790,23 @@ function DashboardPage({
           <p className="mt-5 text-[0.7rem] uppercase tracking-[0.3em] text-[var(--muted)]">
             a vim-first sudoku
           </p>
+
+          <div className="mt-6 grid gap-2 sm:grid-cols-3">
+            <StreakTile
+              label="daily streak"
+              value={String(localStats.dailyStreak)}
+              accent={localStats.completedToday}
+            />
+            <StreakTile
+              label="best streak"
+              value={String(localStats.bestDailyStreak)}
+            />
+            <StreakTile
+              label="today"
+              value={localStats.completedToday ? 'done' : 'open'}
+              accent={!localStats.completedToday}
+            />
+          </div>
 
           <div className="mt-9 grid gap-4 md:grid-cols-2 md:items-start">
             <div className="relative border border-[var(--border)] bg-[var(--panel-bg)] p-3 md:order-2">
@@ -6739,6 +6924,31 @@ function DashboardPage({
   )
 }
 
+function StreakTile({
+  accent = false,
+  label,
+  value,
+}: {
+  accent?: boolean
+  label: string
+  value: string
+}) {
+  return (
+    <div className="border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-2 font-mono">
+      <p className="text-[0.58rem] uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-xl font-black uppercase tracking-[0.12em] ${
+          accent ? 'text-[var(--accent)]' : 'text-[var(--app-text)]'
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
 // One canonical header for every page: brand (→ home) + burger.
 // Pages can inject contextual buttons via `extraActions`.
 function AppShellHeader({
@@ -6811,6 +7021,120 @@ function AppPageFrame({
         <div className="mx-auto w-full max-w-6xl">{children}</div>
       </div>
     </section>
+  )
+}
+
+function NotificationsButton({
+  onOpenChallenge,
+  recipientAnonId,
+}: {
+  onOpenChallenge: (challengeId: string) => void
+  recipientAnonId: string
+}) {
+  const [open, setOpen] = useState(false)
+  const rows = useQuery(listNotificationsRef as FunctionReference<'query'>, {
+    limit: 12,
+    recipientAnonId,
+  }) as NotificationRow[] | undefined
+  const unreadCount = useQuery(
+    unreadNotificationsRef as FunctionReference<'query'>,
+    { recipientAnonId },
+  ) as number | undefined
+  const markRead = useMutation(
+    markNotificationReadRef as FunctionReference<'mutation'>,
+  ) as (args: {
+    notificationId: string
+    recipientAnonId: string
+  }) => Promise<string | null>
+  const markAllRead = useMutation(
+    markAllNotificationsReadRef as FunctionReference<'mutation'>,
+  ) as (args: { recipientAnonId: string }) => Promise<number>
+  const notifications = rows ?? []
+  const hasUnread = (unreadCount ?? 0) > 0
+
+  async function openNotification(row: NotificationRow) {
+    await markRead({
+      notificationId: row._id,
+      recipientAnonId,
+    }).catch(() => undefined)
+    setOpen(false)
+    if (row.challengeId) onOpenChallenge(row.challengeId)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Notifications"
+        title="Notifications"
+        onClick={() => setOpen((current) => !current)}
+        className={`relative grid h-9 w-9 place-items-center border bg-[var(--button-bg)] text-[var(--app-text)] transition active:translate-y-px ${
+          hasUnread
+            ? 'border-[var(--accent)] text-[var(--accent)]'
+            : 'border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+        }`}
+      >
+        <Bell size={16} />
+        {hasUnread && (
+          <span className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center border border-[var(--app-bg)] bg-[var(--accent)] px-1 font-mono text-[0.55rem] font-black leading-none text-[var(--app-bg)]">
+            {Math.min(unreadCount ?? 0, 9)}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-[min(92vw,360px)] border border-[var(--border)] bg-[var(--panel-bg)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
+          <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono">
+            <span className="text-xs font-black uppercase tracking-[0.18em] text-[var(--accent)]">
+              [notifications]
+            </span>
+            <button
+              type="button"
+              disabled={!hasUnread}
+              className="text-[0.62rem] font-black uppercase tracking-[0.14em] text-[var(--muted)] transition hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                void markAllRead({ recipientAnonId })
+              }}
+            >
+              mark read
+            </button>
+          </header>
+          {rows === undefined ? (
+            <p className="p-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+              loading inbox...
+            </p>
+          ) : notifications.length === 0 ? (
+            <p className="p-3 text-sm leading-relaxed text-[var(--muted)]">
+              No notifications yet.
+            </p>
+          ) : (
+            <div className="max-h-[420px] divide-y divide-[var(--border)] overflow-y-auto">
+              {notifications.map((row) => (
+                <button
+                  type="button"
+                  key={row._id}
+                  className="grid w-full grid-cols-[6px_minmax(0,1fr)] gap-3 p-3 text-left transition hover:bg-[var(--panel-soft)]"
+                  onClick={() => void openNotification(row)}
+                >
+                  <span
+                    className={`mt-1 h-2 w-2 ${
+                      row.readAt ? 'bg-[var(--border)]' : 'bg-[var(--accent)]'
+                    }`}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-text)]">
+                      {row.body}
+                    </span>
+                    <span className="mt-1 block font-mono text-[0.65rem] uppercase tracking-[0.12em] text-[var(--muted)]">
+                      {formatGameDate(row.createdAt)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -7716,7 +8040,7 @@ function LeaderboardsDetail({
 }
 
 function ChallengeSetupPanel({
-  currentGame,
+  anonId,
   difficulty,
   kind,
   mode,
@@ -7739,7 +8063,7 @@ function ChallengeSetupPanel({
   turnSeconds,
   variant,
 }: {
-  currentGame: GameMeta
+  anonId: string
   difficulty: PuzzleDifficulty
   kind: ChallengeSetupKind
   mode: PlayMode
@@ -7762,16 +8086,6 @@ function ChallengeSetupPanel({
   turnSeconds: number
   variant: VariantId
 }) {
-  const activeSize = source === 'current' ? currentGame.puzzleSize : puzzleSize
-  const activeMode = source === 'current' ? currentGame.playMode : mode
-  const activeDifficulty =
-    source === 'current' ? (currentGame.difficulty ?? 'custom') : difficulty
-  const activeVariant = source === 'current' ? currentGame.variantId : variant
-  const filledCount =
-    source === 'current'
-      ? parseGrid(currentGame.puzzle, currentGame.puzzleSize).filter(Boolean)
-          .length
-      : null
   const isLive = isLiveChallengeSetup(kind)
   const isTurnBattle = kind === 'live-turns'
   const sources: [ChallengePuzzleSource, string, string][] = [
@@ -7779,21 +8093,10 @@ function ChallengeSetupPanel({
     ['generated', 'generated', 'fresh random puzzle'],
     ['current', 'current', 'use loaded board'],
   ]
-  const details = [
-    challengeSetupLabel(kind),
-    source,
-    activeSize,
-    modeLabel(activeMode),
-    activeDifficulty,
-    VARIANTS[activeVariant ?? 'classic'].label,
-    isTurnBattle ? `${turnSeconds}s turns` : null,
-    isTurnBattle ? `${turnLives} lives` : null,
-    isLive ? 'live link' : (recipient?.name ?? 'open link'),
-  ].filter(Boolean)
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-4 pb-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="pb-6">
         <section className="space-y-3">
           <div className="border-b border-[var(--border)] pb-3">
             <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -7812,6 +8115,7 @@ function ChallengeSetupPanel({
             />
           ) : hasConvexBackend() ? (
             <ChallengeTargetSelect
+              anonId={anonId}
               onRecipientChange={onRecipientChange}
               onRecipientClear={onRecipientClear}
               recipient={recipient}
@@ -7904,22 +8208,6 @@ function ChallengeSetupPanel({
               {status}
             </p>
           )}
-        </section>
-
-        <section className="space-y-3 border-l border-[var(--border)] pl-4 max-lg:border-l-0 max-lg:border-t max-lg:pl-0 max-lg:pt-4">
-          <div>
-            <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-[var(--muted)]">
-              summary
-            </p>
-            <p className="mt-1 font-mono text-xs uppercase leading-5 tracking-[0.12em] text-[var(--app-text)]">
-              {details.join(' · ')}
-            </p>
-            <p className="mt-2 font-mono text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
-              {filledCount === null
-                ? 'puzzle generated on create'
-                : `${filledCount}/${boardConfigFor(activeSize).cellCount} filled`}
-            </p>
-          </div>
         </section>
       </div>
 
@@ -8097,15 +8385,16 @@ function ChallengeRangeField({
 }
 
 function ChallengeTargetSelect({
+  anonId,
   onRecipientChange,
   onRecipientClear,
   recipient,
 }: {
+  anonId: string
   onRecipientChange: (friend: FriendSummary | null) => void
   onRecipientClear: () => void
   recipient: FriendSummary | null
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), [])
   const rows = useQuery(listFriendsRef as FunctionReference<'query'>, {
     anonId,
   }) as FriendshipRow[] | undefined
@@ -8218,7 +8507,6 @@ function ChallengeRacePanel({
     )
   }
 
-  const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize)
   const completedAttempts = challenge.attempts.filter(
     (attempt) => attempt.status === 'completed',
   )
@@ -8260,11 +8548,7 @@ function ChallengeRacePanel({
           </button>
         </header>
 
-        <div className="grid gap-4 p-3 md:grid-cols-[220px_minmax(0,1fr)]">
-          <PuzzlePreview
-            grid={puzzleGrid}
-            givens={puzzleGrid.map((value) => value !== 0)}
-          />
+        <div className="p-3">
           <div className="min-w-0 space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <ChallengeMeta label="created by" value={challenge.creatorName} />
@@ -8448,7 +8732,6 @@ function LiveBattleRoomPanel({
     )
   }
 
-  const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize)
   const isActiveRoom = activeRoomId === room.roomId
   const roomLabel =
     room.battleKind === 'turns'
@@ -8551,8 +8834,7 @@ function LiveBattleRoomPanel({
           </button>
         </header>
 
-        <div className="grid gap-4 p-3 md:grid-cols-[220px_minmax(0,1fr)]">
-          <PuzzlePreview grid={puzzleGrid} givens={puzzleGrid.map(Boolean)} />
+        <div className="p-3">
           <div className="min-w-0 space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <ChallengeMeta label="created by" value={room.creatorName} />
@@ -9000,8 +9282,13 @@ type ProfileStats = {
   bestElapsedMs?: number
   completedCount: number
   currentStreak: number
+  dailyCompletedCount: number
+  dailyStreak: number
+  bestDailyStreak: number
+  completedToday: boolean
   inProgressCount: number
   lastCompletedAt?: string
+  lastDailyDate?: string
   syncedGames: number
 }
 
@@ -9053,10 +9340,11 @@ function ProfilePanel({
               onChange={(event) => onNameChange(event.target.value)}
             />
           </label>
-          <ProfileMeta label="guest id" value={shortGuestId(guestId)} />
+          {hasConvexBackend() && <AuthControls />}
+          <ProfileMeta label="player id" value={shortGuestId(guestId)} />
           <ProfileMeta
             label="friend code"
-            value={cloudProfile?.friendCode ?? 'syncing'}
+            value={cloudProfile?.friendCode ?? 'sign in to claim'}
           />
           <ProfileMeta label="joined" value={joined} />
           <ProfileMeta
@@ -9073,11 +9361,11 @@ function ProfilePanel({
         </header>
         <div className="grid grid-cols-2 gap-px bg-[var(--border)] lg:grid-cols-3">
           <ProfileStat label="completed" value={String(completedCount)} />
+          <ProfileStat label="daily streak" value={`${localStats.dailyStreak}d`} />
           <ProfileStat
-            label="in progress"
-            value={String(localStats.inProgressCount)}
+            label="best streak"
+            value={`${localStats.bestDailyStreak}d`}
           />
-          <ProfileStat label="streak" value={`${localStats.currentStreak}d`} />
           <ProfileStat
             label="best"
             value={
@@ -9100,6 +9388,11 @@ function ProfilePanel({
           />
         </div>
         <div className="border-t border-[var(--border)] p-4 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+          today:{' '}
+          <span className="text-[var(--app-text)]">
+            {localStats.completedToday ? 'completed' : 'open'}
+          </span>
+          <span className="mx-2 text-[var(--border)]">·</span>
           last completion:{' '}
           <span className="text-[var(--app-text)]">
             {localStats.lastCompletedAt
@@ -9115,12 +9408,23 @@ function ProfilePanel({
       </section>
 
       <div className="lg:col-span-2">
-        {hasConvexBackend() ? (
+        {hasConvexBackend() && cloudProfile?.authSubject ? (
           <FriendsPanel
+            anonId={guestId}
             friendCode={cloudProfile?.friendCode ?? ''}
             onChallengeFriend={onChallengeFriend}
             onViewProfile={onViewFriendProfile}
           />
+        ) : hasConvexBackend() ? (
+          <section className="border border-[var(--border)] bg-[var(--input-bg)] p-4">
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+              [friends locked]
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+              Sign in to claim your profile, keep friends across devices, and
+              submit named scores.
+            </p>
+          </section>
         ) : (
           <section className="border border-[var(--border)] bg-[var(--input-bg)] p-4">
             <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
@@ -9155,6 +9459,138 @@ function PublicProfileOffline({ onBack }: { onBack: () => void }) {
         back
       </button>
     </section>
+  )
+}
+
+function AuthControls() {
+  const { isAuthenticated, isLoading } = useConvexAuth()
+  const { signIn, signOut } = useAuthActions()
+  const [flow, setFlow] = useState<'signIn' | 'signUp'>('signIn')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [status, setStatus] = useState('')
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!email.trim() || !password) {
+      setStatus('email and password required')
+      return
+    }
+
+    setStatus(flow === 'signUp' ? 'creating account...' : 'signing in...')
+    try {
+      await signIn('password', {
+        email: email.trim(),
+        flow,
+        password,
+      })
+      setPassword('')
+      setStatus(flow === 'signUp' ? 'account linked' : 'signed in')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'auth failed')
+    }
+  }
+
+  async function handleSignOut() {
+    setStatus('signing out...')
+    try {
+      await signOut()
+      setStatus('signed out')
+    } catch {
+      setStatus('could not sign out')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+        auth loading
+      </div>
+    )
+  }
+
+  if (isAuthenticated) {
+    return (
+      <div className="space-y-2 border border-[var(--border)] bg-[var(--panel-bg)] p-3 font-mono">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+            account linked
+          </span>
+          <button
+            type="button"
+            className="border border-[var(--border)] bg-[var(--button-bg)] px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-[var(--app-text)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            onClick={() => void handleSignOut()}
+          >
+            sign out
+          </button>
+        </div>
+        {status && (
+          <p className="text-[0.68rem] uppercase tracking-[0.12em] text-[var(--muted)]">
+            {status}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <form
+      className="space-y-2 border border-[var(--border)] bg-[var(--panel-bg)] p-3 font-mono"
+      onSubmit={(event) => void submitAuth(event)}
+    >
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          className={`border px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] ${
+            flow === 'signIn'
+              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+              : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)]'
+          }`}
+          onClick={() => setFlow('signIn')}
+        >
+          sign in
+        </button>
+        <button
+          type="button"
+          className={`border px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] ${
+            flow === 'signUp'
+              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+              : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)]'
+          }`}
+          onClick={() => setFlow('signUp')}
+        >
+          sign up
+        </button>
+      </div>
+      <input
+        autoComplete="email"
+        className="w-full border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-xs text-[var(--app-text)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+        inputMode="email"
+        placeholder="email"
+        type="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+      <input
+        autoComplete={flow === 'signUp' ? 'new-password' : 'current-password'}
+        className="w-full border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-xs text-[var(--app-text)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+        placeholder="password"
+        type="password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+      />
+      <button
+        type="submit"
+        className="w-full border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--app-bg)]"
+      >
+        {flow === 'signUp' ? 'create account' : 'sign in'}
+      </button>
+      {status && (
+        <p className="text-[0.68rem] uppercase tracking-[0.12em] text-[var(--muted)]">
+          {status}
+        </p>
+      )}
+    </form>
   )
 }
 
@@ -9999,6 +10435,7 @@ function cellCountFor(record: GameRecord) {
 function buildLocalStats(records: GameRecord[]): ProfileStats {
   const completed = records.filter((record) => record.status === 'completed')
   const timed = completed.filter((record) => record.elapsedMs > 0)
+  const dailyStats = buildDailyStreakStats(completed)
   const totalElapsedMs = timed.reduce(
     (total, record) => total + record.elapsedMs,
     0,
@@ -10016,11 +10453,56 @@ function buildLocalStats(records: GameRecord[]): ProfileStats {
     currentStreak: countCompletionStreak(
       completed.map((record) => record.completedAt ?? record.updatedAt),
     ),
+    dailyCompletedCount: dailyStats.completedCount,
+    dailyStreak: dailyStats.current,
+    bestDailyStreak: dailyStats.best,
+    completedToday: dailyStats.completedToday,
     inProgressCount: records.filter((record) => record.status === 'in-progress')
       .length,
     lastCompletedAt: completed[0]?.completedAt ?? completed[0]?.updatedAt,
+    lastDailyDate: dailyStats.lastDate,
     syncedGames: records.length,
   }
+}
+
+function buildDailyStreakStats(records: GameRecord[]) {
+  const days = new Set(
+    records
+      .map(dailyDateForRecord)
+      .filter((dateKey): dateKey is string => Boolean(dateKey)),
+  )
+  const sortedDays = [...days].sort()
+  const today = todayDateKey()
+  const completedToday = days.has(today)
+  let cursor = completedToday ? today : shiftDateKey(today, -1)
+  let current = 0
+  while (days.has(cursor)) {
+    current += 1
+    cursor = shiftDateKey(cursor, -1)
+  }
+
+  let best = 0
+  let run = 0
+  let previous: string | null = null
+  for (const day of sortedDays) {
+    run = previous && shiftDateKey(previous, 1) === day ? run + 1 : 1
+    best = Math.max(best, run)
+    previous = day
+  }
+
+  return {
+    best,
+    completedCount: days.size,
+    completedToday,
+    current,
+    lastDate: sortedDays.at(-1),
+  }
+}
+
+function dailyDateForRecord(record: GameRecord) {
+  if (!record.id.startsWith('daily-vimdoku-')) return null
+  const match = record.id.match(/(\d{4}-\d{2}-\d{2})$/)
+  return match?.[1] ?? null
 }
 
 function countCompletionStreak(values: string[]) {

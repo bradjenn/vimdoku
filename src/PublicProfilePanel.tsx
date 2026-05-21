@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
-import { getOrCreateGuestId } from './identity';
 
 export type PublicProfile = {
   anonId: string;
@@ -59,12 +58,13 @@ export function PublicProfilePanel({
   friendCode,
   onBack,
   onChallenge,
+  viewerAnonId,
 }: {
   friendCode: string;
   onBack: () => void;
   onChallenge: (profile: PublicProfile) => void;
+  viewerAnonId: string;
 }) {
-  const viewerAnonId = useMemo(() => getOrCreateGuestId(), []);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [friendStatus, setFriendStatus] = useState('');
   const [isUpdatingFriend, setIsUpdatingFriend] = useState(false);

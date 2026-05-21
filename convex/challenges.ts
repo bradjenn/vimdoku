@@ -66,6 +66,19 @@ export const createRace = mutation({
       variantId,
     });
 
+    if (recipientAnonId) {
+      await ctx.db.insert('notifications', {
+        actorAnonId: args.creatorAnonId,
+        actorName: cleanName(args.creatorName),
+        body: `${cleanName(args.creatorName)} challenged you to a ${challengeKindLabel(challengeKind)}.`,
+        challengeId,
+        createdAt: new Date().toISOString(),
+        recipientAnonId,
+        title: 'new challenge',
+        type: 'challenge',
+      });
+    }
+
     return challengeId;
   },
 });
@@ -447,6 +460,10 @@ function cleanOptionalId(value: string | undefined) {
 
 function cleanChallengeKind(value: string | undefined) {
   return value === 'streak' ? 'streak' : 'race';
+}
+
+function challengeKindLabel(value: string) {
+  return value === 'streak' ? 'streak battle' : 'race';
 }
 
 function cleanName(value: string) {

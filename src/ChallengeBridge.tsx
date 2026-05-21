@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
@@ -6,7 +6,6 @@ import type {
   ChallengeCreateRequest,
   ChallengeRace,
 } from './challenges';
-import { getOrCreateGuestId } from './identity';
 import type { GameRecord } from './storage';
 
 type CreateRaceArgs = {
@@ -66,6 +65,7 @@ const submitAttemptRef = makeFunctionReference<
 
 export function ChallengeBridge({
   activeChallengeId,
+  anonId,
   challengeId,
   createRequest,
   currentRecord,
@@ -76,6 +76,7 @@ export function ChallengeBridge({
   playerName,
 }: {
   activeChallengeId: string | null;
+  anonId: string;
   challengeId: string | null;
   createRequest: ChallengeCreateRequest | null;
   currentRecord: GameRecord;
@@ -85,7 +86,6 @@ export function ChallengeBridge({
   onStatus: (status: string) => void;
   playerName: string;
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), []);
   const handledCreateRequest = useRef<string | null>(null);
   const startedAttempts = useRef(new Set<string>());
   const submittedAttempts = useRef(new Set<string>());

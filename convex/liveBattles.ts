@@ -3,6 +3,7 @@ import {
   queryGeneric as query,
 } from 'convex/server'
 import { v } from 'convex/values'
+import type { QueryCtx } from './_generated/server'
 
 export const createRoom = mutation({
   args: {
@@ -61,7 +62,9 @@ export const createRoom = mutation({
       puzzleSize,
       roomId,
       sharedGrid:
-        battleKind === 'coop' ? cleanPuzzle(args.puzzle, puzzleSize) : undefined,
+        battleKind === 'coop'
+          ? cleanPuzzle(args.puzzle, puzzleSize)
+          : undefined,
       source,
       status: 'waiting',
       title: `${battleKind === 'turns' ? 'Turn battle' : battleKind === 'coop' ? 'Co-op' : 'Live race'} ${titleParts}`,
@@ -130,6 +133,79 @@ export const getRoom = query({
       variantId: cleanVariantId(room.variantId),
       winnerAnonId: room.winnerAnonId,
     }
+  },
+})
+
+export const listResults = query({
+  args: {
+    anonId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const anonId = cleanId(args.anonId)
+    const myPresence = await ctx.db
+      .query('liveBattlePresence')
+      .withIndex('by_anonId_and_updatedAt', (q) => q.eq('anonId', anonId))
+      .order('desc')
+      .take(80)
+    const seenRoomIds = new Set<string>()
+
+    const rows = await Promise.all(
+      myPresence.map(async (presence) => {
+        if (seenRoomIds.has(presence.roomId)) return null
+        seenRoomIds.add(presence.roomId)
+
+        const room = await ctx.db
+          .query('liveBattles')
+          .withIndex('by_roomId', (q) => q.eq('roomId', presence.roomId))
+          .unique()
+        if (!room || room.status !== 'finished') return null
+        if ((room.battleKind ?? 'race') === 'coop') return null
+
+        const roomPresence = await ctx.db
+          .query('liveBattlePresence')
+          .withIndex('by_roomId', (q) => q.eq('roomId', room.roomId))
+          .take(8)
+        const sortedPresence = (
+          await Promise.all(
+            roomPresence.map(async (row) => ({
+              anonId: row.anonId,
+              completion: row.completion,
+              elapsedMs: row.elapsedMs,
+              lastSeenAt: row.lastSeenAt,
+              lives: row.lives,
+              mistakes: row.mistakes ?? 0,
+              player: await profileNameFor(ctx, row.anonId, row.player),
+              recordId: row.recordId,
+              selectedCell: row.selectedCell,
+              status: row.status,
+              updatedAt: row.updatedAt,
+            })),
+          )
+        ).sort(comparePresence)
+
+        return {
+          battleKind: room.battleKind ?? 'race',
+          createdAt: room.createdAt,
+          creatorName: room.creatorName,
+          difficulty: room.difficulty,
+          playMode: room.playMode ?? 'classic',
+          presence: sortedPresence,
+          puzzleSize: room.puzzleSize ?? '9x9',
+          roomId: room.roomId,
+          source: room.source,
+          status: room.status,
+          title: room.title,
+          updatedAt: latestLiveBattleActivity(room.createdAt, sortedPresence),
+          variantId: cleanVariantId(room.variantId),
+          winnerAnonId: room.winnerAnonId,
+        }
+      }),
+    )
+
+    return rows
+      .filter((row) => row !== null)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 50)
   },
 })
 
@@ -489,6 +565,17 @@ function comparePresence(
   return b.lastSeenAt - a.lastSeenAt
 }
 
+function latestLiveBattleActivity(
+  createdAt: string,
+  presence: Array<{ updatedAt: string }>,
+) {
+  return presence.reduce(
+    (latest, player) =>
+      player.updatedAt.localeCompare(latest) > 0 ? player.updatedAt : latest,
+    createdAt,
+  )
+}
+
 async function advanceTurn(
   patchRoom: (patch: {
     status: 'live'
@@ -567,6 +654,21 @@ function cleanId(value: string) {
 
 function cleanName(value: string) {
   return cleanText(value, 32) || 'anonymous'
+}
+
+async function profileNameFor(ctx: QueryCtx, anonId: string, fallback: string) {
+  if (!isAnonymousName(fallback)) return fallback
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_anonId', (q) => q.eq('anonId', anonId))
+    .unique()
+  if (!profile || isAnonymousName(profile.name)) return fallback
+  return profile.name
+}
+
+function isAnonymousName(value: string) {
+  const normalized = value.trim().toLowerCase()
+  return normalized === '' || normalized === 'anonymous'
 }
 
 function cleanText(value: string, maxLength: number) {

@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
-import { getOrCreateGuestId } from './identity';
 
 export type FriendSummary = {
   anonId: string;
@@ -44,15 +43,16 @@ const removeFriendRef = makeFunctionReference<
 >('friends:remove');
 
 export function FriendsPanel({
+  anonId,
   friendCode,
   onChallengeFriend,
   onViewProfile,
 }: {
+  anonId: string;
   friendCode: string;
   onChallengeFriend: (friend: FriendSummary) => void;
   onViewProfile: (friend: FriendSummary) => void;
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), []);
   const [codeInput, setCodeInput] = useState('');
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [status, setStatus] = useState('');

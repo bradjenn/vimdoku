@@ -6,7 +6,7 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { ConvexProvider } from 'convex/react'
+import { ConvexAuthProvider } from '@convex-dev/auth/react'
 import './index.css'
 import App from './App.tsx'
 import { convexClient } from './convexClient.ts'
@@ -198,7 +198,7 @@ declare module '@tanstack/react-router' {
 
 const routedApp = <RouterProvider router={router} />
 const app = convexClient ? (
-  <ConvexProvider client={convexClient}>{routedApp}</ConvexProvider>
+  <ConvexAuthProvider client={convexClient}>{routedApp}</ConvexAuthProvider>
 ) : (
   routedApp
 )
