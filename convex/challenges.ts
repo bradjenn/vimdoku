@@ -216,6 +216,81 @@ export const listMine = query({
   },
 });
 
+export const listResults = query({
+  args: {
+    anonId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const recentChallenges = await ctx.db.query('challenges').order('desc').take(80);
+    const attemptRows = await ctx.db
+      .query('challengeAttempts')
+      .withIndex('by_anonId_updated', (q) => q.eq('anonId', args.anonId))
+      .order('desc')
+      .take(80);
+    const attemptedIds = new Set(attemptRows.map((attempt) => attempt.challengeId));
+
+    const rows = await Promise.all(
+      recentChallenges
+        .filter(
+          (challenge) =>
+            !challenge.recipientAnonId ||
+            challenge.creatorAnonId === args.anonId ||
+            challenge.recipientAnonId === args.anonId ||
+            attemptedIds.has(challenge.challengeId),
+        )
+        .map(async (challenge) => {
+          const attempts = await ctx.db
+            .query('challengeAttempts')
+            .withIndex('by_challengeId_and_updatedAt', (q) =>
+              q.eq('challengeId', challenge.challengeId),
+            )
+            .order('desc')
+            .take(80);
+          const sortedAttempts = attempts
+            .map((attempt) => ({
+              anonId: attempt.anonId,
+              completedAt: attempt.completedAt,
+              completion: attempt.completion,
+              elapsedMs: attempt.elapsedMs,
+              mistakes: attempt.mistakes ?? 0,
+              player: attempt.player,
+              recordId: attempt.recordId,
+              startedAt: attempt.startedAt,
+              status: attempt.status,
+              updatedAt: attempt.updatedAt,
+            }))
+            .sort(compareAttemptsFor(challenge.challengeKind ?? 'race'));
+          const mine = sortedAttempts.find((attempt) => attempt.anonId === args.anonId);
+
+          return {
+            attempts: sortedAttempts,
+            challengeId: challenge.challengeId,
+            challengeKind: challenge.challengeKind ?? 'race',
+            createdAt: challenge.createdAt,
+            creatorName: challenge.creatorName,
+            difficulty: challenge.difficulty,
+            isCreator: challenge.creatorAnonId === args.anonId,
+            isRecipient: challenge.recipientAnonId === args.anonId,
+            myAttempt: mine,
+            playMode: challenge.playMode ?? 'classic',
+            puzzleSize: challenge.puzzleSize ?? '9x9',
+            recipientAnonId: challenge.recipientAnonId,
+            recipientName: challenge.recipientName,
+            source: challenge.source,
+            status: challenge.status,
+            title: challenge.title,
+            updatedAt: latestChallengeActivity(challenge.createdAt, sortedAttempts),
+            variantId: cleanVariantId(challenge.variantId),
+          };
+        }),
+    );
+
+    return rows
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 80);
+  },
+});
+
 export const startAttempt = mutation({
   args: {
     anonId: v.string(),
@@ -230,6 +305,7 @@ export const startAttempt = mutation({
       .withIndex('by_challengeId', (q) => q.eq('challengeId', challengeId))
       .unique();
     if (!challenge) throw new Error('Challenge not found.');
+    if (challenge.status === 'closed') throw new Error('Challenge is closed.');
 
     const existingAttempts = await ctx.db
       .query('challengeAttempts')
@@ -284,6 +360,7 @@ export const submitAttempt = mutation({
       .withIndex('by_challengeId', (q) => q.eq('challengeId', challengeId))
       .unique();
     if (!challenge) throw new Error('Challenge not found.');
+    if (challenge.status === 'closed') throw new Error('Challenge is closed.');
 
     const existingAttempts = await ctx.db
       .query('challengeAttempts')
@@ -309,6 +386,13 @@ export const submitAttempt = mutation({
 
     if (existing) {
       if (existing.status === 'completed' && existing.elapsedMs <= elapsedMs) {
+        const player = cleanName(args.player);
+        if (shouldUseSubmittedName(existing.player, player)) {
+          await ctx.db.patch(existing._id, {
+            player,
+            updatedAt: new Date().toISOString(),
+          });
+        }
         return existing._id;
       }
       await ctx.db.patch(existing._id, doc);
@@ -367,6 +451,17 @@ function cleanChallengeKind(value: string | undefined) {
 
 function cleanName(value: string) {
   return cleanText(value, 32) || 'anonymous';
+}
+
+function shouldUseSubmittedName(current: string, next: string) {
+  if (current === next) return false;
+  if (isAnonymousName(next)) return false;
+  return isAnonymousName(current) || current !== next;
+}
+
+function isAnonymousName(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized === '' || normalized === 'anonymous';
 }
 
 function cleanText(value: string, maxLength: number) {

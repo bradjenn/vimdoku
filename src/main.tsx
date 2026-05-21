@@ -87,15 +87,39 @@ const leaderboardsRoute = createRoute({
   component: () => null,
 })
 
-const leaderboardDetailRoute = createRoute({
+const leaderboardSizeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/leaderboards/$size/$mode/$variant/$difficulty',
+  path: '/leaderboards/$size',
+  component: () => null,
+})
+
+const leaderboardPartOneRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/leaderboards/$size/$part1',
+  component: () => null,
+})
+
+const leaderboardPartTwoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/leaderboards/$size/$part1/$part2',
+  component: () => null,
+})
+
+const leaderboardPartThreeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/leaderboards/$size/$part1/$part2/$part3',
   component: () => null,
 })
 
 const challengeSetupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/challenge',
+  component: () => null,
+})
+
+const challengeResultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/challenge/results',
   component: () => null,
 })
 
@@ -148,8 +172,12 @@ const routeTree = rootRoute.addChildren([
   newRoute,
   gamesRoute,
   leaderboardsRoute,
-  leaderboardDetailRoute,
+  leaderboardSizeRoute,
+  leaderboardPartOneRoute,
+  leaderboardPartTwoRoute,
+  leaderboardPartThreeRoute,
   challengeSetupRoute,
+  challengeResultsRoute,
   challengeRoute,
   liveBattleRoute,
   profileRoute,
@@ -181,8 +209,4 @@ if (!rootElement) {
   throw new Error('Root element #root was not found.')
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
-    {app}
-  </StrictMode>,
-)
+createRoot(rootElement).render(<StrictMode>{app}</StrictMode>)

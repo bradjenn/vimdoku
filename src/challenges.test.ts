@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest'
 import {
   challengeGameId,
   challengeIdFromGameId,
@@ -9,34 +9,38 @@ import {
   createChallengeGameMeta,
   makeChallengeId,
   type ChallengeRace,
-} from './challenges';
+} from './challenges'
 
 describe('challenge identifiers', () => {
   it('round-trips challenge URL paths', () => {
-    expect(challengePath('race-abc123')).toBe('/challenge/race-abc123');
-    expect(challengeIdFromPath('/challenge/race-abc123')).toBe('race-abc123');
-    expect(challengeIdFromPath('/profile')).toBeNull();
-  });
+    expect(challengePath('race-abc123')).toBe('/challenge/race-abc123')
+    expect(challengeIdFromPath('/challenge/race-abc123')).toBe('race-abc123')
+    expect(challengeIdFromPath('/challenge/streak-abc123')).toBe(
+      'streak-abc123',
+    )
+    expect(challengeIdFromPath('/challenge/results')).toBeNull()
+    expect(challengeIdFromPath('/profile')).toBeNull()
+  })
 
   it('round-trips challenge-backed game IDs', () => {
-    const gameId = challengeGameId('streak-abc123', 'streak');
+    const gameId = challengeGameId('streak-abc123', 'streak')
 
-    expect(gameId).toBe('challenge-streak-streak-abc123');
-    expect(challengeIdFromGameId(gameId)).toBe('streak-abc123');
-    expect(challengeKindFromGameId(gameId)).toBe('streak');
-    expect(challengeKindFromGameId('daily-vimdoku-easy-2026-05-18')).toBeNull();
-  });
+    expect(gameId).toBe('challenge-streak-streak-abc123')
+    expect(challengeIdFromGameId(gameId)).toBe('streak-abc123')
+    expect(challengeKindFromGameId(gameId)).toBe('streak')
+    expect(challengeKindFromGameId('daily-vimdoku-easy-2026-05-18')).toBeNull()
+  })
 
   it('creates IDs with the selected kind prefix', () => {
-    expect(makeChallengeId('race')).toMatch(/^race-[a-z0-9]+$/);
-    expect(makeChallengeId('streak')).toMatch(/^streak-[a-z0-9]+$/);
-  });
+    expect(makeChallengeId('race')).toMatch(/^race-[a-z0-9]+$/)
+    expect(makeChallengeId('streak')).toMatch(/^streak-[a-z0-9]+$/)
+  })
 
   it('labels challenge kinds for display text', () => {
-    expect(challengeKindLabel('race')).toBe('race');
-    expect(challengeKindLabel('streak')).toBe('streak battle');
-  });
-});
+    expect(challengeKindLabel('race')).toBe('race')
+    expect(challengeKindLabel('streak')).toBe('streak battle')
+  })
+})
 
 describe('challenge game metadata', () => {
   it('creates a playable game meta object from a challenge', () => {
@@ -54,7 +58,7 @@ describe('challenge game metadata', () => {
       status: 'open',
       title: 'Challenge',
       variantId: 'anti-knight',
-    };
+    }
 
     expect(createChallengeGameMeta(challenge)).toMatchObject({
       difficulty: 'medium',
@@ -64,6 +68,6 @@ describe('challenge game metadata', () => {
       puzzleSize: '9x9',
       source: 'challenge race race-abc123',
       variantId: 'anti-knight',
-    });
-  });
-});
+    })
+  })
+})

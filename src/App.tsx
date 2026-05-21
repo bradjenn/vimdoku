@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  ChevronDown,
   Check,
   Eraser,
   FileText,
@@ -17,14 +18,15 @@ import {
   Trophy,
   UserRound,
   Wrench,
-} from 'lucide-react';
-import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { useQuery } from 'convex/react';
-import { makeFunctionReference } from 'convex/server';
-import type { FunctionReference } from 'convex/server';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
-import Tesseract from 'tesseract.js';
+} from 'lucide-react'
+import * as SelectPrimitive from '@radix-ui/react-select'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
+import { useQuery } from 'convex/react'
+import { makeFunctionReference } from 'convex/server'
+import type { FunctionReference } from 'convex/server'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+import Tesseract from 'tesseract.js'
 import {
   EMPTY_NOTES,
   STARTER_GRID,
@@ -48,7 +50,7 @@ import {
   pruneImpossibleNotes,
   removeRelatedNotes,
   solveGrid,
-} from './sudoku';
+} from './sudoku'
 import {
   createDailyGameMeta,
   dailyPath,
@@ -60,7 +62,7 @@ import {
   parseDailyRoute,
   shiftDateKey,
   todayDateKey,
-} from './daily';
+} from './daily'
 import {
   createGameMeta,
   createGameRecord,
@@ -76,7 +78,7 @@ import {
   type Snapshot,
   type SolveEvent,
   type SolveEventKind,
-} from './storage';
+} from './storage'
 import {
   PLAYER_NAME_KEY,
   fetchGlobalLeaderboard,
@@ -84,11 +86,14 @@ import {
   leaderboardEntryMatches,
   submitGlobalScore,
   type LeaderboardEntry,
-} from './leaderboard';
-import { ChallengeBridge } from './ChallengeBridge';
-import { ChallengeHistoryPanel } from './ChallengeHistoryPanel';
-import { LiveBattleBridge } from './LiveBattleBridge';
-import { FriendsPanel, type FriendSummary } from './FriendsPanel';
+} from './leaderboard'
+import { ChallengeBridge } from './ChallengeBridge'
+import {
+  ChallengeHistoryPanel,
+  ChallengeResultsView,
+} from './ChallengeHistoryPanel'
+import { LiveBattleBridge } from './LiveBattleBridge'
+import { FriendsPanel, type FriendSummary } from './FriendsPanel'
 import {
   challengeKindFromGameId,
   challengeKindLabel,
@@ -100,7 +105,7 @@ import {
   type ChallengeKind,
   type ChallengeCreateRequest,
   type ChallengeRace,
-} from './challenges';
+} from './challenges'
 import {
   createLiveBattleGameMeta,
   liveBattleIdFromGameId,
@@ -111,38 +116,37 @@ import {
   type LiveBattleKind,
   type LiveBattleRoom,
   type LiveBattleTurnRequest,
-} from './liveBattles';
-import { ConvexBridge, type CloudProfile, type CloudStats } from './ConvexBridge';
-import { hasConvexBackend } from './convexClient';
-import { getOrCreateGuestId, shortGuestId } from './identity';
-import { PublicProfilePanel } from './PublicProfilePanel';
+} from './liveBattles'
 import {
-  PLAY_MODES,
-  modeLabel,
-  modePolicy,
-  type PlayMode,
-} from './playModes';
-import { checkGrid } from './checks';
+  ConvexBridge,
+  type CloudProfile,
+  type CloudStats,
+} from './ConvexBridge'
+import { hasConvexBackend } from './convexClient'
+import { getOrCreateGuestId, shortGuestId } from './identity'
+import { PublicProfilePanel } from './PublicProfilePanel'
+import { PLAY_MODES, modeLabel, modePolicy, type PlayMode } from './playModes'
+import { checkGrid } from './checks'
 import {
   boxSelection,
   columnSelection,
   nextEmptyCell,
   rectangularSelection,
   rowSelection,
-} from './selection';
-import { decodePuzzleLinkData, encodePuzzleLinkData } from './puzzleLinks';
-import { VARIANTS, checkVariant, type VariantId } from './variants';
-import { TuiDialog } from './ui';
+} from './selection'
+import { decodePuzzleLinkData, encodePuzzleLinkData } from './puzzleLinks'
+import { VARIANTS, checkVariant, type VariantId } from './variants'
+import { TuiDialog } from './ui'
 
 type ReviewCell = {
-  value: number;
-  confidence: number;
-};
+  value: number
+  confidence: number
+}
 
-type EditorMode = 'normal' | 'annotate' | 'corner' | 'color' | 'visual';
-type ToolMode = 'digit' | 'center' | 'corner' | 'color';
-type HintMode = 'nudge' | 'explain' | 'show';
-type CommandMode = 'command' | 'search';
+type EditorMode = 'normal' | 'annotate' | 'corner' | 'color' | 'visual'
+type ToolMode = 'digit' | 'center' | 'corner' | 'color'
+type HintMode = 'nudge' | 'explain' | 'show'
+type CommandMode = 'command' | 'search'
 type MenuModal =
   | 'menu'
   | 'settings'
@@ -151,9 +155,9 @@ type MenuModal =
   | 'rules'
   | 'theme'
   | 'tools'
-  | null;
-type RouteModal = 'menu' | 'settings' | 'commands' | 'rules' | 'theme' | 'tools';
-type TimerPauseReason = 'manual' | 'auto' | null;
+  | null
+type RouteModal = 'menu' | 'settings' | 'commands' | 'rules' | 'theme' | 'tools'
+type TimerPauseReason = 'manual' | 'auto' | null
 type PageRoute =
   | 'dashboard'
   | 'play'
@@ -162,27 +166,35 @@ type PageRoute =
   | 'leaderboards'
   | 'challenge'
   | 'live-battle'
-  | 'profile';
-type GameLibraryFilter = 'all' | 'in-progress' | 'completed';
-type ChallengePuzzleSource = 'daily' | 'generated' | 'current';
-type ThemeId = (typeof CODE_THEMES)[number]['id'];
+  | 'profile'
+type GameLibraryFilter = 'all' | 'in-progress' | 'completed'
+type ChallengePuzzleSource = 'daily' | 'generated' | 'current'
+type ChallengeSetupKind = ChallengeKind | 'live-race' | 'live-turns'
+type ThemeId = (typeof CODE_THEMES)[number]['id']
 type CommandSuggestion = {
-  command: string;
-  description: string;
-  keywords?: string;
-};
+  command: string
+  description: string
+  keywords?: string
+}
 type FriendshipRow = {
-  direction: 'incoming' | 'outgoing';
-  friend: FriendSummary;
-  friendshipId: string;
-  status: 'pending' | 'accepted';
-};
+  direction: 'incoming' | 'outgoing'
+  friend: FriendSummary
+  friendshipId: string
+  status: 'pending' | 'accepted'
+}
 
-const THEME_KEY = 'vimdoku-theme-v1';
-const TIMER_PAUSED_GAME_KEY = 'vimdoku-paused-game-v1';
-const NEW_GAME_DIFFICULTIES: PuzzleDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
-const PUZZLE_SIZES: PuzzleSize[] = ['9x9', '6x6'];
-const LEADERBOARD_PLAY_MODES = PLAY_MODES.filter((mode) => modePolicy(mode).scoreEnabled);
+const THEME_KEY = 'vimdoku-theme-v1'
+const TIMER_PAUSED_GAME_KEY = 'vimdoku-paused-game-v1'
+const NEW_GAME_DIFFICULTIES: PuzzleDifficulty[] = [
+  'easy',
+  'medium',
+  'hard',
+  'expert',
+]
+const PUZZLE_SIZES: PuzzleSize[] = ['9x9', '6x6']
+const LEADERBOARD_PLAY_MODES = PLAY_MODES.filter(
+  (mode) => modePolicy(mode).scoreEnabled,
+)
 const CELL_COLORS = [
   '#f7768e',
   '#e0af68',
@@ -190,12 +202,12 @@ const CELL_COLORS = [
   '#7dcfff',
   '#bb9af7',
   '#f5c2e7',
-] as const;
+] as const
 const listFriendsRef = makeFunctionReference<
   'query',
   { anonId: string },
   FriendshipRow[]
->('friends:list');
+>('friends:list')
 
 // Single source of truth for the Space-leader menu — drives both the
 // which-key popup and the keydown resolution below.
@@ -211,7 +223,7 @@ const LEADER_BINDINGS: [key: string, label: string][] = [
   ['t', 'tools'],
   ['c', 'colorscheme'],
   ['m', 'menu'],
-];
+]
 
 // alpha-nvim style startup splash — ANSI Shadow font, same as LazyVim's logo.
 const VIMDOKU_BANNER = [
@@ -221,7 +233,7 @@ const VIMDOKU_BANNER = [
   '╚██╗ ██╔╝██║██║╚██╔╝██║██║  ██║██║   ██║██╔═██╗ ██║   ██║',
   ' ╚████╔╝ ██║██║ ╚═╝ ██║██████╔╝╚██████╔╝██║  ██╗╚██████╔╝',
   '  ╚═══╝  ╚═╝╚═╝     ╚═╝╚═════╝  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ',
-].join('\n');
+].join('\n')
 
 const DASHBOARD_ACTIONS: [key: string, label: string][] = [
   ['n', 'new game'],
@@ -231,15 +243,25 @@ const DASHBOARD_ACTIONS: [key: string, label: string][] = [
   ['r', 'challenge'],
   ['p', 'profile'],
   ['s', 'settings'],
-];
+]
 
 const COMMAND_SUGGESTIONS: CommandSuggestion[] = [
-  { command: 'hint', description: 'ask the hint engine for the next useful move' },
+  {
+    command: 'hint',
+    description: 'ask the hint engine for the next useful move',
+  },
   { command: 'tools', description: 'open the tool palette' },
-  { command: 'theme', description: 'open the colorscheme picker', keywords: 'colorscheme colour color' },
+  {
+    command: 'theme',
+    description: 'open the colorscheme picker',
+    keywords: 'colorscheme colour color',
+  },
   { command: 'rules', description: 'open puzzle rules and variant checks' },
   { command: 'share', description: 'copy a clean puzzle link' },
-  { command: 'share-state', description: 'copy puzzle with notes, colours, timer, and progress' },
+  {
+    command: 'share-state',
+    description: 'copy puzzle with notes, colours, timer, and progress',
+  },
   { command: 'pause', description: 'pause the puzzle timer' },
   { command: 'resume', description: 'resume the puzzle timer' },
   { command: 'check', description: 'check classic and variant conflicts' },
@@ -252,10 +274,16 @@ const COMMAND_SUGGESTIONS: CommandSuggestion[] = [
   { command: 'all', description: 'select every cell' },
   { command: 'color 1', description: 'colour selected cells' },
   { command: 'color clear', description: 'clear selected colour' },
-  { command: 'anti-knight', description: 'switch variant checks to anti-knight' },
+  {
+    command: 'anti-knight',
+    description: 'switch variant checks to anti-knight',
+  },
   { command: 'anti-king', description: 'switch variant checks to anti-king' },
   { command: 'diagonal', description: 'switch variant checks to diagonal' },
-  { command: 'non-consecutive', description: 'switch variant checks to non-consecutive' },
+  {
+    command: 'non-consecutive',
+    description: 'switch variant checks to non-consecutive',
+  },
   { command: 'classic', description: 'switch back to classic rules' },
   { command: 'new', description: 'open new game' },
   { command: 'daily', description: 'open today daily' },
@@ -268,7 +296,7 @@ const COMMAND_SUGGESTIONS: CommandSuggestion[] = [
   { command: 'import', description: 'import a puzzle image' },
   { command: 'solve', description: 'fill the solution' },
   { command: 'reset', description: 'reset player entries' },
-] as const;
+] as const
 
 const CODE_THEMES = [
   {
@@ -579,187 +607,224 @@ const CODE_THEMES = [
       '--status-text': '#1f1f1f',
     },
   },
-] as const;
+] as const
 
 function App() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
-  });
-  const routeModal = modalFromPath(pathname);
-  const activePage = pageFromPath(pathname);
-  const publicFriendCode = useMemo(() => publicFriendCodeFromPath(pathname), [pathname]);
-  const dailyRoute = useMemo(() => parseDailyRoute(pathname), [pathname]);
-  const routeChallengeId = useMemo(() => challengeIdFromPath(pathname), [pathname]);
-  const routeLiveBattleId = useMemo(() => liveBattleIdFromPath(pathname), [pathname]);
-  const sharedPuzzlePayload = useMemo(() => sharedPuzzlePayloadFromPath(pathname), [pathname]);
-  const showDashboard = activePage === 'dashboard';
-  const [grid, setGrid] = useState<Grid>(() => loadLegacySnapshot()?.grid ?? STARTER_GRID);
-  const [notes, setNotes] = useState<Notes>(() => loadLegacySnapshot()?.notes ?? EMPTY_NOTES);
+  })
+  const routeModal = modalFromPath(pathname)
+  const activePage = pageFromPath(pathname)
+  const publicFriendCode = useMemo(
+    () => publicFriendCodeFromPath(pathname),
+    [pathname],
+  )
+  const dailyRoute = useMemo(() => parseDailyRoute(pathname), [pathname])
+  const routeChallengeId = useMemo(
+    () => challengeIdFromPath(pathname),
+    [pathname],
+  )
+  const routeChallengeResults = pathname === '/challenge/results'
+  const routeLiveBattleId = useMemo(
+    () => liveBattleIdFromPath(pathname),
+    [pathname],
+  )
+  const sharedPuzzlePayload = useMemo(
+    () => sharedPuzzlePayloadFromPath(pathname),
+    [pathname],
+  )
+  const showDashboard = activePage === 'dashboard'
+  const [grid, setGrid] = useState<Grid>(
+    () => loadLegacySnapshot()?.grid ?? STARTER_GRID,
+  )
+  const [notes, setNotes] = useState<Notes>(
+    () => loadLegacySnapshot()?.notes ?? EMPTY_NOTES,
+  )
   const [givens, setGivens] = useState<boolean[]>(
     () => loadLegacySnapshot()?.givens ?? STARTER_GRID.map(Boolean),
-  );
-  const [selected, setSelected] = useState(0);
-  const [noteMode, setNoteMode] = useState(false);
-  const [shiftHeld, setShiftHeld] = useState(false);
-  const [visualAnchor, setVisualAnchor] = useState<number | null>(null);
-  const [explicitSelection, setExplicitSelection] = useState<Set<number> | null>(null);
-  const [history, setHistory] = useState<Snapshot[]>([]);
-  const [future, setFuture] = useState<Snapshot[]>([]);
-  const [hint, setHint] = useState<Hint | null>(null);
-  const [toolMode, setToolMode] = useState<ToolMode>('digit');
-  const [activeColor, setActiveColor] = useState(0);
-  const [variantId, setVariantId] = useState<VariantId>('classic');
-  const [cellColors, setCellColors] = useState<(number | null)[]>(() =>
-    loadLegacySnapshot()?.cellColors ?? Array(STARTER_GRID.length).fill(null),
-  );
-  const [cornerMarks, setCornerMarks] = useState<Notes>(() =>
-    loadLegacySnapshot()?.cornerMarks ?? emptyNotes(puzzleSizeFromGrid(STARTER_GRID)),
-  );
-  const [hintMode, setHintMode] = useState<HintMode>('explain');
-  const [review, setReview] = useState<ReviewCell[] | null>(null);
-  const [reviewSelected, setReviewSelected] = useState(0);
-  const [_ocrStatus, setOcrStatus] = useState('');
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [commandMode, setCommandMode] = useState<CommandMode | null>(null);
-  const [commandValue, setCommandValue] = useState('');
-  const [commandCursor, setCommandCursor] = useState(0);
-  const [statusLine, setStatusLine] = useState('Ready. Press : for commands.');
-  const [highlightDigit, setHighlightDigit] = useState<number | null>(null);
-  const [themeId, setThemeId] = useState<ThemeId>(() => loadTheme());
-  const [menuModal, setMenuModal] = useState<MenuModal>(null);
-  const [gamePickerOpen, setGamePickerOpen] = useState(false);
-  const [gameQuery, setGameQuery] = useState('');
-  const [gameLibraryQuery, setGameLibraryQuery] = useState('');
+  )
+  const [selected, setSelected] = useState(0)
+  const [noteMode, setNoteMode] = useState(false)
+  const [shiftHeld, setShiftHeld] = useState(false)
+  const [visualAnchor, setVisualAnchor] = useState<number | null>(null)
+  const [explicitSelection, setExplicitSelection] =
+    useState<Set<number> | null>(null)
+  const [history, setHistory] = useState<Snapshot[]>([])
+  const [future, setFuture] = useState<Snapshot[]>([])
+  const [hint, setHint] = useState<Hint | null>(null)
+  const [toolMode, setToolMode] = useState<ToolMode>('digit')
+  const [activeColor, setActiveColor] = useState(0)
+  const [variantId, setVariantId] = useState<VariantId>('classic')
+  const [cellColors, setCellColors] = useState<(number | null)[]>(
+    () =>
+      loadLegacySnapshot()?.cellColors ?? Array(STARTER_GRID.length).fill(null),
+  )
+  const [cornerMarks, setCornerMarks] = useState<Notes>(
+    () =>
+      loadLegacySnapshot()?.cornerMarks ??
+      emptyNotes(puzzleSizeFromGrid(STARTER_GRID)),
+  )
+  const [hintMode, setHintMode] = useState<HintMode>('explain')
+  const [review, setReview] = useState<ReviewCell[] | null>(null)
+  const [reviewSelected, setReviewSelected] = useState(0)
+  const [_ocrStatus, setOcrStatus] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [commandMode, setCommandMode] = useState<CommandMode | null>(null)
+  const [commandValue, setCommandValue] = useState('')
+  const [commandCursor, setCommandCursor] = useState(0)
+  const [statusLine, setStatusLine] = useState('Ready. Press : for commands.')
+  const [highlightDigit, setHighlightDigit] = useState<number | null>(null)
+  const [themeId, setThemeId] = useState<ThemeId>(() => loadTheme())
+  const [menuModal, setMenuModal] = useState<MenuModal>(null)
+  const [gamePickerOpen, setGamePickerOpen] = useState(false)
+  const [gameQuery, setGameQuery] = useState('')
+  const [gameLibraryQuery, setGameLibraryQuery] = useState('')
   const [gameLibraryFilter, setGameLibraryFilter] =
-    useState<GameLibraryFilter>('all');
-  const [gameCursor, setGameCursor] = useState(0);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [timerPaused, setTimerPaused] = useState(false);
+    useState<GameLibraryFilter>('all')
+  const [gameCursor, setGameCursor] = useState(0)
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [timerPaused, setTimerPaused] = useState(false)
   const [timerPauseReason, setTimerPauseReason] =
-    useState<TimerPauseReason>(null);
-  const [hintUses, setHintUses] = useState(0);
-  const [manualPauseCount, setManualPauseCount] = useState(0);
-  const [solveEvents, setSolveEvents] = useState<SolveEvent[]>([]);
+    useState<TimerPauseReason>(null)
+  const [hintUses, setHintUses] = useState(0)
+  const [manualPauseCount, setManualPauseCount] = useState(0)
+  const [solveEvents, setSolveEvents] = useState<SolveEvent[]>([])
   const [activeGame, setActiveGame] = useState<GameMeta>(() =>
     loadInitialGameMeta(),
-  );
+  )
   const [gameRecords, setGameRecords] = useState<GameRecord[]>(() =>
     loadLegacyGameRecords(),
-  );
-  const [globalScores, setGlobalScores] = useState<LeaderboardEntry[]>([]);
-  const [leaderboardStatus, setLeaderboardStatus] = useState('');
-  const [challengeRace, setChallengeRace] = useState<ChallengeRace | null>(null);
-  const [challengeStatus, setChallengeStatus] = useState('');
-  const [challengeShareUrl, setChallengeShareUrl] = useState('');
-  const [challengeSetupOpen, setChallengeSetupOpen] = useState(false);
-  const [challengeRecipient, setChallengeRecipient] = useState<FriendSummary | null>(
-    null,
-  );
-  const [challengeMistakes, setChallengeMistakes] = useState(0);
+  )
+  const [globalScores, setGlobalScores] = useState<LeaderboardEntry[]>([])
+  const [leaderboardStatus, setLeaderboardStatus] = useState('')
+  const [challengeRace, setChallengeRace] = useState<ChallengeRace | null>(null)
+  const [challengeStatus, setChallengeStatus] = useState('')
+  const [challengeShareUrl, setChallengeShareUrl] = useState('')
+  const [challengeSetupOpen, setChallengeSetupOpen] = useState(false)
+  const [challengeRecipient, setChallengeRecipient] =
+    useState<FriendSummary | null>(null)
+  const [challengeMistakes, setChallengeMistakes] = useState(0)
   const [challengeCreateRequest, setChallengeCreateRequest] =
-    useState<ChallengeCreateRequest | null>(null);
-  const [liveBattleRoom, setLiveBattleRoom] = useState<LiveBattleRoom | null>(null);
-  const [liveBattleStatus, setLiveBattleStatus] = useState('');
-  const [liveBattleShareUrl, setLiveBattleShareUrl] = useState('');
+    useState<ChallengeCreateRequest | null>(null)
+  const [liveBattleRoom, setLiveBattleRoom] = useState<LiveBattleRoom | null>(
+    null,
+  )
+  const [liveBattleStatus, setLiveBattleStatus] = useState('')
+  const [liveBattleShareUrl, setLiveBattleShareUrl] = useState('')
   const [liveBattleCreateRequest, setLiveBattleCreateRequest] =
-    useState<LiveBattleCreateRequest | null>(null);
+    useState<LiveBattleCreateRequest | null>(null)
   const [liveBattleTurnRequest, setLiveBattleTurnRequest] =
-    useState<LiveBattleTurnRequest | null>(null);
-  const [cloudProfile, setCloudProfile] = useState<CloudProfile | null>(null);
-  const [cloudStats, setCloudStats] = useState<CloudStats | null>(null);
-  const [guestId] = useState(() => getOrCreateGuestId());
+    useState<LiveBattleTurnRequest | null>(null)
+  const [cloudProfile, setCloudProfile] = useState<CloudProfile | null>(null)
+  const [cloudStats, setCloudStats] = useState<CloudStats | null>(null)
+  const [guestId] = useState(() => getOrCreateGuestId())
   const [playerName, setPlayerName] = useState(
     () => localStorage.getItem(PLAYER_NAME_KEY) || 'anonymous',
-  );
-  const [storageReady, setStorageReady] = useState(false);
+  )
+  const [storageReady, setStorageReady] = useState(false)
   const [newGameDifficulty, setNewGameDifficulty] =
-    useState<PuzzleDifficulty>('medium');
-  const [newGameMode, setNewGameMode] = useState<PlayMode>('classic');
-  const [newGameSize, setNewGameSize] = useState<PuzzleSize>('9x9');
-  const [newGameVariant, setNewGameVariant] = useState<VariantId>('classic');
-  const [dailyDateKey, setDailyDateKey] = useState(() => todayDateKey());
+    useState<PuzzleDifficulty>('medium')
+  const [newGameMode, setNewGameMode] = useState<PlayMode>('classic')
+  const [newGameSize, setNewGameSize] = useState<PuzzleSize>('9x9')
+  const [newGameVariant, setNewGameVariant] = useState<VariantId>('classic')
+  const [dailyDateKey, setDailyDateKey] = useState(() => todayDateKey())
   const [dashboardDifficulty, setDashboardDifficulty] =
-    useState<PuzzleDifficulty>('easy');
-  const [dashboardMode, setDashboardMode] = useState<PlayMode>('classic');
-  const [dashboardSize, setDashboardSize] = useState<PuzzleSize>('9x9');
+    useState<PuzzleDifficulty>('easy')
+  const [dashboardMode, setDashboardMode] = useState<PlayMode>('classic')
+  const [dashboardSize, setDashboardSize] = useState<PuzzleSize>('9x9')
   const [challengeDifficulty, setChallengeDifficulty] =
-    useState<PuzzleDifficulty>('medium');
-  const [challengeKind, setChallengeKind] = useState<ChallengeKind>('race');
-  const [challengeMode, setChallengeMode] = useState<PlayMode>('classic');
-  const [challengeSize, setChallengeSize] = useState<PuzzleSize>('9x9');
+    useState<PuzzleDifficulty>('medium')
+  const [challengeKind, setChallengeKind] = useState<ChallengeSetupKind>('race')
+  const [challengeMode, setChallengeMode] = useState<PlayMode>('classic')
+  const [challengeSize, setChallengeSize] = useState<PuzzleSize>('9x9')
+  const [challengeVariant, setChallengeVariant] = useState<VariantId>('classic')
   const [challengeSource, setChallengeSource] =
-    useState<ChallengePuzzleSource>('daily');
+    useState<ChallengePuzzleSource>('daily')
+  const [challengeTurnSeconds, setChallengeTurnSeconds] = useState(20)
+  const [challengeTurnLives, setChallengeTurnLives] = useState(3)
+  const leaderboardFilters = useMemo(
+    () => leaderboardFiltersFromPath(pathname) ?? DEFAULT_LEADERBOARD_FILTERS,
+    [pathname],
+  )
   const leaderboardScope = useMemo(
     () => leaderboardScopeFromPath(pathname),
     [pathname],
-  );
-  const leaderboardSize = leaderboardScope?.size ?? '9x9';
-  const leaderboardMode = leaderboardScope?.mode ?? 'classic';
-  const leaderboardVariant = leaderboardScope?.variant ?? 'classic';
-  const leaderboardDifficulty = leaderboardScope?.difficulty ?? 'easy';
-  const [solvedDismissed, setSolvedDismissed] = useState(false);
-  const [solvedNamePromptGameId, setSolvedNamePromptGameId] = useState<string | null>(
-    null,
-  );
-  const [newPuzzleText, setNewPuzzleText] = useState('');
-  const [newGameStatus, setNewGameStatus] = useState('');
-  const [isFetchingPuzzle, setIsFetchingPuzzle] = useState(false);
-  const [hintRailOpen, setHintRailOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [toolsPanelOpen, setToolsPanelOpen] = useState(true);
-  const [leaderPending, setLeaderPending] = useState(false);
+  )
+  const leaderboardSize = leaderboardFilters.size
+  const leaderboardMode = leaderboardFilters.mode
+  const leaderboardVariant = leaderboardFilters.variant
+  const leaderboardDifficulty = leaderboardScope?.difficulty ?? 'easy'
+  const [solvedDismissed, setSolvedDismissed] = useState(false)
+  const [solvedNamePromptGameId, setSolvedNamePromptGameId] = useState<
+    string | null
+  >(null)
+  const [newPuzzleText, setNewPuzzleText] = useState('')
+  const [newGameStatus, setNewGameStatus] = useState('')
+  const [isFetchingPuzzle, setIsFetchingPuzzle] = useState(false)
+  const [hintRailOpen, setHintRailOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [toolsPanelOpen, setToolsPanelOpen] = useState(true)
+  const [leaderPending, setLeaderPending] = useState(false)
   const [compactStatus, setCompactStatus] = useState(
     () =>
       typeof window !== 'undefined' &&
       window.matchMedia('(max-width: 640px)').matches,
-  );
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingKeyRef = useRef('');
-  const submittedScoreIdsRef = useRef(new Set<string>());
-  const previousPageRef = useRef(activePage);
-  const activeMenuModal = menuModal ?? routeModal;
-  const hasCustomPlayerName = isCustomPlayerName(playerName);
-  const activeSize = activeGame.puzzleSize ?? puzzleSizeFromGrid(grid);
-  const activeMode = activeGame.playMode ?? 'classic';
-  const activeChallengeId = challengeIdFromGameId(activeGame.id);
-  const activeChallengeKind = challengeKindFromGameId(activeGame.id);
-  const activeLiveBattleId = liveBattleIdFromGameId(activeGame.id);
+  )
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const pendingKeyRef = useRef('')
+  const submittedScoreIdsRef = useRef(new Set<string>())
+  const previousPageRef = useRef(activePage)
+  const handledLiveRaceStartRef = useRef<string | null>(null)
+  const handledLiveRaceFinishRef = useRef<string | null>(null)
+  const activeMenuModal = menuModal ?? routeModal
+  const hasCustomPlayerName = isCustomPlayerName(playerName)
+  const activeSize = activeGame.puzzleSize ?? puzzleSizeFromGrid(grid)
+  const activeMode = activeGame.playMode ?? 'classic'
+  const activeChallengeId = challengeIdFromGameId(activeGame.id)
+  const activeChallengeKind = challengeKindFromGameId(activeGame.id)
+  const activeLiveBattleId = liveBattleIdFromGameId(activeGame.id)
   const isLiveBattlePlay =
     activePage === 'live-battle' &&
     Boolean(routeLiveBattleId) &&
-    activeLiveBattleId === routeLiveBattleId;
+    activeLiveBattleId === routeLiveBattleId
   const activeLiveBattleRoom =
     activeLiveBattleId && liveBattleRoom?.roomId === activeLiveBattleId
       ? liveBattleRoom
-      : null;
+      : null
   const isTurnBattlePlay =
-    isLiveBattlePlay && activeLiveBattleRoom?.battleKind === 'turns';
+    isLiveBattlePlay && activeLiveBattleRoom?.battleKind === 'turns'
   const isMyTurnBattleTurn =
-    !isTurnBattlePlay || activeLiveBattleRoom?.turnAnonId === guestId;
-  const showBoard = activePage === 'play' || isLiveBattlePlay;
-  const activeConfig = boardConfigFor(activeSize);
-  const activeDigits = activeConfig.digits;
-  const activeCellCount = activeConfig.cellCount;
+    !isTurnBattlePlay || activeLiveBattleRoom?.turnAnonId === guestId
+  const showBoard = activePage === 'play' || isLiveBattlePlay
+  const activeConfig = boardConfigFor(activeSize)
+  const activeDigits = activeConfig.digits
+  const activeCellCount = activeConfig.cellCount
   const {
     flashStyle: battleImpactFlashStyle,
     impactStyle: battleImpactStyle,
     triggerImpact: triggerBattleImpact,
-  } = useScreenImpact();
-  const policy = useMemo(() => modePolicy(activeMode), [activeMode]);
-  const { notesEnabled, hintsEnabled, pauseEnabled, timerEnabled, scoreEnabled } = policy;
+  } = useScreenImpact()
+  const policy = useMemo(() => modePolicy(activeMode), [activeMode])
+  const {
+    notesEnabled,
+    hintsEnabled,
+    pauseEnabled,
+    timerEnabled,
+    scoreEnabled,
+  } = policy
 
   const updatePlayerName = useCallback((value: string) => {
-    setPlayerName(value);
-  }, []);
+    setPlayerName(value)
+  }, [])
 
   const goToDashboard = useCallback(() => {
-    void navigate({ to: '/' });
-  }, [navigate]);
+    void navigate({ to: '/' })
+  }, [navigate])
 
   const goToPlay = useCallback(() => {
-    void navigate({ to: '/play' });
-  }, [navigate]);
+    void navigate({ to: '/play' })
+  }, [navigate])
 
   const openDailyPuzzle = useCallback(
     (
@@ -772,37 +837,37 @@ function App() {
         void navigate({
           to: '/play/daily/$difficulty/$date',
           params: { date: dateKey, difficulty },
-        });
-        return;
+        })
+        return
       }
       if (playMode === 'classic') {
         void navigate({
           to: '/play/daily/$size/$difficulty/$date',
           params: { date: dateKey, difficulty, size: puzzleSize },
-        });
-        return;
+        })
+        return
       }
       void navigate({
         to: '/play/daily/$size/$mode/$difficulty/$date',
         params: { date: dateKey, difficulty, mode: playMode, size: puzzleSize },
-      });
+      })
     },
     [navigate, newGameMode, newGameSize],
-  );
+  )
 
   const goToProfile = useCallback(() => {
-    setStatusLine('Opened profile.');
-    void navigate({ to: '/profile' });
-  }, [navigate]);
+    setStatusLine('Opened profile.')
+    void navigate({ to: '/profile' })
+  }, [navigate])
 
   const openPublicProfile = useCallback(
     (friendCode: string) => {
-      const compactCode = compactFriendCode(friendCode);
-      setStatusLine(`Opened ${compactCode} profile.`);
-      void navigate({ to: `/u/${encodeURIComponent(compactCode)}` });
+      const compactCode = compactFriendCode(friendCode)
+      setStatusLine(`Opened ${compactCode} profile.`)
+      void navigate({ to: `/u/${encodeURIComponent(compactCode)}` })
     },
     [navigate],
-  );
+  )
 
   const navigateToPage = useCallback(
     (page: PageRoute) => {
@@ -815,76 +880,84 @@ function App() {
               ? '/new'
               : page === 'games'
                 ? '/games'
-              : page === 'leaderboards'
-                ? '/leaderboards'
-              : page === 'challenge'
-                ? routeChallengeId
-                  ? challengePath(routeChallengeId)
-                  : '/challenge'
-                : page === 'live-battle'
-                  ? routeLiveBattleId
-                    ? liveBattlePath(routeLiveBattleId)
-                    : '/challenge'
-                : '/profile';
-      void navigate({ to: path });
+                : page === 'leaderboards'
+                  ? '/leaderboards'
+                  : page === 'challenge'
+                    ? routeChallengeResults
+                      ? '/challenge/results'
+                      : routeChallengeId
+                        ? challengePath(routeChallengeId)
+                        : '/challenge'
+                    : page === 'live-battle'
+                      ? routeLiveBattleId
+                        ? liveBattlePath(routeLiveBattleId)
+                        : '/challenge'
+                      : '/profile'
+      void navigate({ to: path })
     },
-    [navigate, routeChallengeId, routeLiveBattleId],
-  );
+    [navigate, routeChallengeId, routeChallengeResults, routeLiveBattleId],
+  )
 
-  const openModalRoute = useCallback(
-    (modal: RouteModal) => {
-      setGamePickerOpen(false);
-      if (modal === 'commands') setCommandMode(null);
-      setMenuModal(modal);
-    },
-    [],
-  );
+  const openModalRoute = useCallback((modal: RouteModal) => {
+    setGamePickerOpen(false)
+    if (modal === 'commands') setCommandMode(null)
+    setMenuModal(modal)
+  }, [])
 
   const chooseToolMode = useCallback((mode: ToolMode) => {
-    setToolMode(mode);
-    setNoteMode(mode === 'center');
-    setStatusLine(toolModeMessage(mode));
-  }, []);
+    setToolMode(mode)
+    setNoteMode(mode === 'center')
+    setStatusLine(toolModeMessage(mode))
+  }, [])
 
   const openNewGame = useCallback(() => {
-    setGamePickerOpen(false);
-    setCommandMode(null);
+    setGamePickerOpen(false)
+    setCommandMode(null)
     if (activePage === 'play') {
-      setMenuModal('new');
+      setMenuModal('new')
       if (routeModal) {
-        void navigate({ to: '/play' });
+        void navigate({ to: '/play' })
       }
-      setStatusLine('Opened new game menu.');
-      return;
+      setStatusLine('Opened new game menu.')
+      return
     }
-    void navigate({ to: '/new' });
-    setStatusLine('Opened new game page.');
-  }, [activePage, navigate, routeModal]);
+    void navigate({ to: '/new' })
+    setStatusLine('Opened new game page.')
+  }, [activePage, navigate, routeModal])
 
-  const openChallengeSetup = useCallback((friend?: FriendSummary | null) => {
-    setChallengeRecipient(friend ?? null);
-    setChallengeSetupOpen(true);
-    setChallengeStatus(
-      friend ? `Creating direct challenge for ${friend.name}.` : '',
-    );
-  }, []);
+  const openChallengeSetup = useCallback(
+    (kind: ChallengeSetupKind = 'race', friend?: FriendSummary | null) => {
+      setChallengeKind(kind)
+      setChallengeRecipient(friend ?? null)
+      setChallengeSetupOpen(true)
+      setChallengeStatus(
+        friend
+          ? `Creating direct ${challengeSetupLabel(kind)} for ${friend.name}.`
+          : '',
+      )
+    },
+    [],
+  )
 
   const closeMenuModal = useCallback(() => {
-    setMenuModal(null);
-    if (routeModal) goToPlay();
-  }, [goToPlay, routeModal]);
+    setMenuModal(null)
+    if (routeModal) goToPlay()
+  }, [goToPlay, routeModal])
 
-  const conflicts = useMemo(() => findConflicts(grid, activeSize), [activeSize, grid]);
-  const visibleConflicts = policy.hidesConflicts ? new Set<number>() : conflicts;
-  const solved = useMemo(() => solveGrid(grid, activeSize), [activeSize, grid]);
+  const conflicts = useMemo(
+    () => findConflicts(grid, activeSize),
+    [activeSize, grid],
+  )
+  const visibleConflicts = policy.hidesConflicts ? new Set<number>() : conflicts
+  const solved = useMemo(() => solveGrid(grid, activeSize), [activeSize, grid])
   const puzzleSolution = useMemo(
     () => solveGrid(parseGrid(activeGame.puzzle, activeSize), activeSize),
     [activeGame.puzzle, activeSize],
-  );
-  const completion = grid.filter(Boolean).length;
+  )
+  const completion = grid.filter(Boolean).length
   const isSolved = Boolean(
     solved && grid.every((value, index) => value === solved[index]),
-  );
+  )
   const showSolved =
     isSolved &&
     showBoard &&
@@ -892,7 +965,7 @@ function App() {
     !commandMode &&
     !gamePickerOpen &&
     !review &&
-    !solvedDismissed;
+    !solvedDismissed
   const currentRecord = useMemo(
     () =>
       createGameRecord(
@@ -918,36 +991,40 @@ function App() {
       solveEvents,
       variantId,
     ],
-  );
+  )
   const needsSolvedNamePrompt =
     scoreEnabled &&
-    (!hasCustomPlayerName || solvedNamePromptGameId === currentRecord.id);
+    (!hasCustomPlayerName || solvedNamePromptGameId === currentRecord.id)
   const trackedGameRecords = useMemo(
     () => upsertGameRecord(gameRecords, currentRecord),
     [currentRecord, gameRecords],
-  );
+  )
   const inProgressGames = useMemo(
     () =>
       trackedGameRecords
         .filter((record) => record.status === 'in-progress')
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [trackedGameRecords],
-  );
+  )
   const completedGames = useMemo(
     () =>
       trackedGameRecords
         .filter((record) => record.status === 'completed')
         .sort((a, b) =>
-          (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt),
+          (b.completedAt ?? b.updatedAt).localeCompare(
+            a.completedAt ?? a.updatedAt,
+          ),
         ),
     [trackedGameRecords],
-  );
+  )
   const localLeaderboard = useMemo(
     () =>
       completedGames
-        .filter((record) => record.puzzleSize === leaderboardSize)
-        .filter((record) => record.playMode === leaderboardMode)
-        .filter((record) => record.variantId === leaderboardVariant)
+        .filter((record) => (record.puzzleSize ?? '9x9') === leaderboardSize)
+        .filter((record) => (record.playMode ?? 'classic') === leaderboardMode)
+        .filter(
+          (record) => (record.variantId ?? 'classic') === leaderboardVariant,
+        )
         .filter((record) => record.difficulty === leaderboardDifficulty)
         .filter((record) => record.elapsedMs > 0)
         .sort((a, b) => a.elapsedMs - b.elapsedMs)
@@ -959,7 +1036,7 @@ function App() {
       leaderboardSize,
       leaderboardVariant,
     ],
-  );
+  )
   const visibleGlobalLeaderboard = useMemo(
     () =>
       globalScores
@@ -979,50 +1056,55 @@ function App() {
       leaderboardSize,
       leaderboardVariant,
     ],
-  );
+  )
   const localProfileStats = useMemo(
     () => buildLocalStats(trackedGameRecords),
     [trackedGameRecords],
-  );
+  )
   const gameFinderRecords = useMemo(
     () => [...inProgressGames, ...completedGames],
     [completedGames, inProgressGames],
-  );
+  )
   const filteredGameRecords = useMemo(
     () => filterGameRecords(gameFinderRecords, gameQuery),
     [gameFinderRecords, gameQuery],
-  );
+  )
   const libraryGameRecords = useMemo(() => {
     const scopedRecords =
       gameLibraryFilter === 'all'
         ? gameFinderRecords
-        : gameFinderRecords.filter((record) => record.status === gameLibraryFilter);
-    return filterGameRecords(scopedRecords, gameLibraryQuery);
-  }, [gameFinderRecords, gameLibraryFilter, gameLibraryQuery]);
+        : gameFinderRecords.filter(
+            (record) => record.status === gameLibraryFilter,
+          )
+    return filterGameRecords(scopedRecords, gameLibraryQuery)
+  }, [gameFinderRecords, gameLibraryFilter, gameLibraryQuery])
   const selectedGameRecord =
-    filteredGameRecords[Math.min(gameCursor, Math.max(0, filteredGameRecords.length - 1))] ??
-    null;
+    filteredGameRecords[
+      Math.min(gameCursor, Math.max(0, filteredGameRecords.length - 1))
+    ] ?? null
   const commandSuggestions = useMemo(
     () => filterCommandSuggestions(commandValue),
     [commandValue],
-  );
+  )
   const selectedCommandSuggestion =
-    commandSuggestions[Math.min(commandCursor, Math.max(0, commandSuggestions.length - 1))] ??
-    null;
+    commandSuggestions[
+      Math.min(commandCursor, Math.max(0, commandSuggestions.length - 1))
+    ] ?? null
   const liveOpponentCursors = useMemo(() => {
-    if (!activeLiveBattleId || !liveBattleRoom) return new Map<number, string[]>();
-    const now = Date.now();
-    const cursors = new Map<number, string[]>();
+    if (!activeLiveBattleId || !liveBattleRoom)
+      return new Map<number, string[]>()
+    const now = Date.now()
+    const cursors = new Map<number, string[]>()
     for (const player of liveBattleRoom.presence) {
-      if (player.anonId === guestId) continue;
-      if (typeof player.selectedCell !== 'number') continue;
-      if (now - player.lastSeenAt >= 8000) continue;
-      const names = cursors.get(player.selectedCell) ?? [];
-      names.push(player.player);
-      cursors.set(player.selectedCell, names);
+      if (player.anonId === guestId) continue
+      if (typeof player.selectedCell !== 'number') continue
+      if (now - player.lastSeenAt >= 8000) continue
+      const names = cursors.get(player.selectedCell) ?? []
+      names.push(player.player)
+      cursors.set(player.selectedCell, names)
     }
-    return cursors;
-  }, [activeLiveBattleId, guestId, liveBattleRoom]);
+    return cursors
+  }, [activeLiveBattleId, guestId, liveBattleRoom])
   const editorMode: EditorMode =
     visualAnchor !== null || explicitSelection !== null
       ? 'visual'
@@ -1032,73 +1114,78 @@ function App() {
           ? 'corner'
           : toolMode === 'center' || (notesEnabled && noteMode)
             ? 'annotate'
-            : 'normal';
+            : 'normal'
 
   const recordSolveEvent = useCallback(
     (event: {
-      cells?: number[];
-      detail?: string;
-      kind: SolveEventKind;
-      label: string;
-      value?: number;
+      cells?: number[]
+      detail?: string
+      kind: SolveEventKind
+      label: string
+      value?: number
     }) => {
-      setSolveEvents((current) => [
-        ...current,
-        {
-          ...event,
-          atMs: elapsedMs,
-          id: `${Date.now().toString(36)}-${current.length.toString(36)}`,
-        },
-      ].slice(-300));
+      setSolveEvents((current) =>
+        [
+          ...current,
+          {
+            ...event,
+            atMs: elapsedMs,
+            id: `${Date.now().toString(36)}-${current.length.toString(36)}`,
+          },
+        ].slice(-300),
+      )
     },
     [elapsedMs],
-  );
+  )
 
   const resumeTimerFromActivity = useCallback(() => {
-    if (!timerPaused || isSolved) return;
-    setTimerPaused(false);
-    setTimerPauseReason(null);
-    setStatusLine('Timer resumed.');
+    if (!timerPaused || isSolved) return
+    setTimerPaused(false)
+    setTimerPauseReason(null)
+    setStatusLine('Timer resumed.')
     recordSolveEvent({
       kind: 'resume',
       label: 'timer resumed',
-      detail: timerPauseReason === 'auto' ? 'activity resumed an auto-paused puzzle' : undefined,
-    });
-  }, [isSolved, recordSolveEvent, timerPauseReason, timerPaused]);
+      detail:
+        timerPauseReason === 'auto'
+          ? 'activity resumed an auto-paused puzzle'
+          : undefined,
+    })
+  }, [isSolved, recordSolveEvent, timerPauseReason, timerPaused])
 
   const toggleTimerPaused = useCallback(() => {
     if (!timerEnabled) {
-      setStatusLine('Zen mode does not track time.');
-      return;
+      setStatusLine('Zen mode does not track time.')
+      return
     }
     if (!pauseEnabled) {
-      setStatusLine('Timer pause is disabled in speedrun.');
-      return;
+      setStatusLine('Timer pause is disabled in speedrun.')
+      return
     }
     if (isSolved) {
-      setStatusLine('Solved puzzles keep their final time.');
-      return;
+      setStatusLine('Solved puzzles keep their final time.')
+      return
     }
     if (!timerPaused) {
-      setManualPauseCount((count) => count + 1);
-      recordSolveEvent({ kind: 'pause', label: 'timer paused' });
+      setManualPauseCount((count) => count + 1)
+      recordSolveEvent({ kind: 'pause', label: 'timer paused' })
     } else {
-      recordSolveEvent({ kind: 'resume', label: 'timer resumed' });
+      recordSolveEvent({ kind: 'resume', label: 'timer resumed' })
     }
     setTimerPaused((current) => {
-      const next = !current;
-      setTimerPauseReason(next ? 'manual' : null);
-      return next;
-    });
-    setStatusLine(timerPaused ? 'Timer resumed.' : 'Timer paused.');
-  }, [isSolved, pauseEnabled, recordSolveEvent, timerEnabled, timerPaused]);
+      const next = !current
+      setTimerPauseReason(next ? 'manual' : null)
+      return next
+    })
+    setStatusLine(timerPaused ? 'Timer resumed.' : 'Timer paused.')
+  }, [isSolved, pauseEnabled, recordSolveEvent, timerEnabled, timerPaused])
 
   useEffect(() => {
     if (previousPageRef.current !== activePage && showBoard) {
-      resumeTimerFromActivity();
+      resumeTimerFromActivity()
     }
-    previousPageRef.current = activePage;
-  }, [activePage, resumeTimerFromActivity, showBoard]);
+    previousPageRef.current = activePage
+  }, [activePage, resumeTimerFromActivity, showBoard])
 
   // The visual selection is the rectangle spanning the anchor and the
   // (moving) cursor; null whenever visual mode is off.
@@ -1109,128 +1196,134 @@ function App() {
         ? null
         : rectangularSelection(visualAnchor, selected, activeSize)),
     [activeSize, explicitSelection, visualAnchor, selected],
-  );
+  )
   const activeCells = useMemo(
     () => visualCells ?? new Set([selected]),
     [selected, visualCells],
-  );
+  )
   const activeTheme = useMemo(
     () => CODE_THEMES.find((theme) => theme.id === themeId) ?? CODE_THEMES[0],
     [themeId],
-  );
-  const themeStyle = activeTheme.vars as CSSProperties;
+  )
+  const themeStyle = activeTheme.vars as CSSProperties
 
   // Mirror theme vars onto :root so Radix-portaled dialogs inherit them.
   useEffect(() => {
-    const root = document.documentElement;
+    const root = document.documentElement
     for (const [key, value] of Object.entries(activeTheme.vars)) {
-      root.style.setProperty(key, value);
+      root.style.setProperty(key, value)
     }
-    root.style.background = activeTheme.vars['--app-bg'];
-    root.style.color = activeTheme.vars['--app-text'];
-    document.body.style.background = activeTheme.vars['--app-bg'];
-    document.body.style.color = activeTheme.vars['--app-text'];
-  }, [activeTheme]);
+    root.style.background = activeTheme.vars['--app-bg']
+    root.style.color = activeTheme.vars['--app-text']
+    document.body.style.background = activeTheme.vars['--app-bg']
+    document.body.style.color = activeTheme.vars['--app-text']
+  }, [activeTheme])
 
   useEffect(() => {
-    localStorage.setItem(THEME_KEY, themeId);
-  }, [themeId]);
+    localStorage.setItem(THEME_KEY, themeId)
+  }, [themeId])
 
   useEffect(() => {
-    localStorage.setItem(PLAYER_NAME_KEY, playerName.trim() || 'anonymous');
-  }, [playerName]);
+    localStorage.setItem(PLAYER_NAME_KEY, playerName.trim() || 'anonymous')
+  }, [playerName])
 
   useEffect(() => {
-    let cancelled = false;
+    let cancelled = false
 
     void loadStoredState()
       .then((stored) => {
-        if (cancelled) return;
-        setGrid(stored.snapshot.grid);
-        setNotes(stored.snapshot.notes);
-        setCornerMarks(stored.snapshot.cornerMarks);
-        setCellColors(stored.snapshot.cellColors);
-        setGivens(stored.snapshot.givens);
-        setVariantId(stored.snapshot.variantId);
+        if (cancelled) return
+        setGrid(stored.snapshot.grid)
+        setNotes(stored.snapshot.notes)
+        setCornerMarks(stored.snapshot.cornerMarks)
+        setCellColors(stored.snapshot.cellColors)
+        setGivens(stored.snapshot.givens)
+        setVariantId(stored.snapshot.variantId)
         setActiveGame({
           ...stored.activeGame,
           variantId: stored.snapshot.variantId,
-        });
-        setGameRecords(stored.records);
+        })
+        setGameRecords(stored.records)
         const storedRecord = stored.records.find(
           (record) => record.id === stored.activeGame.id,
-        );
-        setElapsedMs(storedRecord?.elapsedMs ?? 0);
-        setSolveEvents(storedRecord?.solveEvents ?? []);
-        const storedTimerPaused = loadPausedGameId() === stored.activeGame.id;
-        setTimerPaused(storedTimerPaused);
-        setTimerPauseReason(storedTimerPaused ? 'manual' : null);
+        )
+        setElapsedMs(storedRecord?.elapsedMs ?? 0)
+        setSolveEvents(storedRecord?.solveEvents ?? [])
+        const storedTimerPaused = loadPausedGameId() === stored.activeGame.id
+        setTimerPaused(storedTimerPaused)
+        setTimerPauseReason(storedTimerPaused ? 'manual' : null)
       })
       .finally(() => {
-        if (!cancelled) setStorageReady(true);
-      });
+        if (!cancelled) setStorageReady(true)
+      })
 
     return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!storageReady) return;
-    if (timerPaused && timerPauseReason === 'manual') {
-      localStorage.setItem(TIMER_PAUSED_GAME_KEY, activeGame.id);
-    } else if (loadPausedGameId() === activeGame.id) {
-      localStorage.removeItem(TIMER_PAUSED_GAME_KEY);
+      cancelled = true
     }
-  }, [activeGame.id, storageReady, timerPaused, timerPauseReason]);
+  }, [])
 
   useEffect(() => {
-    if (!storageReady || activePage !== 'play' || !timerEnabled || !pauseEnabled || isSolved) {
-      return;
+    if (!storageReady) return
+    if (timerPaused && timerPauseReason === 'manual') {
+      localStorage.setItem(TIMER_PAUSED_GAME_KEY, activeGame.id)
+    } else if (loadPausedGameId() === activeGame.id) {
+      localStorage.removeItem(TIMER_PAUSED_GAME_KEY)
+    }
+  }, [activeGame.id, storageReady, timerPaused, timerPauseReason])
+
+  useEffect(() => {
+    if (
+      !storageReady ||
+      activePage !== 'play' ||
+      !timerEnabled ||
+      !pauseEnabled ||
+      isSolved
+    ) {
+      return
     }
 
     function appIsActive() {
-      return document.visibilityState === 'visible' && document.hasFocus();
+      return document.visibilityState === 'visible' && document.hasFocus()
     }
 
     function autoPause() {
-      if (timerPaused || appIsActive()) return;
-      setTimerPauseReason('auto');
-      setTimerPaused(true);
+      if (timerPaused || appIsActive()) return
+      setTimerPauseReason('auto')
+      setTimerPaused(true)
       recordSolveEvent({
         detail: 'window lost focus or the tab became hidden',
         kind: 'pause',
         label: 'timer auto-paused',
-      });
-      setStatusLine('Timer auto-paused while Vimdoku was inactive.');
+      })
+      setStatusLine('Timer auto-paused while Vimdoku was inactive.')
     }
 
     function autoResume() {
-      if (timerPauseReason !== 'auto' || !appIsActive()) return;
-      setTimerPaused(false);
-      setTimerPauseReason(null);
+      if (timerPauseReason !== 'auto' || !appIsActive()) return
+      setTimerPaused(false)
+      setTimerPauseReason(null)
       recordSolveEvent({
         detail: 'window focus returned',
         kind: 'resume',
         label: 'timer auto-resumed',
-      });
-      setStatusLine('Timer resumed.');
+      })
+      setStatusLine('Timer resumed.')
     }
 
     function onVisibilityChange() {
-      if (document.visibilityState === 'visible') autoResume();
-      else autoPause();
+      if (document.visibilityState === 'visible') autoResume()
+      else autoPause()
     }
 
-    window.addEventListener('blur', autoPause);
-    window.addEventListener('focus', autoResume);
-    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', autoPause)
+    window.addEventListener('focus', autoResume)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
-      window.removeEventListener('blur', autoPause);
-      window.removeEventListener('focus', autoResume);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
+      window.removeEventListener('blur', autoPause)
+      window.removeEventListener('focus', autoResume)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [
     activePage,
     isSolved,
@@ -1240,17 +1333,17 @@ function App() {
     timerEnabled,
     timerPaused,
     timerPauseReason,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!storageReady) return;
+    if (!storageReady) return
     void saveStoredState(
       { cellColors, cornerMarks, grid, notes, givens, variantId },
       activeGame,
       trackedGameRecords,
     ).catch(() => {
-      setStatusLine('Could not save puzzle history.');
-    });
+      setStatusLine('Could not save puzzle history.')
+    })
   }, [
     activeGame,
     cellColors,
@@ -1261,7 +1354,7 @@ function App() {
     storageReady,
     trackedGameRecords,
     variantId,
-  ]);
+  ])
 
   useEffect(() => {
     if (
@@ -1275,19 +1368,19 @@ function App() {
       isSolved ||
       review
     ) {
-      return;
+      return
     }
 
     function isVisible() {
-      return document.visibilityState === 'visible';
+      return document.visibilityState === 'visible'
     }
 
-    if (!isVisible()) return;
+    if (!isVisible()) return
     const timer = window.setInterval(() => {
-      if (isVisible()) setElapsedMs((current) => current + 1000);
-    }, 1000);
+      if (isVisible()) setElapsedMs((current) => current + 1000)
+    }, 1000)
 
-    return () => window.clearInterval(timer);
+    return () => window.clearInterval(timer)
   }, [
     activeMenuModal,
     activePage,
@@ -1298,52 +1391,56 @@ function App() {
     storageReady,
     timerEnabled,
     timerPaused,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!leaderboardScope) return;
-    if (hasConvexBackend()) return;
-    if (!hasGlobalLeaderboard()) return;
+    if (activePage !== 'leaderboards') return
+    if (hasConvexBackend()) return
+    if (!hasGlobalLeaderboard()) return
 
     void fetchGlobalLeaderboard(
-      leaderboardScope.size,
-      leaderboardScope.mode,
-      leaderboardScope.variant,
+      leaderboardSize,
+      leaderboardMode,
+      leaderboardVariant,
     )
       .then((scores) => {
-        setGlobalScores(scores);
-        setLeaderboardStatus('');
+        setGlobalScores(scores)
+        setLeaderboardStatus('')
       })
       .catch(() => {
-        setLeaderboardStatus('Could not load global leaderboard.');
-      });
-  }, [leaderboardScope]);
+        setLeaderboardStatus('Could not load global leaderboard.')
+      })
+  }, [activePage, leaderboardMode, leaderboardSize, leaderboardVariant])
 
   useEffect(() => {
-    if (!routeChallengeId) return;
-    setChallengeRace(null);
-    setChallengeShareUrl(`${window.location.origin}${challengePath(routeChallengeId)}`);
-    setChallengeStatus('Loading challenge...');
-  }, [routeChallengeId]);
+    if (!routeChallengeId) return
+    setChallengeRace(null)
+    setChallengeShareUrl(
+      `${window.location.origin}${challengePath(routeChallengeId)}`,
+    )
+    setChallengeStatus('Loading challenge...')
+  }, [routeChallengeId])
 
   useEffect(() => {
-    if (!routeLiveBattleId) return;
-    setLiveBattleRoom(null);
-    setLiveBattleShareUrl(`${window.location.origin}${liveBattlePath(routeLiveBattleId)}`);
-    setLiveBattleStatus('Loading live battle...');
-  }, [routeLiveBattleId]);
+    if (!routeLiveBattleId) return
+    setLiveBattleRoom(null)
+    setLiveBattleShareUrl(
+      `${window.location.origin}${liveBattlePath(routeLiveBattleId)}`,
+    )
+    setLiveBattleStatus('Loading live battle...')
+  }, [routeLiveBattleId])
 
   useEffect(() => {
     if (!showSolved) {
-      if (solvedNamePromptGameId) setSolvedNamePromptGameId(null);
-      return;
+      if (solvedNamePromptGameId) setSolvedNamePromptGameId(null)
+      return
     }
     if (
       scoreEnabled &&
       !hasCustomPlayerName &&
       solvedNamePromptGameId !== currentRecord.id
     ) {
-      setSolvedNamePromptGameId(currentRecord.id);
+      setSolvedNamePromptGameId(currentRecord.id)
     }
   }, [
     currentRecord.id,
@@ -1351,124 +1448,150 @@ function App() {
     scoreEnabled,
     showSolved,
     solvedNamePromptGameId,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!showSolved || !currentRecord.completedAt) return;
-    if (hasConvexBackend()) return;
-    if (!hasCustomPlayerName) return;
-    if (!scoreEnabled) return;
-    if (solvedNamePromptGameId === currentRecord.id) return;
-    if (submittedScoreIdsRef.current.has(currentRecord.id)) return;
-    submittedScoreIdsRef.current.add(currentRecord.id);
+    if (!showSolved || !currentRecord.completedAt) return
+    if (hasConvexBackend()) return
+    if (!hasCustomPlayerName) return
+    if (!scoreEnabled) return
+    if (solvedNamePromptGameId === currentRecord.id) return
+    if (submittedScoreIdsRef.current.has(currentRecord.id)) return
+    submittedScoreIdsRef.current.add(currentRecord.id)
     void submitGlobalScore(currentRecord).catch(() => {
-      setLeaderboardStatus('Could not submit global score.');
-    });
+      setLeaderboardStatus('Could not submit global score.')
+    })
   }, [
     currentRecord,
     hasCustomPlayerName,
     scoreEnabled,
     showSolved,
     solvedNamePromptGameId,
-  ]);
+  ])
 
   useEffect(() => {
-    const query = window.matchMedia('(max-width: 640px)');
-    const sync = () => setCompactStatus(query.matches);
-    sync();
-    query.addEventListener('change', sync);
-    return () => query.removeEventListener('change', sync);
-  }, []);
+    const query = window.matchMedia('(max-width: 640px)')
+    const sync = () => setCompactStatus(query.matches)
+    sync()
+    query.addEventListener('change', sync)
+    return () => query.removeEventListener('change', sync)
+  }, [])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Shift') setShiftHeld(true);
+      if (event.key === 'Shift') setShiftHeld(true)
     }
     function onKeyUp(event: KeyboardEvent) {
-      if (event.key === 'Shift') setShiftHeld(false);
+      if (event.key === 'Shift') setShiftHeld(false)
     }
     // Releasing Shift outside the window never fires keyup, so clear on blur.
     function onBlur() {
-      setShiftHeld(false);
+      setShiftHeld(false)
     }
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, []);
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [])
 
   const pushHistory = useCallback(() => {
     setHistory((current) => [
       ...current.slice(-49),
       { cellColors, cornerMarks, grid, notes, givens, variantId },
-    ]);
-    setFuture([]);
-  }, [cellColors, cornerMarks, givens, grid, notes, variantId]);
+    ])
+    setFuture([])
+  }, [cellColors, cornerMarks, givens, grid, notes, variantId])
 
-  const chooseVariant = useCallback((nextVariant: VariantId) => {
-    pushHistory();
-    setVariantId(nextVariant);
-    setActiveGame((current) => ({ ...current, variantId: nextVariant }));
-  }, [pushHistory]);
+  const chooseVariant = useCallback(
+    (nextVariant: VariantId) => {
+      pushHistory()
+      setVariantId(nextVariant)
+      setActiveGame((current) => ({ ...current, variantId: nextVariant }))
+    },
+    [pushHistory],
+  )
 
-  const moveSelection = useCallback((deltaRow: number, deltaCol: number) => {
-    resumeTimerFromActivity();
-    setExplicitSelection(null);
-    setSelected((index) => {
-      const row = Math.max(0, Math.min(activeConfig.size - 1, Math.floor(index / activeConfig.size) + deltaRow));
-      const col = Math.max(0, Math.min(activeConfig.size - 1, (index % activeConfig.size) + deltaCol));
-      return row * activeConfig.size + col;
-    });
-  }, [activeConfig.size, resumeTimerFromActivity]);
+  const moveSelection = useCallback(
+    (deltaRow: number, deltaCol: number) => {
+      resumeTimerFromActivity()
+      setExplicitSelection(null)
+      setSelected((index) => {
+        const row = Math.max(
+          0,
+          Math.min(
+            activeConfig.size - 1,
+            Math.floor(index / activeConfig.size) + deltaRow,
+          ),
+        )
+        const col = Math.max(
+          0,
+          Math.min(
+            activeConfig.size - 1,
+            (index % activeConfig.size) + deltaCol,
+          ),
+        )
+        return row * activeConfig.size + col
+      })
+    },
+    [activeConfig.size, resumeTimerFromActivity],
+  )
 
   // Jump to the same relative cell in an adjacent box ({ and }).
-  const moveBox = useCallback((delta: number) => {
-    resumeTimerFromActivity();
-    setExplicitSelection(null);
-    setSelected((index) => {
-      const boxesPerRow = activeConfig.size / activeConfig.boxCols;
-      const boxCount = boxesPerRow * (activeConfig.size / activeConfig.boxRows);
-      const row = Math.floor(index / activeConfig.size);
-      const col = index % activeConfig.size;
-      const box =
-        Math.floor(row / activeConfig.boxRows) * boxesPerRow +
-        Math.floor(col / activeConfig.boxCols);
-      const nextBox = Math.max(0, Math.min(boxCount - 1, box + delta));
-      const within = (row % activeConfig.boxRows) * activeConfig.boxCols + (col % activeConfig.boxCols);
-      const nextRow =
-        Math.floor(nextBox / boxesPerRow) * activeConfig.boxRows +
-        Math.floor(within / activeConfig.boxCols);
-      const nextCol = (nextBox % boxesPerRow) * activeConfig.boxCols + (within % activeConfig.boxCols);
-      return nextRow * activeConfig.size + nextCol;
-    });
-  }, [activeConfig, resumeTimerFromActivity]);
+  const moveBox = useCallback(
+    (delta: number) => {
+      resumeTimerFromActivity()
+      setExplicitSelection(null)
+      setSelected((index) => {
+        const boxesPerRow = activeConfig.size / activeConfig.boxCols
+        const boxCount =
+          boxesPerRow * (activeConfig.size / activeConfig.boxRows)
+        const row = Math.floor(index / activeConfig.size)
+        const col = index % activeConfig.size
+        const box =
+          Math.floor(row / activeConfig.boxRows) * boxesPerRow +
+          Math.floor(col / activeConfig.boxCols)
+        const nextBox = Math.max(0, Math.min(boxCount - 1, box + delta))
+        const within =
+          (row % activeConfig.boxRows) * activeConfig.boxCols +
+          (col % activeConfig.boxCols)
+        const nextRow =
+          Math.floor(nextBox / boxesPerRow) * activeConfig.boxRows +
+          Math.floor(within / activeConfig.boxCols)
+        const nextCol =
+          (nextBox % boxesPerRow) * activeConfig.boxCols +
+          (within % activeConfig.boxCols)
+        return nextRow * activeConfig.size + nextCol
+      })
+    },
+    [activeConfig, resumeTimerFromActivity],
+  )
 
   const setCell = useCallback(
     (value: number) => {
-      const targets = [...activeCells].filter((index) => !givens[index]);
-      if (targets.length === 0) return;
-      resumeTimerFromActivity();
+      const targets = [...activeCells].filter((index) => !givens[index])
+      if (targets.length === 0) return
+      resumeTimerFromActivity()
       if (isTurnBattlePlay && value !== 0) {
         if (!isMyTurnBattleTurn) {
-          setStatusLine('Turn battle: wait for your turn.');
-          return;
+          setStatusLine('Turn battle: wait for your turn.')
+          return
         }
         if (targets.length !== 1) {
-          setStatusLine('Turn battle: enter one cell at a time.');
-          return;
+          setStatusLine('Turn battle: enter one cell at a time.')
+          return
         }
         if (!activeLiveBattleRoom || !puzzleSolution) {
-          setStatusLine('Turn battle: solution check is not ready yet.');
-          return;
+          setStatusLine('Turn battle: solution check is not ready yet.')
+          return
         }
-        const target = targets[0];
-        const correct = puzzleSolution[target] === value;
+        const target = targets[0]
+        const correct = puzzleSolution[target] === value
         if (!correct) {
-          setChallengeMistakes((count) => count + 1);
+          setChallengeMistakes((count) => count + 1)
           setLiveBattleTurnRequest({
             completion,
             correct: false,
@@ -1478,25 +1601,26 @@ function App() {
             requestId: `${activeLiveBattleRoom.roomId}-${Date.now().toString(36)}-${target}`,
             roomId: activeLiveBattleRoom.roomId,
             selectedCell: target,
-          });
-          setStatusLine('Turn battle: bad entry, life lost.');
-          triggerBattleImpact(16, 0.42, 0.78);
-          return;
+          })
+          setStatusLine('Turn battle: bad entry, life lost.')
+          triggerBattleImpact(16, 0.42, 0.78)
+          return
         }
       }
-      pushHistory();
+      pushHistory()
       const mistakes =
         activeChallengeKind === 'streak' && value !== 0
-          ? targets.filter((index) => grid[index] !== value && solved?.[index] !== value)
-              .length
-          : 0;
+          ? targets.filter(
+              (index) => grid[index] !== value && solved?.[index] !== value,
+            ).length
+          : 0
       if (mistakes > 0) {
-        setChallengeMistakes((count) => count + mistakes);
-        setStatusLine('Streak battle: bad entry recorded.');
-        triggerBattleImpact(12, 0.34, 0.78);
+        setChallengeMistakes((count) => count + mistakes)
+        setStatusLine('Streak battle: bad entry recorded.')
+        triggerBattleImpact(12, 0.34, 0.78)
       }
-      const nextGrid = [...grid];
-      for (const index of targets) nextGrid[index] = value;
+      const nextGrid = [...grid]
+      for (const index of targets) nextGrid[index] = value
       if (isTurnBattlePlay && value !== 0 && activeLiveBattleRoom) {
         setLiveBattleTurnRequest({
           completion: nextGrid.filter(Boolean).length,
@@ -1507,9 +1631,9 @@ function App() {
           requestId: `${activeLiveBattleRoom.roomId}-${Date.now().toString(36)}-${targets[0]}`,
           roomId: activeLiveBattleRoom.roomId,
           selectedCell: targets[0],
-        });
+        })
       }
-      setGrid(nextGrid);
+      setGrid(nextGrid)
       recordSolveEvent({
         cells: targets,
         kind: value === 0 ? 'clear' : 'entry',
@@ -1519,27 +1643,29 @@ function App() {
             : `placed ${value}`,
         detail: targets.map((index) => labelCell(index, activeSize)).join(', '),
         value: value || undefined,
-      });
+      })
       setNotes((current) =>
         value === 0
           ? current
           : targets.reduce(
-              (nextNotes, index) => removeRelatedNotes(nextNotes, index, value, activeSize),
+              (nextNotes, index) =>
+                removeRelatedNotes(nextNotes, index, value, activeSize),
               current,
             ),
-      );
+      )
       if (value !== 0) {
         setCornerMarks((current) =>
           targets.reduce(
-            (nextMarks, index) => removeRelatedNotes(nextMarks, index, value, activeSize),
+            (nextMarks, index) =>
+              removeRelatedNotes(nextMarks, index, value, activeSize),
             current,
           ),
-        );
+        )
       }
-      setHint(null);
+      setHint(null)
       if (activeSize === '6x6' && value !== 0 && targets.length === 1) {
-        const nextEmpty = nextEmptyCell(nextGrid, givens, selected);
-        if (nextEmpty !== null) setSelected(nextEmpty);
+        const nextEmpty = nextEmptyCell(nextGrid, givens, selected)
+        if (nextEmpty !== null) setSelected(nextEmpty)
       }
     },
     [
@@ -1563,82 +1689,88 @@ function App() {
       solved,
       triggerBattleImpact,
     ],
-  );
+  )
 
   const clearCellsCompletely = useCallback(() => {
-    const targets = [...activeCells].filter((index) => !givens[index]);
-    if (targets.length === 0) return;
-    resumeTimerFromActivity();
-    pushHistory();
+    const targets = [...activeCells].filter((index) => !givens[index])
+    if (targets.length === 0) return
+    resumeTimerFromActivity()
+    pushHistory()
     setGrid((current) => {
-      const next = [...current];
-      for (const index of targets) next[index] = 0;
-      return next;
-    });
+      const next = [...current]
+      for (const index of targets) next[index] = 0
+      return next
+    })
     setNotes((current) => {
-      const next = cloneNotes(current);
-      for (const index of targets) next[index] = [];
-      return next;
-    });
+      const next = cloneNotes(current)
+      for (const index of targets) next[index] = []
+      return next
+    })
     setCornerMarks((current) => {
-      const next = cloneNotes(current);
-      for (const index of targets) next[index] = [];
-      return next;
-    });
+      const next = cloneNotes(current)
+      for (const index of targets) next[index] = []
+      return next
+    })
     setCellColors((current) => {
-      const next = [...current];
-      for (const index of targets) next[index] = null;
-      return next;
-    });
+      const next = [...current]
+      for (const index of targets) next[index] = null
+      return next
+    })
     recordSolveEvent({
       cells: targets,
       kind: 'clear',
       label: `hard cleared ${targets.length} cell${targets.length === 1 ? '' : 's'}`,
       detail: 'removed entry, notes, corner marks, and colour',
-    });
-    setHint(null);
+    })
+    setHint(null)
     setStatusLine(
       `Cleared ${targets.length} cell${targets.length === 1 ? '' : 's'} completely.`,
-    );
-  }, [activeCells, givens, pushHistory, recordSolveEvent, resumeTimerFromActivity]);
+    )
+  }, [
+    activeCells,
+    givens,
+    pushHistory,
+    recordSolveEvent,
+    resumeTimerFromActivity,
+  ])
 
   const toggleNote = useCallback(
     (value: number) => {
       if (!notesEnabled) {
-        setStatusLine('Notes are disabled in speedrun.');
-        return;
+        setStatusLine('Notes are disabled in speedrun.')
+        return
       }
       const eligible = [...activeCells].filter(
         (index) => !givens[index] && grid[index] === 0,
-      );
-      if (eligible.length === 0) return;
-      resumeTimerFromActivity();
-      pushHistory();
-      const allHave = eligible.every((index) => notes[index].includes(value));
+      )
+      if (eligible.length === 0) return
+      resumeTimerFromActivity()
+      pushHistory()
+      const allHave = eligible.every((index) => notes[index].includes(value))
       setNotes((current) => {
-        const next = cloneNotes(current);
+        const next = cloneNotes(current)
         for (const index of eligible) {
           if (allHave) {
-            next[index] = next[index].filter((note) => note !== value);
+            next[index] = next[index].filter((note) => note !== value)
           } else if (!next[index].includes(value)) {
-            next[index] = [...next[index], value].sort();
+            next[index] = [...next[index], value].sort()
           }
         }
-        return next;
-      });
-      setHint(null);
+        return next
+      })
+      setHint(null)
       recordSolveEvent({
         cells: eligible,
         kind: 'note',
         label: `${allHave ? 'removed' : 'added'} centre ${value}`,
         value,
-      });
+      })
       if (eligible.length > 1) {
         setStatusLine(
           `${allHave ? 'Removed' : 'Annotated'} ${value} ${
             allHave ? 'from' : 'on'
           } ${eligible.length} cells.`,
-        );
+        )
       }
     },
     [
@@ -1651,44 +1783,46 @@ function App() {
       recordSolveEvent,
       resumeTimerFromActivity,
     ],
-  );
+  )
 
   const toggleCornerMark = useCallback(
     (value: number) => {
       if (!notesEnabled) {
-        setStatusLine('Marks are disabled in speedrun.');
-        return;
+        setStatusLine('Marks are disabled in speedrun.')
+        return
       }
       const eligible = [...activeCells].filter(
         (index) => !givens[index] && grid[index] === 0,
-      );
-      if (eligible.length === 0) return;
-      resumeTimerFromActivity();
-      pushHistory();
-      const allHave = eligible.every((index) => cornerMarks[index].includes(value));
+      )
+      if (eligible.length === 0) return
+      resumeTimerFromActivity()
+      pushHistory()
+      const allHave = eligible.every((index) =>
+        cornerMarks[index].includes(value),
+      )
       setCornerMarks((current) => {
-        const next = cloneNotes(current);
+        const next = cloneNotes(current)
         for (const index of eligible) {
           if (allHave) {
-            next[index] = next[index].filter((mark) => mark !== value);
+            next[index] = next[index].filter((mark) => mark !== value)
           } else if (!next[index].includes(value)) {
-            next[index] = [...next[index], value].sort();
+            next[index] = [...next[index], value].sort()
           }
         }
-        return next;
-      });
-      setHint(null);
+        return next
+      })
+      setHint(null)
       recordSolveEvent({
         cells: eligible,
         kind: 'corner',
         label: `${allHave ? 'removed' : 'added'} corner ${value}`,
         value,
-      });
+      })
       setStatusLine(
         `${allHave ? 'Removed' : 'Marked'} corner ${value} ${
           allHave ? 'from' : 'on'
         } ${eligible.length} cell${eligible.length === 1 ? '' : 's'}.`,
-      );
+      )
     },
     [
       activeCells,
@@ -1700,26 +1834,26 @@ function App() {
       recordSolveEvent,
       resumeTimerFromActivity,
     ],
-  );
+  )
 
   const applyColor = useCallback(
     (colorIndex: number | null) => {
-      resumeTimerFromActivity();
-      const targets = [...activeCells];
-      if (colorIndex !== null) setActiveColor(colorIndex);
-      pushHistory();
+      resumeTimerFromActivity()
+      const targets = [...activeCells]
+      if (colorIndex !== null) setActiveColor(colorIndex)
+      pushHistory()
       setCellColors((current) => {
-        const next = [...current];
-        for (const index of targets) next[index] = colorIndex;
-        return next;
-      });
+        const next = [...current]
+        for (const index of targets) next[index] = colorIndex
+        return next
+      })
       setStatusLine(
         colorIndex === null
           ? `Cleared colour from ${targets.length} cell${targets.length === 1 ? '' : 's'}.`
           : `Applied colour ${colorIndex + 1} to ${targets.length} cell${
               targets.length === 1 ? '' : 's'
             }.`,
-      );
+      )
       recordSolveEvent({
         cells: targets,
         kind: 'color',
@@ -1728,69 +1862,75 @@ function App() {
             ? `cleared colour`
             : `applied colour ${colorIndex + 1}`,
         value: colorIndex === null ? undefined : colorIndex + 1,
-      });
+      })
     },
     [activeCells, pushHistory, recordSolveEvent, resumeTimerFromActivity],
-  );
+  )
 
   const clearNotesAcrossBlock = useCallback(() => {
-    if (!notesEnabled) return;
-    const targets = [...activeCells];
-    resumeTimerFromActivity();
-    pushHistory();
+    if (!notesEnabled) return
+    const targets = [...activeCells]
+    resumeTimerFromActivity()
+    pushHistory()
     setNotes((current) => {
-      const next = cloneNotes(current);
-      for (const index of targets) next[index] = [];
-      return next;
-    });
-    setHint(null);
+      const next = cloneNotes(current)
+      for (const index of targets) next[index] = []
+      return next
+    })
+    setHint(null)
     recordSolveEvent({
       cells: targets,
       kind: 'clear',
       label: `cleared centre notes`,
-    });
-    setStatusLine(`Cleared notes in ${targets.length} cells.`);
-  }, [activeCells, notesEnabled, pushHistory, recordSolveEvent, resumeTimerFromActivity]);
+    })
+    setStatusLine(`Cleared notes in ${targets.length} cells.`)
+  }, [
+    activeCells,
+    notesEnabled,
+    pushHistory,
+    recordSolveEvent,
+    resumeTimerFromActivity,
+  ])
 
   const clearCornerMarksAcrossSelection = useCallback(() => {
-    const targets = [...activeCells];
-    resumeTimerFromActivity();
-    pushHistory();
+    const targets = [...activeCells]
+    resumeTimerFromActivity()
+    pushHistory()
     setCornerMarks((current) => {
-      const next = cloneNotes(current);
-      for (const index of targets) next[index] = [];
-      return next;
-    });
-    setHint(null);
+      const next = cloneNotes(current)
+      for (const index of targets) next[index] = []
+      return next
+    })
+    setHint(null)
     recordSolveEvent({
       cells: targets,
       kind: 'clear',
       label: `cleared corner notes`,
-    });
-    setStatusLine(`Cleared corners in ${targets.length} cells.`);
-  }, [activeCells, pushHistory, recordSolveEvent, resumeTimerFromActivity]);
+    })
+    setStatusLine(`Cleared corners in ${targets.length} cells.`)
+  }, [activeCells, pushHistory, recordSolveEvent, resumeTimerFromActivity])
 
   const undo = useCallback(() => {
     if (!history.length) {
-      setStatusLine('Nothing to undo.');
-      return;
+      setStatusLine('Nothing to undo.')
+      return
     }
-    resumeTimerFromActivity();
-    const previous = history[history.length - 1];
+    resumeTimerFromActivity()
+    const previous = history[history.length - 1]
     setFuture((current) => [
       ...current.slice(-49),
       { cellColors, cornerMarks, grid, notes, givens, variantId },
-    ]);
-    setHistory((current) => current.slice(0, -1));
-    setCellColors(previous.cellColors);
-    setCornerMarks(previous.cornerMarks);
-    setGrid(previous.grid);
-    setNotes(previous.notes);
-    setGivens(previous.givens);
-    setVariantId(previous.variantId);
-    setActiveGame((current) => ({ ...current, variantId: previous.variantId }));
-    setHint(null);
-    setStatusLine('Undid last change.');
+    ])
+    setHistory((current) => current.slice(0, -1))
+    setCellColors(previous.cellColors)
+    setCornerMarks(previous.cornerMarks)
+    setGrid(previous.grid)
+    setNotes(previous.notes)
+    setGivens(previous.givens)
+    setVariantId(previous.variantId)
+    setActiveGame((current) => ({ ...current, variantId: previous.variantId }))
+    setHint(null)
+    setStatusLine('Undid last change.')
   }, [
     cellColors,
     cornerMarks,
@@ -1800,29 +1940,29 @@ function App() {
     notes,
     resumeTimerFromActivity,
     variantId,
-  ]);
+  ])
 
   const redo = useCallback(() => {
     if (!future.length) {
-      setStatusLine('Nothing to redo.');
-      return;
+      setStatusLine('Nothing to redo.')
+      return
     }
-    resumeTimerFromActivity();
-    const next = future[future.length - 1];
+    resumeTimerFromActivity()
+    const next = future[future.length - 1]
     setHistory((current) => [
       ...current.slice(-49),
       { cellColors, cornerMarks, grid, notes, givens, variantId },
-    ]);
-    setFuture((current) => current.slice(0, -1));
-    setCellColors(next.cellColors);
-    setCornerMarks(next.cornerMarks);
-    setGrid(next.grid);
-    setNotes(next.notes);
-    setGivens(next.givens);
-    setVariantId(next.variantId);
-    setActiveGame((current) => ({ ...current, variantId: next.variantId }));
-    setHint(null);
-    setStatusLine('Redid change.');
+    ])
+    setFuture((current) => current.slice(0, -1))
+    setCellColors(next.cellColors)
+    setCornerMarks(next.cornerMarks)
+    setGrid(next.grid)
+    setNotes(next.notes)
+    setGivens(next.givens)
+    setVariantId(next.variantId)
+    setActiveGame((current) => ({ ...current, variantId: next.variantId }))
+    setHint(null)
+    setStatusLine('Redid change.')
   }, [
     cellColors,
     cornerMarks,
@@ -1832,67 +1972,83 @@ function App() {
     notes,
     resumeTimerFromActivity,
     variantId,
-  ]);
+  ])
 
-  const askForHint = useCallback((mode: HintMode = hintMode) => {
-    if (!hintsEnabled) {
-      setStatusLine('Hints are disabled in speedrun.');
-      return;
-    }
-    const next = nextHint(grid, activeSize);
-    setHintMode(mode);
-    setHint(next);
-    setHintUses((count) => count + 1);
-    recordSolveEvent({
-      cells: hintFocusCells(next),
-      detail: 'technique' in next ? next.technique : next.message,
-      kind: 'hint',
-      label: `${mode} hint`,
-      value: 'value' in next ? next.value : undefined,
-    });
-    if (mode !== 'nudge') {
-      const focusCell = hintFocusCells(next)[0];
-      if (focusCell !== undefined) setSelected(focusCell);
-    }
-  }, [activeSize, grid, hintMode, hintsEnabled, recordSolveEvent]);
+  const askForHint = useCallback(
+    (mode: HintMode = hintMode) => {
+      if (!hintsEnabled) {
+        setStatusLine('Hints are disabled in speedrun.')
+        return
+      }
+      const next = nextHint(grid, activeSize)
+      setHintMode(mode)
+      setHint(next)
+      setHintUses((count) => count + 1)
+      recordSolveEvent({
+        cells: hintFocusCells(next),
+        detail: 'technique' in next ? next.technique : next.message,
+        kind: 'hint',
+        label: `${mode} hint`,
+        value: 'value' in next ? next.value : undefined,
+      })
+      if (mode !== 'nudge') {
+        const focusCell = hintFocusCells(next)[0]
+        if (focusCell !== undefined) setSelected(focusCell)
+      }
+    },
+    [activeSize, grid, hintMode, hintsEnabled, recordSolveEvent],
+  )
 
   const clearHintState = useCallback((closeRail = false) => {
-    setHint(null);
-    setHighlightDigit(null);
-    if (closeRail) setHintRailOpen(false);
-    setStatusLine(closeRail ? 'Hints off.' : 'Cleared hints and highlights.');
-  }, []);
+    setHint(null)
+    setHighlightDigit(null)
+    if (closeRail) setHintRailOpen(false)
+    setStatusLine(closeRail ? 'Hints off.' : 'Cleared hints and highlights.')
+  }, [])
 
   const applyHint = useCallback(() => {
-    if (!hint || !('cell' in hint) || givens[hint.cell]) return;
-    resumeTimerFromActivity();
-    pushHistory();
+    if (!hint || !('cell' in hint) || givens[hint.cell]) return
+    resumeTimerFromActivity()
+    pushHistory()
     setGrid((current) => {
-      const next = [...current];
-      next[hint.cell] = hint.value;
-      return next;
-    });
-    setNotes((current) => removeRelatedNotes(current, hint.cell, hint.value, activeSize));
-    setCornerMarks((current) => removeRelatedNotes(current, hint.cell, hint.value, activeSize));
+      const next = [...current]
+      next[hint.cell] = hint.value
+      return next
+    })
+    setNotes((current) =>
+      removeRelatedNotes(current, hint.cell, hint.value, activeSize),
+    )
+    setCornerMarks((current) =>
+      removeRelatedNotes(current, hint.cell, hint.value, activeSize),
+    )
     recordSolveEvent({
       cells: [hint.cell],
       detail: hint.technique,
       kind: 'entry',
       label: `applied hint ${hint.value}`,
       value: hint.value,
-    });
-    setHint(null);
-  }, [activeSize, givens, hint, pushHistory, recordSolveEvent, resumeTimerFromActivity]);
+    })
+    setHint(null)
+  }, [
+    activeSize,
+    givens,
+    hint,
+    pushHistory,
+    recordSolveEvent,
+    resumeTimerFromActivity,
+  ])
 
   const resetPuzzle = useCallback(() => {
-    resumeTimerFromActivity();
-    pushHistory();
-    setGrid((current) => current.map((value, index) => (givens[index] ? value : 0)));
-    setNotes(emptyNotes(activeSize));
-    setCornerMarks(emptyNotes(activeSize));
-    setCellColors(Array(activeCellCount).fill(null));
-    setHint(null);
-    recordSolveEvent({ kind: 'reset', label: 'reset entries' });
+    resumeTimerFromActivity()
+    pushHistory()
+    setGrid((current) =>
+      current.map((value, index) => (givens[index] ? value : 0)),
+    )
+    setNotes(emptyNotes(activeSize))
+    setCornerMarks(emptyNotes(activeSize))
+    setCellColors(Array(activeCellCount).fill(null))
+    setHint(null)
+    recordSolveEvent({ kind: 'reset', label: 'reset entries' })
   }, [
     activeCellCount,
     activeSize,
@@ -1900,24 +2056,24 @@ function App() {
     pushHistory,
     recordSolveEvent,
     resumeTimerFromActivity,
-  ]);
+  ])
 
   const clearAll = useCallback(() => {
-    setGameRecords((current) => upsertGameRecord(current, currentRecord));
-    pushHistory();
-    setGrid(emptyGrid(activeSize));
-    setNotes(emptyNotes(activeSize));
-    setCornerMarks(emptyNotes(activeSize));
-    setCellColors(Array(activeCellCount).fill(null));
-    setGivens(Array(activeCellCount).fill(false));
-    setHint(null);
-    setElapsedMs(0);
-    setTimerPaused(false);
-    setTimerPauseReason(null);
-    setHintUses(0);
-    setManualPauseCount(0);
-    setSolveEvents([]);
-    setChallengeMistakes(0);
+    setGameRecords((current) => upsertGameRecord(current, currentRecord))
+    pushHistory()
+    setGrid(emptyGrid(activeSize))
+    setNotes(emptyNotes(activeSize))
+    setCornerMarks(emptyNotes(activeSize))
+    setCellColors(Array(activeCellCount).fill(null))
+    setGivens(Array(activeCellCount).fill(false))
+    setHint(null)
+    setElapsedMs(0)
+    setTimerPaused(false)
+    setTimerPauseReason(null)
+    setHintUses(0)
+    setManualPauseCount(0)
+    setSolveEvents([])
+    setChallengeMistakes(0)
     setActiveGame(
       createGameMeta(
         emptyGrid(activeSize),
@@ -1927,8 +2083,8 @@ function App() {
         activeMode,
         variantId,
       ),
-    );
-    goToPlay();
+    )
+    goToPlay()
   }, [
     activeCellCount,
     activeMode,
@@ -1937,94 +2093,96 @@ function App() {
     goToPlay,
     pushHistory,
     variantId,
-  ]);
+  ])
 
-  const startNewPuzzle = useCallback((
-    nextGrid: Grid,
-    message = 'Started new puzzle.',
-    source = 'custom',
-    difficulty?: PuzzleDifficulty | 'custom',
-    puzzleSize: PuzzleSize = puzzleSizeFromGrid(nextGrid),
-    playMode: PlayMode = newGameMode,
-    meta = createGameMeta(nextGrid, source, difficulty, puzzleSize, playMode),
-    navigateToPlay = true,
-  ) => {
-    setGameRecords((current) => upsertGameRecord(current, currentRecord));
-    setGrid(nextGrid);
-    setNotes(emptyNotes(meta.puzzleSize));
-    setCornerMarks(emptyNotes(meta.puzzleSize));
-    setCellColors(Array(nextGrid.length).fill(null));
-    setGivens(nextGrid.map(Boolean));
-    setHistory([]);
-    setFuture([]);
-    setSolvedDismissed(false);
-    setHint(null);
-    setHighlightDigit(null);
-    setElapsedMs(0);
-    setTimerPaused(false);
-    setTimerPauseReason(null);
-    setHintUses(0);
-    setManualPauseCount(0);
-    setSolveEvents([]);
-    setChallengeMistakes(0);
-    setNoteMode(false);
-    setToolMode('digit');
-    setVariantId(meta.variantId);
-    setVisualAnchor(null);
-    setExplicitSelection(null);
-    setActiveGame(meta);
-    const firstEmpty = nextGrid.indexOf(0);
-    setSelected(firstEmpty >= 0 ? firstEmpty : 0);
-    setStatusLine(message);
-    if (navigateToPlay) goToPlay();
-  }, [currentRecord, goToPlay, newGameMode]);
+  const startNewPuzzle = useCallback(
+    (
+      nextGrid: Grid,
+      message = 'Started new puzzle.',
+      source = 'custom',
+      difficulty?: PuzzleDifficulty | 'custom',
+      puzzleSize: PuzzleSize = puzzleSizeFromGrid(nextGrid),
+      playMode: PlayMode = newGameMode,
+      meta = createGameMeta(nextGrid, source, difficulty, puzzleSize, playMode),
+      navigateToPlay = true,
+    ) => {
+      setGameRecords((current) => upsertGameRecord(current, currentRecord))
+      setGrid(nextGrid)
+      setNotes(emptyNotes(meta.puzzleSize))
+      setCornerMarks(emptyNotes(meta.puzzleSize))
+      setCellColors(Array(nextGrid.length).fill(null))
+      setGivens(nextGrid.map(Boolean))
+      setHistory([])
+      setFuture([])
+      setSolvedDismissed(false)
+      setHint(null)
+      setHighlightDigit(null)
+      setElapsedMs(0)
+      setTimerPaused(false)
+      setTimerPauseReason(null)
+      setHintUses(0)
+      setManualPauseCount(0)
+      setSolveEvents([])
+      setChallengeMistakes(0)
+      setNoteMode(false)
+      setToolMode('digit')
+      setVariantId(meta.variantId)
+      setVisualAnchor(null)
+      setExplicitSelection(null)
+      setActiveGame(meta)
+      const firstEmpty = nextGrid.indexOf(0)
+      setSelected(firstEmpty >= 0 ? firstEmpty : 0)
+      setStatusLine(message)
+      if (navigateToPlay) goToPlay()
+    },
+    [currentRecord, goToPlay, newGameMode],
+  )
 
-  const loadGameRecord = useCallback((
-    record: GameRecord,
-    message: string,
-    navigateToPlay = true,
-  ) => {
-    setGameRecords((current) => upsertGameRecord(current, currentRecord));
-    setGrid(record.grid);
-    setNotes(record.notes);
-    setCornerMarks(record.cornerMarks);
-    setCellColors(record.cellColors);
-    setGivens(record.givens);
-    setElapsedMs(record.elapsedMs);
-    setChallengeMistakes(0);
-    setActiveGame({
-      id: record.id,
-      puzzle: record.puzzle,
-      source: record.source,
-      difficulty: record.difficulty,
-      startedAt: record.startedAt,
-      puzzleSize: record.puzzleSize,
-      playMode: record.playMode,
-      variantId: record.variantId,
-    });
-    setHistory([]);
-    setFuture([]);
-    setSolvedDismissed(record.status === 'completed');
-    setHint(null);
-    setHighlightDigit(null);
-    setGamePickerOpen(false);
-    setGameQuery('');
-    setGameCursor(0);
-    setTimerPaused(false);
-    setTimerPauseReason(null);
-    setHintUses(0);
-    setManualPauseCount(0);
-    setSolveEvents(record.solveEvents);
-    setNoteMode(false);
-    setToolMode('digit');
-    setVariantId(record.variantId);
-    setVisualAnchor(null);
-    setExplicitSelection(null);
-    const firstEmpty = record.grid.indexOf(0);
-    setSelected(firstEmpty >= 0 ? firstEmpty : 0);
-    setStatusLine(message);
-    if (navigateToPlay) goToPlay();
-  }, [currentRecord, goToPlay]);
+  const loadGameRecord = useCallback(
+    (record: GameRecord, message: string, navigateToPlay = true) => {
+      setGameRecords((current) => upsertGameRecord(current, currentRecord))
+      setGrid(record.grid)
+      setNotes(record.notes)
+      setCornerMarks(record.cornerMarks)
+      setCellColors(record.cellColors)
+      setGivens(record.givens)
+      setElapsedMs(record.elapsedMs)
+      setChallengeMistakes(0)
+      setActiveGame({
+        id: record.id,
+        puzzle: record.puzzle,
+        source: record.source,
+        difficulty: record.difficulty,
+        startedAt: record.startedAt,
+        puzzleSize: record.puzzleSize,
+        playMode: record.playMode,
+        variantId: record.variantId,
+      })
+      setHistory([])
+      setFuture([])
+      setSolvedDismissed(record.status === 'completed')
+      setHint(null)
+      setHighlightDigit(null)
+      setGamePickerOpen(false)
+      setGameQuery('')
+      setGameCursor(0)
+      setTimerPaused(false)
+      setTimerPauseReason(null)
+      setHintUses(0)
+      setManualPauseCount(0)
+      setSolveEvents(record.solveEvents)
+      setNoteMode(false)
+      setToolMode('digit')
+      setVariantId(record.variantId)
+      setVisualAnchor(null)
+      setExplicitSelection(null)
+      const firstEmpty = record.grid.indexOf(0)
+      setSelected(firstEmpty >= 0 ? firstEmpty : 0)
+      setStatusLine(message)
+      if (navigateToPlay) goToPlay()
+    },
+    [currentRecord, goToPlay],
+  )
 
   const startGeneratedPuzzle = useCallback(
     (
@@ -2035,13 +2193,18 @@ function App() {
       variant: VariantId = newGameVariant,
     ) => {
       if (daily) {
-        openDailyPuzzle(difficulty, todayDateKey(), puzzleSize, playMode);
-        closeMenuModal();
-        setNewGameStatus('');
-        return;
+        openDailyPuzzle(difficulty, todayDateKey(), puzzleSize, playMode)
+        closeMenuModal()
+        setNewGameStatus('')
+        return
       }
-      const seed = daily ? dailySeed(difficulty) : Date.now();
-      const nextPuzzle = generatePuzzleForVariant(difficulty, seed, puzzleSize, variant);
+      const seed = daily ? dailySeed(difficulty) : Date.now()
+      const nextPuzzle = generatePuzzleForVariant(
+        difficulty,
+        seed,
+        puzzleSize,
+        variant,
+      )
       startNewPuzzle(
         nextPuzzle,
         `Generated a ${puzzleSize} ${playMode} ${VARIANTS[variant].label} ${difficulty} puzzle.`,
@@ -2057,9 +2220,9 @@ function App() {
           playMode,
           variant,
         ),
-      );
-      closeMenuModal();
-      setNewGameStatus('');
+      )
+      closeMenuModal()
+      setNewGameStatus('')
     },
     [
       closeMenuModal,
@@ -2070,7 +2233,7 @@ function App() {
       openDailyPuzzle,
       startNewPuzzle,
     ],
-  );
+  )
 
   const fetchSudokuMountainPuzzle = useCallback(
     async (daily = false) => {
@@ -2078,10 +2241,16 @@ function App() {
         const nextPuzzle = generatePuzzle(
           newGameDifficulty,
           daily
-            ? dailySeed(newGameDifficulty, 'vimdoku', todayDateKey(), '6x6', newGameMode)
+            ? dailySeed(
+                newGameDifficulty,
+                'vimdoku',
+                todayDateKey(),
+                '6x6',
+                newGameMode,
+              )
             : Date.now(),
           '6x6',
-        );
+        )
         startNewPuzzle(
           nextPuzzle,
           daily
@@ -2091,32 +2260,46 @@ function App() {
           newGameDifficulty,
           '6x6',
           newGameMode,
-        );
-        closeMenuModal();
-        setNewGameStatus('');
-        return;
+        )
+        closeMenuModal()
+        setNewGameStatus('')
+        return
       }
 
-      setIsFetchingPuzzle(true);
-      setNewGameStatus('Fetching Sudoku Mountain...');
+      setIsFetchingPuzzle(true)
+      setNewGameStatus('Fetching Sudoku Mountain...')
 
       try {
         const params = new URLSearchParams({
           mode: 'classic',
           difficulty: newGameDifficulty,
-        });
+        })
         if (daily) {
-          params.set('seed', String(dailySeed(newGameDifficulty, 'mountain', todayDateKey(), '9x9', newGameMode)));
+          params.set(
+            'seed',
+            String(
+              dailySeed(
+                newGameDifficulty,
+                'mountain',
+                todayDateKey(),
+                '9x9',
+                newGameMode,
+              ),
+            ),
+          )
         }
 
         const response = await fetch(
           `https://api.sudokumountain.com/v1/generate?${params.toString()}`,
-        );
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        )
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-        const data = (await response.json()) as { puzzle?: string; seed?: number };
+        const data = (await response.json()) as {
+          puzzle?: string
+          seed?: number
+        }
         if (!data.puzzle || data.puzzle.replace(/[^0-9.]/g, '').length < 81) {
-          throw new Error('Unexpected puzzle payload');
+          throw new Error('Unexpected puzzle payload')
         }
 
         startNewPuzzle(
@@ -2128,14 +2311,22 @@ function App() {
           newGameDifficulty,
           '9x9',
           newGameMode,
-        );
-        closeMenuModal();
-        setNewGameStatus('');
+        )
+        closeMenuModal()
+        setNewGameStatus('')
       } catch {
         startNewPuzzle(
           generatePuzzle(
             newGameDifficulty,
-            daily ? dailySeed(newGameDifficulty, 'vimdoku', todayDateKey(), '9x9', newGameMode) : Date.now(),
+            daily
+              ? dailySeed(
+                  newGameDifficulty,
+                  'vimdoku',
+                  todayDateKey(),
+                  '9x9',
+                  newGameMode,
+                )
+              : Date.now(),
             '9x9',
           ),
           'Could not reach Sudoku Mountain. Generated a local puzzle instead.',
@@ -2143,29 +2334,35 @@ function App() {
           newGameDifficulty,
           '9x9',
           newGameMode,
-        );
-        closeMenuModal();
-        setNewGameStatus('');
+        )
+        closeMenuModal()
+        setNewGameStatus('')
       } finally {
-        setIsFetchingPuzzle(false);
+        setIsFetchingPuzzle(false)
       }
     },
-    [closeMenuModal, newGameDifficulty, newGameMode, newGameSize, startNewPuzzle],
-  );
+    [
+      closeMenuModal,
+      newGameDifficulty,
+      newGameMode,
+      newGameSize,
+      startNewPuzzle,
+    ],
+  )
 
   const startPastedPuzzle = useCallback(() => {
-    const pastedSize = puzzleSizeFromGrid(newPuzzleText);
-    const nextPuzzle = parseGrid(newPuzzleText, pastedSize);
-    const givensCount = nextPuzzle.filter(Boolean).length;
+    const pastedSize = puzzleSizeFromGrid(newPuzzleText)
+    const nextPuzzle = parseGrid(newPuzzleText, pastedSize)
+    const givensCount = nextPuzzle.filter(Boolean).length
 
     if (givensCount === 0) {
-      setNewGameStatus('Paste a 36- or 81-character grid first.');
-      return;
+      setNewGameStatus('Paste a 36- or 81-character grid first.')
+      return
     }
 
     if (!solveGrid(nextPuzzle, pastedSize)) {
-      setNewGameStatus('That grid has a conflict or no solution.');
-      return;
+      setNewGameStatus('That grid has a conflict or no solution.')
+      return
     }
 
     startNewPuzzle(
@@ -2175,19 +2372,19 @@ function App() {
       'custom',
       pastedSize,
       newGameMode,
-    );
-    setNewPuzzleText('');
-    setNewGameStatus('');
-    closeMenuModal();
-  }, [closeMenuModal, newGameMode, newPuzzleText, startNewPuzzle]);
+    )
+    setNewPuzzleText('')
+    setNewGameStatus('')
+    closeMenuModal()
+  }, [closeMenuModal, newGameMode, newPuzzleText, startNewPuzzle])
 
   useEffect(() => {
-    if (!storageReady || !sharedPuzzlePayload) return;
-    const shared = decodePuzzleLinkData(sharedPuzzlePayload);
+    if (!storageReady || !sharedPuzzlePayload) return
+    const shared = decodePuzzleLinkData(sharedPuzzlePayload)
     if (!shared) {
-      setStatusLine('Shared puzzle link could not be read.');
-      void navigate({ to: '/play', replace: true });
-      return;
+      setStatusLine('Shared puzzle link could not be read.')
+      void navigate({ to: '/play', replace: true })
+      return
     }
     startNewPuzzle(
       shared.grid,
@@ -2207,33 +2404,44 @@ function App() {
         shared.variantId ?? 'classic',
       ),
       false,
-    );
+    )
     if (shared.kind === 'state') {
-      setNotes(shared.notes ?? emptyNotes(shared.puzzleSize));
-      setCornerMarks(shared.cornerMarks ?? emptyNotes(shared.puzzleSize));
-      setCellColors(shared.cellColors ?? Array(shared.grid.length).fill(null));
-      setElapsedMs(shared.elapsedMs ?? 0);
+      setNotes(shared.notes ?? emptyNotes(shared.puzzleSize))
+      setCornerMarks(shared.cornerMarks ?? emptyNotes(shared.puzzleSize))
+      setCellColors(shared.cellColors ?? Array(shared.grid.length).fill(null))
+      setElapsedMs(shared.elapsedMs ?? 0)
     }
-    void navigate({ to: '/play', replace: true });
-  }, [navigate, sharedPuzzlePayload, startNewPuzzle, storageReady]);
+    void navigate({ to: '/play', replace: true })
+  }, [navigate, sharedPuzzlePayload, startNewPuzzle, storageReady])
 
-  const resumeGame = useCallback((record: GameRecord) => {
-    closeMenuModal();
-    loadGameRecord(
-      record,
-      record.status === 'completed' ? 'Opened completed puzzle.' : 'Resumed puzzle.',
-    );
-  }, [closeMenuModal, loadGameRecord]);
+  const resumeGame = useCallback(
+    (record: GameRecord) => {
+      closeMenuModal()
+      loadGameRecord(
+        record,
+        record.status === 'completed'
+          ? 'Opened completed puzzle.'
+          : 'Resumed puzzle.',
+      )
+    },
+    [closeMenuModal, loadGameRecord],
+  )
 
   useEffect(() => {
-    if (!storageReady || !dailyRoute) return;
-      if (pathname !== dailyPath(dailyRoute)) {
-      if (dailyRoute.puzzleSize === '9x9' && dailyRoute.playMode === 'classic') {
+    if (!storageReady || !dailyRoute) return
+    if (pathname !== dailyPath(dailyRoute)) {
+      if (
+        dailyRoute.puzzleSize === '9x9' &&
+        dailyRoute.playMode === 'classic'
+      ) {
         void navigate({
           to: '/play/daily/$difficulty/$date',
-          params: { date: dailyRoute.dateKey, difficulty: dailyRoute.difficulty },
+          params: {
+            date: dailyRoute.dateKey,
+            difficulty: dailyRoute.difficulty,
+          },
           replace: true,
-        });
+        })
       } else if (dailyRoute.playMode === 'classic') {
         void navigate({
           to: '/play/daily/$size/$difficulty/$date',
@@ -2243,7 +2451,7 @@ function App() {
             size: dailyRoute.puzzleSize,
           },
           replace: true,
-        });
+        })
       } else {
         void navigate({
           to: '/play/daily/$size/$mode/$difficulty/$date',
@@ -2254,7 +2462,7 @@ function App() {
             size: dailyRoute.puzzleSize,
           },
           replace: true,
-        });
+        })
       }
     }
 
@@ -2268,25 +2476,25 @@ function App() {
         dailyRoute.playMode,
       ),
       dailyRoute.puzzleSize,
-    );
+    )
     const dailyMeta = createDailyGameMeta(
       nextPuzzle,
       dailyRoute.difficulty,
       dailyRoute.dateKey,
       dailyRoute.puzzleSize,
       dailyRoute.playMode,
-    );
-    if (activeGame.id === dailyMeta.id) return;
+    )
+    if (activeGame.id === dailyMeta.id) return
 
     const savedDaily = trackedGameRecords.find(
       (record) => record.id === dailyMeta.id,
-    );
-    const label = `${dailyRoute.dateKey} ${dailyRoute.puzzleSize} ${dailyRoute.playMode} ${dailyRoute.difficulty} daily`;
+    )
+    const label = `${dailyRoute.dateKey} ${dailyRoute.puzzleSize} ${dailyRoute.playMode} ${dailyRoute.difficulty} daily`
 
     const timer = window.setTimeout(() => {
       if (savedDaily) {
-        loadGameRecord(savedDaily, `Loaded ${label}.`, false);
-        return;
+        loadGameRecord(savedDaily, `Loaded ${label}.`, false)
+        return
       }
 
       startNewPuzzle(
@@ -2298,10 +2506,10 @@ function App() {
         dailyRoute.playMode,
         dailyMeta,
         false,
-      );
-    }, 0);
+      )
+    }, 0)
 
-    return () => window.clearTimeout(timer);
+    return () => window.clearTimeout(timer)
   }, [
     activeGame.id,
     dailyRoute,
@@ -2311,73 +2519,73 @@ function App() {
     startNewPuzzle,
     storageReady,
     trackedGameRecords,
-  ]);
+  ])
 
   const deleteGame = useCallback((id: string) => {
-    setGameRecords((current) => current.filter((record) => record.id !== id));
-    setStatusLine('Removed puzzle from history.');
-  }, []);
+    setGameRecords((current) => current.filter((record) => record.id !== id))
+    setStatusLine('Removed puzzle from history.')
+  }, [])
 
   const openCommand = useCallback((mode: CommandMode) => {
-    setCommandMode(mode);
-    setCommandValue('');
-    setCommandCursor(0);
-    setStatusLine(mode === 'command' ? 'Command mode' : 'Search digit');
-  }, []);
+    setCommandMode(mode)
+    setCommandValue('')
+    setCommandCursor(0)
+    setStatusLine(mode === 'command' ? 'Command mode' : 'Search digit')
+  }, [])
 
   const openGamePicker = useCallback(() => {
-    setGameQuery('');
-    setGameCursor(0);
-    setGamePickerOpen(true);
-    setStatusLine('Opened puzzle picker.');
-  }, []);
+    setGameQuery('')
+    setGameCursor(0)
+    setGamePickerOpen(true)
+    setStatusLine('Opened puzzle picker.')
+  }, [])
 
   const closeGamePicker = useCallback(() => {
-    setGamePickerOpen(false);
-    setGameQuery('');
-    setGameCursor(0);
-  }, []);
+    setGamePickerOpen(false)
+    setGameQuery('')
+    setGameCursor(0)
+  }, [])
 
   const openGameLibrary = useCallback(() => {
-    closeGamePicker();
-    void navigate({ to: '/games' });
-    setStatusLine('Opened puzzle library.');
-  }, [closeGamePicker, navigate]);
+    closeGamePicker()
+    void navigate({ to: '/games' })
+    setStatusLine('Opened puzzle library.')
+  }, [closeGamePicker, navigate])
 
   const openLeaderboards = useCallback(() => {
     setLeaderboardStatus(
       hasConvexBackend()
         ? 'Connecting to live Convex leaderboard...'
         : hasGlobalLeaderboard()
-        ? 'Loading global leaderboard...'
-        : 'Set VITE_LEADERBOARD_ENDPOINT to enable global scores.',
-    );
-    void navigate({ to: '/leaderboards' });
-    setStatusLine('Opened leaderboards.');
-  }, [navigate]);
+          ? 'Loading global leaderboard...'
+          : 'Set VITE_LEADERBOARD_ENDPOINT to enable global scores.',
+    )
+    void navigate({ to: '/leaderboards' })
+    setStatusLine('Opened leaderboards.')
+  }, [navigate])
 
   const copyChallengeLink = useCallback((challengeId: string) => {
-    const url = `${window.location.origin}${challengePath(challengeId)}`;
-    setChallengeShareUrl(url);
+    const url = `${window.location.origin}${challengePath(challengeId)}`
+    setChallengeShareUrl(url)
     void navigator.clipboard?.writeText(url).catch(() => {
-      setChallengeStatus('Challenge link is ready. Copy it from the lobby.');
-    });
-    setStatusLine('Challenge link copied.');
-    return url;
-  }, []);
+      setChallengeStatus('Challenge link is ready. Copy it from the lobby.')
+    })
+    setStatusLine('Challenge link copied.')
+    return url
+  }, [])
 
   const copyLiveBattleLink = useCallback((roomId: string) => {
-    const url = `${window.location.origin}${liveBattlePath(roomId)}`;
-    setLiveBattleShareUrl(url);
+    const url = `${window.location.origin}${liveBattlePath(roomId)}`
+    setLiveBattleShareUrl(url)
     void navigator.clipboard?.writeText(url).catch(() => {
-      setLiveBattleStatus('Live battle link is ready. Copy it from the room.');
-    });
-    setStatusLine('Live battle link copied.');
-    return url;
-  }, []);
+      setLiveBattleStatus('Live battle link is ready. Copy it from the room.')
+    })
+    setStatusLine('Live battle link copied.')
+    return url
+  }, [])
 
   const copyPuzzleLink = useCallback(() => {
-    const puzzleGrid = grid.map((value, index) => (givens[index] ? value : 0));
+    const puzzleGrid = grid.map((value, index) => (givens[index] ? value : 0))
     const payload = encodePuzzleLinkData({
       givens: givens.map(Boolean),
       grid: puzzleGrid,
@@ -2385,14 +2593,14 @@ function App() {
       rules: puzzleRules(activeSize, variantId),
       title: activeGame.source,
       variantId,
-    });
-    const url = `${window.location.origin}/p/${payload}`;
+    })
+    const url = `${window.location.origin}/p/${payload}`
     void navigator.clipboard?.writeText(url).catch(() => {
-      setStatusLine('Puzzle link is ready, but clipboard access failed.');
-    });
-    setStatusLine('Puzzle link copied.');
-    return url;
-  }, [activeGame.source, activeSize, givens, grid, variantId]);
+      setStatusLine('Puzzle link is ready, but clipboard access failed.')
+    })
+    setStatusLine('Puzzle link copied.')
+    return url
+  }, [activeGame.source, activeSize, givens, grid, variantId])
 
   const copyStateLink = useCallback(() => {
     const payload = encodePuzzleLinkData({
@@ -2407,13 +2615,13 @@ function App() {
       rules: puzzleRules(activeSize, variantId),
       title: `${activeGame.source} state`,
       variantId,
-    });
-    const url = `${window.location.origin}/p/${payload}`;
+    })
+    const url = `${window.location.origin}/p/${payload}`
     void navigator.clipboard?.writeText(url).catch(() => {
-      setStatusLine('State link is ready, but clipboard access failed.');
-    });
-    setStatusLine('Puzzle state link copied.');
-    return url;
+      setStatusLine('State link is ready, but clipboard access failed.')
+    })
+    setStatusLine('Puzzle state link copied.')
+    return url
   }, [
     activeGame.source,
     activeSize,
@@ -2424,205 +2632,340 @@ function App() {
     grid,
     notes,
     variantId,
-  ]);
+  ])
 
-  const createRaceChallenge = useCallback((template?: {
-    challengeKind?: ChallengeKind;
-    difficulty?: PuzzleDifficulty | 'custom';
-    playMode: PlayMode;
-    puzzle: string;
-    puzzleSize: PuzzleSize;
-    source: string;
-    variantId?: VariantId;
-  }) => {
-    if (!hasConvexBackend()) {
-      setChallengeStatus('Challenge links need the Convex backend.');
-      setStatusLine('Challenge links need the Convex backend.');
-      return;
-    }
+  const createRaceChallenge = useCallback(
+    (template?: {
+      challengeKind?: ChallengeKind
+      difficulty?: PuzzleDifficulty | 'custom'
+      playMode: PlayMode
+      puzzle: string
+      puzzleSize: PuzzleSize
+      source: string
+      variantId?: VariantId
+    }) => {
+      if (!hasConvexBackend()) {
+        setChallengeStatus('Challenge links need the Convex backend.')
+        setStatusLine('Challenge links need the Convex backend.')
+        return
+      }
 
-    const raceTemplate = template ?? {
-      difficulty: activeGame.difficulty,
-      playMode: activeMode,
-      puzzle: activeGame.puzzle,
-      puzzleSize: activeSize,
-      source: activeGame.source,
+      const raceTemplate = template ?? {
+        difficulty: activeGame.difficulty,
+        playMode: activeMode,
+        puzzle: activeGame.puzzle,
+        puzzleSize: activeSize,
+        source: activeGame.source,
+        variantId,
+      }
+      const nextChallengeKind =
+        raceTemplate.challengeKind ?? asyncChallengeKindFromSetup(challengeKind)
+      const challengeId = makeChallengeId(nextChallengeKind)
+      const request: ChallengeCreateRequest = {
+        challengeId,
+        challengeKind: nextChallengeKind,
+        creatorName: playerName,
+        difficulty: raceTemplate.difficulty,
+        playMode: raceTemplate.playMode,
+        puzzle: raceTemplate.puzzle,
+        puzzleSize: raceTemplate.puzzleSize,
+        recipientAnonId: challengeRecipient?.anonId,
+        recipientName: challengeRecipient?.name,
+        requestId: `${challengeId}-${Date.now().toString(36)}`,
+        source: raceTemplate.source,
+        variantId: raceTemplate.variantId ?? 'classic',
+      }
+      setChallengeCreateRequest(request)
+      setChallengeStatus(
+        `Creating ${challengeKindLabel(nextChallengeKind)} link...`,
+      )
+      setChallengeSetupOpen(false)
+      closeMenuModal()
+      void navigate({ to: '/challenge/$challengeId', params: { challengeId } })
+    },
+    [
+      activeGame,
+      activeMode,
+      activeSize,
+      challengeKind,
+      challengeRecipient,
+      closeMenuModal,
+      navigate,
+      playerName,
       variantId,
-    };
-    const nextChallengeKind = raceTemplate.challengeKind ?? challengeKind;
-    const challengeId = makeChallengeId(nextChallengeKind);
-    const request: ChallengeCreateRequest = {
-      challengeId,
-      challengeKind: nextChallengeKind,
-      creatorName: playerName,
-      difficulty: raceTemplate.difficulty,
-      playMode: raceTemplate.playMode,
-      puzzle: raceTemplate.puzzle,
-      puzzleSize: raceTemplate.puzzleSize,
-      recipientAnonId: challengeRecipient?.anonId,
-      recipientName: challengeRecipient?.name,
-      requestId: `${challengeId}-${Date.now().toString(36)}`,
-      source: raceTemplate.source,
-      variantId: raceTemplate.variantId ?? 'classic',
-    };
-    setChallengeCreateRequest(request);
-    setChallengeStatus(`Creating ${challengeKindLabel(nextChallengeKind)} link...`);
-    setChallengeSetupOpen(false);
-    closeMenuModal();
-    void navigate({ to: '/challenge/$challengeId', params: { challengeId } });
-  }, [
-    activeGame,
-    activeMode,
-    activeSize,
-    challengeKind,
-    challengeRecipient,
-    closeMenuModal,
-    navigate,
-    playerName,
-    variantId,
-  ]);
+    ],
+  )
 
-  const createConfiguredRaceChallenge = useCallback(() => {
+  const handleChallengeCreated = useCallback(
+    (challengeId: string, requestId: string) => {
+      setChallengeCreateRequest((current) =>
+        current?.requestId === requestId ? null : current,
+      )
+      copyChallengeLink(challengeId)
+      setChallengeStatus(
+        challengeRecipient
+          ? `Direct challenge sent to ${challengeRecipient.name}. Link copied too.`
+          : 'Challenge link copied. Send it to a friend.',
+      )
+    },
+    [challengeRecipient, copyChallengeLink],
+  )
+
+  const startChallengeRace = useCallback(
+    (challenge: ChallengeRace) => {
+      const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize)
+      startNewPuzzle(
+        puzzleGrid,
+        `Started ${challengeKindLabel(challenge.challengeKind)} ${challenge.challengeId}.`,
+        `challenge ${challengeKindLabel(challenge.challengeKind)} ${challenge.challengeId}`,
+        challenge.difficulty,
+        challenge.puzzleSize,
+        challenge.playMode,
+        createChallengeGameMeta(challenge),
+      )
+      setChallengeStatus(
+        challenge.challengeKind === 'streak'
+          ? 'Streak battle started. Bad entries count against you.'
+          : 'Race started. The clock is live.',
+      )
+    },
+    [startNewPuzzle],
+  )
+
+  const createLiveBattleRoom = useCallback(
+    (
+      battleKind: LiveBattleKind = 'race',
+      template?: {
+        difficulty?: PuzzleDifficulty | 'custom'
+        playMode: PlayMode
+        puzzle: string
+        puzzleSize: PuzzleSize
+        source: string
+        variantId?: VariantId
+      },
+    ) => {
+      if (!hasConvexBackend()) {
+        setLiveBattleStatus('Live battles need the Convex backend.')
+        setStatusLine('Live battles need the Convex backend.')
+        return
+      }
+
+      const liveTemplate = template ?? {
+        difficulty: activeGame.difficulty,
+        playMode: activeMode,
+        puzzle: activeGame.puzzle,
+        puzzleSize: activeSize,
+        source: activeGame.source,
+        variantId,
+      }
+      const roomId = makeLiveBattleId(battleKind)
+      const request: LiveBattleCreateRequest = {
+        battleKind,
+        creatorName: playerName,
+        difficulty: liveTemplate.difficulty,
+        playMode: liveTemplate.playMode,
+        puzzle: liveTemplate.puzzle,
+        puzzleSize: liveTemplate.puzzleSize,
+        requestId: `${roomId}-${Date.now().toString(36)}`,
+        roomId,
+        source: liveTemplate.source,
+        turnLives: challengeTurnLives,
+        turnSeconds: challengeTurnSeconds,
+        variantId: liveTemplate.variantId ?? 'classic',
+      }
+      setLiveBattleCreateRequest(request)
+      setLiveBattleStatus(
+        battleKind === 'turns'
+          ? 'Creating turn battle room...'
+          : 'Creating live battle room...',
+      )
+      setChallengeSetupOpen(false)
+      closeMenuModal()
+      void navigate({ to: '/battle/live/$roomId', params: { roomId } })
+    },
+    [
+      activeGame,
+      activeMode,
+      activeSize,
+      challengeTurnLives,
+      challengeTurnSeconds,
+      closeMenuModal,
+      navigate,
+      playerName,
+      variantId,
+    ],
+  )
+
+  const createConfiguredChallenge = useCallback(() => {
+    const setupKind = challengeKind
     if (challengeSource === 'current') {
-      createRaceChallenge();
-      return;
+      if (isLiveChallengeSetup(setupKind)) {
+        createLiveBattleRoom(liveBattleKindFromSetup(setupKind))
+      } else {
+        createRaceChallenge({
+          challengeKind: asyncChallengeKindFromSetup(setupKind),
+          difficulty: activeGame.difficulty,
+          playMode: activeMode,
+          puzzle: activeGame.puzzle,
+          puzzleSize: activeSize,
+          source: activeGame.source,
+          variantId,
+        })
+      }
+      return
     }
 
-    const dateKey = todayDateKey();
+    const dateKey = todayDateKey()
     const seed =
       challengeSource === 'daily'
         ? dailySeed(
             challengeDifficulty,
-            'vimdoku',
+            `vimdoku-${challengeVariant}`,
             dateKey,
             challengeSize,
             challengeMode,
           )
-        : Date.now();
-    const puzzleGrid = generatePuzzle(challengeDifficulty, seed, challengeSize);
-    createRaceChallenge({
-      challengeKind,
+        : Date.now()
+    const puzzleGrid = generatePuzzleForVariant(
+      challengeDifficulty,
+      seed,
+      challengeSize,
+      challengeVariant,
+    )
+    const template = {
       difficulty: challengeDifficulty,
       playMode: challengeMode,
       puzzle: gridToString(puzzleGrid, challengeSize),
       puzzleSize: challengeSize,
       source:
         challengeSource === 'daily'
-          ? `vimdoku ${challengeSize} ${modeLabel(challengeMode)} daily ${dateKey}`
-          : `generated ${challengeSize} ${modeLabel(challengeMode)} ${challengeDifficulty} challenge`,
-      variantId: 'classic',
-    });
+          ? `vimdoku ${challengeSize} ${modeLabel(challengeMode)} ${VARIANTS[challengeVariant].label} daily ${dateKey}`
+          : `generated ${challengeSize} ${modeLabel(challengeMode)} ${VARIANTS[challengeVariant].label} ${challengeDifficulty} challenge`,
+      variantId: challengeVariant,
+    }
+
+    if (isLiveChallengeSetup(setupKind)) {
+      createLiveBattleRoom(liveBattleKindFromSetup(setupKind), template)
+      return
+    }
+
+    createRaceChallenge({
+      ...template,
+      challengeKind: asyncChallengeKindFromSetup(setupKind),
+    })
   }, [
+    activeGame,
+    activeMode,
+    activeSize,
     challengeKind,
     challengeDifficulty,
     challengeMode,
     challengeSize,
     challengeSource,
+    challengeVariant,
+    createLiveBattleRoom,
     createRaceChallenge,
-  ]);
-
-  const handleChallengeCreated = useCallback(
-    (challengeId: string, requestId: string) => {
-      setChallengeCreateRequest((current) =>
-        current?.requestId === requestId ? null : current,
-      );
-      copyChallengeLink(challengeId);
-      setChallengeStatus(
-        challengeRecipient
-          ? `Direct challenge sent to ${challengeRecipient.name}. Link copied too.`
-          : 'Challenge link copied. Send it to a friend.',
-      );
-    },
-    [challengeRecipient, copyChallengeLink],
-  );
-
-  const startChallengeRace = useCallback((challenge: ChallengeRace) => {
-    const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize);
-    startNewPuzzle(
-      puzzleGrid,
-      `Started ${challengeKindLabel(challenge.challengeKind)} ${challenge.challengeId}.`,
-      `challenge ${challengeKindLabel(challenge.challengeKind)} ${challenge.challengeId}`,
-      challenge.difficulty,
-      challenge.puzzleSize,
-      challenge.playMode,
-      createChallengeGameMeta(challenge),
-    );
-    setChallengeStatus(
-      challenge.challengeKind === 'streak'
-        ? 'Streak battle started. Bad entries count against you.'
-        : 'Race started. The clock is live.',
-    );
-  }, [startNewPuzzle]);
-
-  const createLiveBattleRoom = useCallback((battleKind: LiveBattleKind = 'race') => {
-    if (!hasConvexBackend()) {
-      setLiveBattleStatus('Live battles need the Convex backend.');
-      setStatusLine('Live battles need the Convex backend.');
-      return;
-    }
-
-    const roomId = makeLiveBattleId(battleKind);
-    const request: LiveBattleCreateRequest = {
-      battleKind,
-      creatorName: playerName,
-      difficulty: activeGame.difficulty,
-      playMode: activeMode,
-      puzzle: activeGame.puzzle,
-      puzzleSize: activeSize,
-      requestId: `${roomId}-${Date.now().toString(36)}`,
-      roomId,
-      source: activeGame.source,
-      variantId,
-    };
-    setLiveBattleCreateRequest(request);
-    setLiveBattleStatus(
-      battleKind === 'turns'
-        ? 'Creating turn battle room...'
-        : 'Creating live battle room...',
-    );
-    void navigate({ to: '/battle/live/$roomId', params: { roomId } });
-  }, [activeGame, activeMode, activeSize, navigate, playerName, variantId]);
+    variantId,
+  ])
 
   const handleLiveBattleCreated = useCallback(
     (roomId: string, requestId: string) => {
       setLiveBattleCreateRequest((current) =>
         current?.requestId === requestId ? null : current,
-      );
-      copyLiveBattleLink(roomId);
-      setLiveBattleStatus('Live room created. Link copied.');
+      )
+      copyLiveBattleLink(roomId)
+      setLiveBattleStatus('Live room created. Link copied.')
     },
     [copyLiveBattleLink],
-  );
+  )
 
-  const startLiveBattle = useCallback((room: LiveBattleRoom) => {
-    const label = room.battleKind === 'turns' ? 'turn battle' : 'live race';
-    const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize);
-    startNewPuzzle(
-      puzzleGrid,
-      `Joined ${label} ${room.roomId}.`,
-      `${label} ${room.roomId}`,
-      room.difficulty,
-      room.puzzleSize,
-      room.playMode,
-      createLiveBattleGameMeta(room),
-      false,
-    );
-    setLiveBattleStatus(
-      room.battleKind === 'turns'
-        ? 'Turn battle joined. Wait for your turn.'
-        : 'Live race joined. Presence is updating.',
-    );
-  }, [startNewPuzzle]);
+  const startLiveBattle = useCallback(
+    (room: LiveBattleRoom) => {
+      const label = room.battleKind === 'turns' ? 'turn battle' : 'live race'
+      const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize)
+      startNewPuzzle(
+        puzzleGrid,
+        `Joined ${label} ${room.roomId}.`,
+        `${label} ${room.roomId}`,
+        room.difficulty,
+        room.puzzleSize,
+        room.playMode,
+        createLiveBattleGameMeta(room),
+        false,
+      )
+      setLiveBattleStatus(
+        room.battleKind === 'turns'
+          ? 'Turn battle joined. Wait for your turn.'
+          : 'Live race joined. Presence is updating.',
+      )
+    },
+    [startNewPuzzle],
+  )
+
+  useEffect(() => {
+    if (!routeLiveBattleId || !liveBattleRoom) return
+    if (liveBattleRoom.roomId !== routeLiveBattleId) return
+    if (liveBattleRoom.battleKind !== 'race') return
+    if (liveBattleRoom.status === 'finished') return
+    if (activeLiveBattleId === liveBattleRoom.roomId) return
+    if (!liveBattleRoom.presence.some((player) => player.anonId === guestId))
+      return
+    const startsAt =
+      liveBattleRoom.status === 'live'
+        ? Date.now()
+        : liveBattleRoom.raceStartsAt
+    if (!startsAt) return
+
+    const key = `${liveBattleRoom.roomId}:${startsAt}`
+    if (handledLiveRaceStartRef.current === key) return
+    const delay = Math.max(0, startsAt - Date.now())
+    const timer = window.setTimeout(() => {
+      handledLiveRaceStartRef.current = key
+      startLiveBattle(liveBattleRoom)
+      setLiveBattleStatus('Race started. First completed grid wins.')
+    }, delay)
+    return () => window.clearTimeout(timer)
+  }, [
+    activeLiveBattleId,
+    guestId,
+    liveBattleRoom,
+    routeLiveBattleId,
+    startLiveBattle,
+  ])
+
+  useEffect(() => {
+    if (!activeLiveBattleRoom || activeLiveBattleRoom.battleKind !== 'race')
+      return
+    if (activeLiveBattleRoom.status !== 'finished') return
+    if (!activeLiveBattleRoom.winnerAnonId) return
+    const key = `${activeLiveBattleRoom.roomId}:${activeLiveBattleRoom.winnerAnonId}`
+    if (handledLiveRaceFinishRef.current === key) return
+    handledLiveRaceFinishRef.current = key
+
+    const winner = activeLiveBattleRoom.presence.find(
+      (player) => player.anonId === activeLiveBattleRoom.winnerAnonId,
+    )
+    const won = activeLiveBattleRoom.winnerAnonId === guestId
+    const message = won
+      ? 'Race finished. You won.'
+      : `Race finished. ${winner?.player ?? 'Your opponent'} completed first.`
+    setLiveBattleStatus(message)
+    setStatusLine(message)
+    if (!won && currentRecord.status !== 'completed') {
+      setTimerPaused(true)
+      setTimerPauseReason('auto')
+    }
+  }, [activeLiveBattleRoom, currentRecord.status, guestId])
 
   const dashboardSelect = useCallback(
     (key: string) => {
-      if (key === 'n') openNewGame();
-      else if (key === 'g') openGameLibrary();
-      else if (key === 'l') openLeaderboards();
-      else if (key === 'r') navigateToPage('challenge');
-      else if (key === 'p') goToProfile();
-      else if (key === 's') openModalRoute('settings');
-      else goToPlay();
+      if (key === 'n') openNewGame()
+      else if (key === 'g') openGameLibrary()
+      else if (key === 'l') openLeaderboards()
+      else if (key === 'r') navigateToPage('challenge')
+      else if (key === 'p') goToProfile()
+      else if (key === 's') openModalRoute('settings')
+      else goToPlay()
     },
     [
       goToPlay,
@@ -2633,94 +2976,99 @@ function App() {
       openModalRoute,
       openNewGame,
     ],
-  );
+  )
 
-  const jumpToNextEmpty = useCallback((direction: 1 | -1) => {
-    resumeTimerFromActivity();
-    setSelected((index) => {
-      for (let step = 1; step <= activeCellCount; step += 1) {
-        const next = (index + step * direction + activeCellCount * 2) % activeCellCount;
-        if (grid[next] === 0) return next;
-      }
-      return index;
-    });
-  }, [activeCellCount, grid, resumeTimerFromActivity]);
+  const jumpToNextEmpty = useCallback(
+    (direction: 1 | -1) => {
+      resumeTimerFromActivity()
+      setSelected((index) => {
+        for (let step = 1; step <= activeCellCount; step += 1) {
+          const next =
+            (index + step * direction + activeCellCount * 2) % activeCellCount
+          if (grid[next] === 0) return next
+        }
+        return index
+      })
+    },
+    [activeCellCount, grid, resumeTimerFromActivity],
+  )
 
   const jumpToDigit = useCallback(
     (digit: number, direction: 1 | -1 = 1) => {
-      resumeTimerFromActivity();
-    setHighlightDigit(digit);
-    setSelected((index) => {
-      for (let step = 1; step <= activeCellCount; step += 1) {
-        const next = (index + step * direction + activeCellCount * 2) % activeCellCount;
-        if (grid[next] === digit) return next;
-      }
-      return index;
-      });
-      setStatusLine(`Highlighting ${digit}. Press Esc to clear.`);
+      resumeTimerFromActivity()
+      setHighlightDigit(digit)
+      setSelected((index) => {
+        for (let step = 1; step <= activeCellCount; step += 1) {
+          const next =
+            (index + step * direction + activeCellCount * 2) % activeCellCount
+          if (grid[next] === digit) return next
+        }
+        return index
+      })
+      setStatusLine(`Highlighting ${digit}. Press Esc to clear.`)
     },
     [activeCellCount, grid, resumeTimerFromActivity],
-  );
+  )
 
   const fillAllCandidates = useCallback(() => {
     if (!notesEnabled) {
-      setStatusLine('Notes are disabled in speedrun.');
-      return;
+      setStatusLine('Notes are disabled in speedrun.')
+      return
     }
-    resumeTimerFromActivity();
-    pushHistory();
-    setNotes(candidatesAsNotes(grid, activeSize));
-    setStatusLine('Annotated every empty cell with current candidates.');
-  }, [activeSize, grid, notesEnabled, pushHistory, resumeTimerFromActivity]);
+    resumeTimerFromActivity()
+    pushHistory()
+    setNotes(candidatesAsNotes(grid, activeSize))
+    setStatusLine('Annotated every empty cell with current candidates.')
+  }, [activeSize, grid, notesEnabled, pushHistory, resumeTimerFromActivity])
 
   const pruneNotes = useCallback(() => {
     if (!notesEnabled) {
-      setStatusLine('Notes are disabled in speedrun.');
-      return;
+      setStatusLine('Notes are disabled in speedrun.')
+      return
     }
-    resumeTimerFromActivity();
-    pushHistory();
-    setNotes((current) => pruneImpossibleNotes(grid, current, activeSize));
-    setStatusLine('Removed impossible annotations.');
-  }, [activeSize, grid, notesEnabled, pushHistory, resumeTimerFromActivity]);
+    resumeTimerFromActivity()
+    pushHistory()
+    setNotes((current) => pruneImpossibleNotes(grid, current, activeSize))
+    setStatusLine('Removed impossible annotations.')
+  }, [activeSize, grid, notesEnabled, pushHistory, resumeTimerFromActivity])
 
   const clearNotes = useCallback(() => {
-    resumeTimerFromActivity();
-    pushHistory();
-    setNotes(emptyNotes(activeSize));
-    setCornerMarks(emptyNotes(activeSize));
-    setStatusLine('Cleared annotations.');
-  }, [activeSize, pushHistory, resumeTimerFromActivity]);
+    resumeTimerFromActivity()
+    pushHistory()
+    setNotes(emptyNotes(activeSize))
+    setCornerMarks(emptyNotes(activeSize))
+    setStatusLine('Cleared annotations.')
+  }, [activeSize, pushHistory, resumeTimerFromActivity])
 
   const runCheck = useCallback(() => {
-    const result = checkGrid(grid, activeSize);
+    const result = checkGrid(grid, activeSize)
     if (!result.ok) {
-      setExplicitSelection(new Set(result.issues[0].cells));
-      setVisualAnchor(result.issues[0].cells[0]);
-      setSelected(result.issues[0].cells[1]);
+      setExplicitSelection(new Set(result.issues[0].cells))
+      setVisualAnchor(result.issues[0].cells[0])
+      setSelected(result.issues[0].cells[1])
       recordSolveEvent({
         cells: result.issues[0].cells,
         detail: result.message,
         kind: 'check',
         label: 'check found conflict',
-      });
-      setStatusLine(result.message);
-      return;
+      })
+      setStatusLine(result.message)
+      return
     }
-    const variantIssues = checkVariant(grid, activeSize, variantId);
+    const variantIssues = checkVariant(grid, activeSize, variantId)
     if (variantIssues.length > 0) {
-      const issue = variantIssues[0];
-      setExplicitSelection(new Set(issue.cells));
-      setVisualAnchor(issue.cells[0]);
-      setSelected(issue.cells[1]);
+      const issue = variantIssues[0]
+      setExplicitSelection(new Set(issue.cells))
+      setVisualAnchor(issue.cells[0])
+      setSelected(issue.cells[1])
       recordSolveEvent({
         cells: issue.cells,
         detail: issue.message,
         kind: 'check',
         label: 'variant check failed',
-      });
-      setStatusLine(issue.message);
-      return;
+      })
+      setStatusLine(issue.message)
+      return
     }
     recordSolveEvent({
       kind: 'check',
@@ -2729,167 +3077,203 @@ function App() {
         variantId === 'classic'
           ? result.message
           : `${VARIANTS[variantId].label} constraints hold`,
-    });
+    })
     setStatusLine(
       variantId === 'classic'
         ? result.message
         : `Check passed: ${VARIANTS[variantId].label} constraints hold.`,
-    );
-  }, [activeSize, grid, recordSolveEvent, variantId]);
+    )
+  }, [activeSize, grid, recordSolveEvent, variantId])
 
-  const selectCells = useCallback(
-    (cells: Set<number>, message: string) => {
-      const ordered = [...cells].sort((a, b) => a - b);
-      if (ordered.length === 0) return;
-      setExplicitSelection(new Set(ordered));
-      setVisualAnchor(ordered[0]);
-      setSelected(ordered[ordered.length - 1]);
-      setStatusLine(message);
-    },
-    [],
-  );
+  const selectCells = useCallback((cells: Set<number>, message: string) => {
+    const ordered = [...cells].sort((a, b) => a - b)
+    if (ordered.length === 0) return
+    setExplicitSelection(new Set(ordered))
+    setVisualAnchor(ordered[0])
+    setSelected(ordered[ordered.length - 1])
+    setStatusLine(message)
+  }, [])
 
   const placeSolution = useCallback(() => {
-    const solution = solveGrid(grid, activeSize);
+    const solution = solveGrid(grid, activeSize)
     if (!solution) {
-      setStatusLine('No valid solution from the current board.');
-      return;
+      setStatusLine('No valid solution from the current board.')
+      return
     }
-    resumeTimerFromActivity();
-    pushHistory();
-    setGrid(solution);
-    setNotes(emptyNotes(activeSize));
-    setStatusLine('Solved the board.');
-  }, [activeSize, grid, pushHistory, resumeTimerFromActivity]);
+    resumeTimerFromActivity()
+    pushHistory()
+    setGrid(solution)
+    setNotes(emptyNotes(activeSize))
+    setStatusLine('Solved the board.')
+  }, [activeSize, grid, pushHistory, resumeTimerFromActivity])
 
   const executeCommand = useCallback(
     (rawCommand: string) => {
-      const command = rawCommand.trim().toLowerCase();
-      setCommandMode(null);
-      setCommandValue('');
+      const command = rawCommand.trim().toLowerCase()
+      setCommandMode(null)
+      setCommandValue('')
 
       if (!command) {
-        setStatusLine('Ready.');
-        return;
+        setStatusLine('Ready.')
+        return
       }
 
       if (['hint', 'h'].includes(command)) {
-        askForHint();
+        askForHint()
       } else if (['pause', 'timer-pause'].includes(command)) {
-        if (!timerPaused) toggleTimerPaused();
+        if (!timerPaused) toggleTimerPaused()
       } else if (['resume', 'timer-resume', 'play'].includes(command)) {
-        if (timerPaused) toggleTimerPaused();
+        if (timerPaused) toggleTimerPaused()
       } else if (['notes', 'candidates', 'annotate'].includes(command)) {
-        fillAllCandidates();
+        fillAllCandidates()
       } else if (['prune', 'prune-notes'].includes(command)) {
-        pruneNotes();
+        pruneNotes()
       } else if (['clear-notes', 'cn'].includes(command)) {
-        clearNotes();
+        clearNotes()
       } else if (['check', 'validate'].includes(command)) {
-        runCheck();
+        runCheck()
       } else if (['rules', 'rule'].includes(command)) {
-        openModalRoute('rules');
-        setStatusLine('Opened puzzle rules.');
+        openModalRoute('rules')
+        setStatusLine('Opened puzzle rules.')
       } else if (['share', 'copy-link', 'puzzle-link'].includes(command)) {
-        copyPuzzleLink();
-      } else if (['share-state', 'copy-state', 'state-link'].includes(command)) {
-        copyStateLink();
+        copyPuzzleLink()
+      } else if (
+        ['share-state', 'copy-state', 'state-link'].includes(command)
+      ) {
+        copyStateLink()
       } else if (['select-row', 'row'].includes(command)) {
-        selectCells(rowSelection(selected, activeSize), 'Selected current row.');
-      } else if (['select-col', 'select-column', 'col', 'column'].includes(command)) {
-        selectCells(columnSelection(selected, activeSize), 'Selected current column.');
+        selectCells(rowSelection(selected, activeSize), 'Selected current row.')
+      } else if (
+        ['select-col', 'select-column', 'col', 'column'].includes(command)
+      ) {
+        selectCells(
+          columnSelection(selected, activeSize),
+          'Selected current column.',
+        )
       } else if (['select-box', 'box'].includes(command)) {
-        selectCells(boxSelection(selected, activeSize), 'Selected current box.');
+        selectCells(boxSelection(selected, activeSize), 'Selected current box.')
       } else if (['select-all', 'all'].includes(command)) {
         selectCells(
           new Set(Array.from({ length: activeCellCount }, (_, index) => index)),
           'Selected every cell.',
-        );
-      } else if (command.startsWith('color ') || command.startsWith('colour ')) {
-        const value = command.split(/\s+/)[1];
-        if (value === 'clear') applyColor(null);
+        )
+      } else if (
+        command.startsWith('color ') ||
+        command.startsWith('colour ')
+      ) {
+        const value = command.split(/\s+/)[1]
+        if (value === 'clear') applyColor(null)
         else {
-          const index = Number(value) - 1;
-          if (index >= 0 && index < CELL_COLORS.length) applyColor(index);
-          else setStatusLine(`Unknown colour: ${value}`);
+          const index = Number(value) - 1
+          if (index >= 0 && index < CELL_COLORS.length) applyColor(index)
+          else setStatusLine(`Unknown colour: ${value}`)
         }
       } else if (['tool-digit', 'digit-tool'].includes(command)) {
-        chooseToolMode('digit');
-      } else if (['tool-notes', 'tool-center', 'centre', 'center'].includes(command)) {
-        chooseToolMode('center');
+        chooseToolMode('digit')
+      } else if (
+        ['tool-notes', 'tool-center', 'centre', 'center'].includes(command)
+      ) {
+        chooseToolMode('center')
       } else if (['tool-corner', 'corner'].includes(command)) {
-        chooseToolMode('corner');
-      } else if (['tool-color', 'tool-colour', 'color', 'colour'].includes(command)) {
-        chooseToolMode('color');
-      } else if (command === 'variant anti-knight' || command === 'anti-knight') {
-        chooseVariant('anti-knight');
-        setStatusLine('Anti-knight rules active for checks.');
+        chooseToolMode('corner')
+      } else if (
+        ['tool-color', 'tool-colour', 'color', 'colour'].includes(command)
+      ) {
+        chooseToolMode('color')
+      } else if (
+        command === 'variant anti-knight' ||
+        command === 'anti-knight'
+      ) {
+        chooseVariant('anti-knight')
+        setStatusLine('Anti-knight rules active for checks.')
       } else if (command === 'variant anti-king' || command === 'anti-king') {
-        chooseVariant('anti-king');
-        setStatusLine('Anti-king rules active for checks.');
+        chooseVariant('anti-king')
+        setStatusLine('Anti-king rules active for checks.')
       } else if (command === 'variant diagonal' || command === 'diagonal') {
-        chooseVariant('diagonal');
-        setStatusLine('Diagonal rules active for checks.');
+        chooseVariant('diagonal')
+        setStatusLine('Diagonal rules active for checks.')
       } else if (
         command === 'variant non-consecutive' ||
         command === 'non-consecutive'
       ) {
-        chooseVariant('non-consecutive');
-        setStatusLine('Non-consecutive rules active for checks.');
+        chooseVariant('non-consecutive')
+        setStatusLine('Non-consecutive rules active for checks.')
       } else if (command === 'variant classic' || command === 'classic') {
-        chooseVariant('classic');
-        setStatusLine('Classic rules active.');
-      } else if (['noh', 'nohlsearch', 'clear-hints', 'clear-hint'].includes(command)) {
-        clearHintState();
-      } else if (['hints-off', 'hint-off', 'nohint', 'nohints'].includes(command)) {
-        clearHintState(true);
+        chooseVariant('classic')
+        setStatusLine('Classic rules active.')
+      } else if (
+        ['noh', 'nohlsearch', 'clear-hints', 'clear-hint'].includes(command)
+      ) {
+        clearHintState()
+      } else if (
+        ['hints-off', 'hint-off', 'nohint', 'nohints'].includes(command)
+      ) {
+        clearHintState(true)
       } else if (['reset'].includes(command)) {
-        resetPuzzle();
-        setStatusLine('Reset player entries.');
+        resetPuzzle()
+        setStatusLine('Reset player entries.')
       } else if (['menu', 'm'].includes(command)) {
-        openModalRoute('menu');
-        setStatusLine('Opened menu.');
+        openModalRoute('menu')
+        setStatusLine('Opened menu.')
       } else if (['dashboard', 'start', 'home'].includes(command)) {
-        goToDashboard();
-        setStatusLine('Opened dashboard.');
+        goToDashboard()
+        setStatusLine('Opened dashboard.')
       } else if (['new', 'new-game'].includes(command)) {
-        openNewGame();
+        openNewGame()
       } else if (['daily', 'today'].includes(command)) {
-        openDailyPuzzle(newGameDifficulty, todayDateKey(), newGameSize, newGameMode);
-        setStatusLine(`Opening today's ${newGameSize} ${newGameMode} ${newGameDifficulty} daily.`);
+        openDailyPuzzle(
+          newGameDifficulty,
+          todayDateKey(),
+          newGameSize,
+          newGameMode,
+        )
+        setStatusLine(
+          `Opening today's ${newGameSize} ${newGameMode} ${newGameDifficulty} daily.`,
+        )
       } else if (['yesterday', 'daily-yesterday'].includes(command)) {
-        openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize, newGameMode);
-        setStatusLine(`Opening yesterday's ${newGameSize} ${newGameMode} ${newGameDifficulty} daily.`);
+        openDailyPuzzle(
+          newGameDifficulty,
+          offsetDateKey(-1),
+          newGameSize,
+          newGameMode,
+        )
+        setStatusLine(
+          `Opening yesterday's ${newGameSize} ${newGameMode} ${newGameDifficulty} daily.`,
+        )
       } else if (['games', 'history', 'ls'].includes(command)) {
-        openGameLibrary();
-      } else if (['leaderboard', 'leaderboards', 'scores', 'lb'].includes(command)) {
-        openLeaderboards();
+        openGameLibrary()
+      } else if (
+        ['leaderboard', 'leaderboards', 'scores', 'lb'].includes(command)
+      ) {
+        openLeaderboards()
       } else if (['challenge', 'race', 'versus', 'vs'].includes(command)) {
-        navigateToPage('challenge');
+        navigateToPage('challenge')
       } else if (['profile', 'me', 'account'].includes(command)) {
-        goToProfile();
+        goToProfile()
       } else if (['clear', 'blank'].includes(command)) {
-        clearAll();
-        setStatusLine('Started a blank board.');
+        clearAll()
+        setStatusLine('Started a blank board.')
       } else if (['import', 'image'].includes(command)) {
-        fileInputRef.current?.click();
-        setStatusLine('Choose a puzzle image to import.');
+        fileInputRef.current?.click()
+        setStatusLine('Choose a puzzle image to import.')
       } else if (['tools', 'tool'].includes(command)) {
-        openModalRoute('tools');
-        setStatusLine('Opened tools.');
-      } else if (['theme', 'colorscheme', 'colors', 'colours'].includes(command)) {
-        openModalRoute('theme');
-        setStatusLine('Opened colorscheme.');
+        openModalRoute('tools')
+        setStatusLine('Opened tools.')
+      } else if (
+        ['theme', 'colorscheme', 'colors', 'colours'].includes(command)
+      ) {
+        openModalRoute('theme')
+        setStatusLine('Opened colorscheme.')
       } else if (['settings'].includes(command)) {
-        openModalRoute('settings');
-        setStatusLine('Opened settings.');
+        openModalRoute('settings')
+        setStatusLine('Opened settings.')
       } else if (['solve'].includes(command)) {
-        placeSolution();
+        placeSolution()
       } else if (command.startsWith('/')) {
-        const digit = Number(command.slice(1, 2));
-        if (digit >= 1 && digit <= activeConfig.size) jumpToDigit(digit);
+        const digit = Number(command.slice(1, 2))
+        if (digit >= 1 && digit <= activeConfig.size) jumpToDigit(digit)
       } else {
-        setStatusLine(`Unknown command: ${rawCommand}`);
+        setStatusLine(`Unknown command: ${rawCommand}`)
       }
     },
     [
@@ -2927,43 +3311,48 @@ function App() {
       timerPaused,
       toggleTimerPaused,
     ],
-  );
+  )
 
   useEffect(() => {
-    if (!showDashboard) return;
+    if (!showDashboard) return
 
     function onDashboardKeyDown(event: KeyboardEvent) {
-      const key = event.key.toLowerCase();
+      const key = event.key.toLowerCase()
       if (key === 'escape') {
-        event.preventDefault();
-        goToPlay();
-        return;
+        event.preventDefault()
+        goToPlay()
+        return
       }
       if (key === 'enter') {
-        event.preventDefault();
-        startGeneratedPuzzle(dashboardDifficulty, true, dashboardSize, dashboardMode);
-        return;
+        event.preventDefault()
+        startGeneratedPuzzle(
+          dashboardDifficulty,
+          true,
+          dashboardSize,
+          dashboardMode,
+        )
+        return
       }
       if (key === '1' || key === '2' || key === '3') {
-        event.preventDefault();
+        event.preventDefault()
         setDashboardDifficulty(
           key === '1' ? 'easy' : key === '2' ? 'medium' : 'hard',
-        );
-        return;
+        )
+        return
       }
       if (key === '6' || key === '9') {
-        event.preventDefault();
-        setDashboardSize(key === '6' ? '6x6' : '9x9');
-        return;
+        event.preventDefault()
+        setDashboardSize(key === '6' ? '6x6' : '9x9')
+        return
       }
       if (DASHBOARD_ACTIONS.some(([actionKey]) => actionKey === key)) {
-        event.preventDefault();
-        dashboardSelect(key);
+        event.preventDefault()
+        dashboardSelect(key)
       }
     }
 
-    window.addEventListener('keydown', onDashboardKeyDown);
-    return () => window.removeEventListener('keydown', onDashboardKeyDown);
+    window.addEventListener('keydown', onDashboardKeyDown)
+    return () => window.removeEventListener('keydown', onDashboardKeyDown)
   }, [
     dashboardDifficulty,
     dashboardMode,
@@ -2972,267 +3361,273 @@ function App() {
     goToPlay,
     showDashboard,
     startGeneratedPuzzle,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!showSolved) return;
+    if (!showSolved) return
 
     function onSolvedKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
-      const key = event.key.toLowerCase();
+      if (isTypingTarget(event.target)) return
+      const key = event.key.toLowerCase()
       if (key === 'escape' || key === 'q') {
-        event.preventDefault();
-        setSolvedDismissed(true);
+        event.preventDefault()
+        setSolvedDismissed(true)
       }
     }
 
-    window.addEventListener('keydown', onSolvedKeyDown);
-    return () => window.removeEventListener('keydown', onSolvedKeyDown);
-  }, [showSolved]);
+    window.addEventListener('keydown', onSolvedKeyDown)
+    return () => window.removeEventListener('keydown', onSolvedKeyDown)
+  }, [showSolved])
 
   useEffect(() => {
-    if (!activeMenuModal) return;
+    if (!activeMenuModal) return
 
     function onModalKeyDown(event: KeyboardEvent) {
       if (
         event.key === 'Escape' ||
         (event.key.toLowerCase() === 'q' && !isTypingTarget(event.target))
       ) {
-        event.preventDefault();
-        closeMenuModal();
+        event.preventDefault()
+        closeMenuModal()
       }
     }
 
-    window.addEventListener('keydown', onModalKeyDown);
-    return () => window.removeEventListener('keydown', onModalKeyDown);
-  }, [activeMenuModal, closeMenuModal]);
+    window.addEventListener('keydown', onModalKeyDown)
+    return () => window.removeEventListener('keydown', onModalKeyDown)
+  }, [activeMenuModal, closeMenuModal])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (review) return;
-      if (showSolved) return;
+      if (review) return
+      if (showSolved) return
       if (
         showBoard &&
         !activeMenuModal &&
         (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === 'p'
       ) {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        setVisualAnchor(null);
-        setExplicitSelection(null);
-        setCommandMode(null);
-        setCommandValue('');
-        openGamePicker();
-        return;
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        setVisualAnchor(null)
+        setExplicitSelection(null)
+        setCommandMode(null)
+        setCommandValue('')
+        openGamePicker()
+        return
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'm') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        setVisualAnchor(null);
-        setExplicitSelection(null);
-        setCommandMode(null);
-        setCommandValue('');
-        if (activeMenuModal === 'menu') closeMenuModal();
-        else openModalRoute('menu');
-        return;
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        setVisualAnchor(null)
+        setExplicitSelection(null)
+        setCommandMode(null)
+        setCommandValue('')
+        if (activeMenuModal === 'menu') closeMenuModal()
+        else openModalRoute('menu')
+        return
       }
       if (gamePickerOpen) {
         if (event.key === 'Escape') {
-          event.preventDefault();
-          closeGamePicker();
-          setStatusLine('Closed puzzle picker.');
+          event.preventDefault()
+          closeGamePicker()
+          setStatusLine('Closed puzzle picker.')
         }
-        return;
+        return
       }
-      if (!showBoard) return;
-      if (activeMenuModal) return;
-      if (commandMode) return;
-      if (isTypingTarget(event.target)) return;
+      if (!showBoard) return
+      if (activeMenuModal) return
+      if (commandMode) return
+      if (isTypingTarget(event.target)) return
 
       if (event.ctrlKey && !event.metaKey) {
-        const ctrlKey = event.key.toLowerCase();
+        const ctrlKey = event.key.toLowerCase()
         if (ctrlKey === 'r') {
-          event.preventDefault();
-          redo();
-          return;
+          event.preventDefault()
+          redo()
+          return
         }
         if (ctrlKey === 'd') {
-          event.preventDefault();
-          moveSelection(3, 0);
-          return;
+          event.preventDefault()
+          moveSelection(3, 0)
+          return
         }
         if (ctrlKey === 'u') {
-          event.preventDefault();
-          moveSelection(-3, 0);
-          return;
+          event.preventDefault()
+          moveSelection(-3, 0)
+          return
         }
       }
 
       if (visualCells) {
-        const visualKey = event.key.toLowerCase();
+        const visualKey = event.key.toLowerCase()
         if (event.key === 'Escape' || visualKey === 'v') {
-          event.preventDefault();
-          pendingKeyRef.current = '';
-          setVisualAnchor(null);
-          setExplicitSelection(null);
-          setToolMode('digit');
-          setNoteMode(false);
-          setStatusLine('Visual mode off. Digit mode restored.');
-          return;
+          event.preventDefault()
+          pendingKeyRef.current = ''
+          setVisualAnchor(null)
+          setExplicitSelection(null)
+          setToolMode('digit')
+          setNoteMode(false)
+          setStatusLine('Visual mode off. Digit mode restored.')
+          return
         }
-        const visualDigit = digitFromKeyEvent(event);
+        const visualDigit = digitFromKeyEvent(event)
         if (visualDigit >= 1 && visualDigit <= activeConfig.size) {
-          event.preventDefault();
+          event.preventDefault()
           if (event.altKey || toolMode === 'color') {
-            applyColor((visualDigit - 1) % CELL_COLORS.length);
+            applyColor((visualDigit - 1) % CELL_COLORS.length)
           } else if (toolMode === 'digit' && !event.shiftKey) {
-            setCell(visualDigit);
+            setCell(visualDigit)
           } else if (toolMode === 'center' || noteMode) {
-            toggleNote(visualDigit);
+            toggleNote(visualDigit)
           } else {
-            toggleCornerMark(visualDigit);
+            toggleCornerMark(visualDigit)
           }
-          return;
+          return
         }
         if (['backspace', 'delete'].includes(visualKey)) {
-          event.preventDefault();
-          clearCellsCompletely();
-          return;
+          event.preventDefault()
+          clearCellsCompletely()
+          return
         }
         if (['0', 'x'].includes(visualKey)) {
-          event.preventDefault();
-          if (toolMode === 'color') applyColor(null);
-          else if (toolMode === 'digit' && !event.shiftKey) setCell(0);
-          else if (toolMode === 'center' || noteMode) clearNotesAcrossBlock();
-          else clearCornerMarksAcrossSelection();
-          return;
+          event.preventDefault()
+          if (toolMode === 'color') applyColor(null)
+          else if (toolMode === 'digit' && !event.shiftKey) setCell(0)
+          else if (toolMode === 'center' || noteMode) clearNotesAcrossBlock()
+          else clearCornerMarksAcrossSelection()
+          return
         }
         // Movement keys fall through to the normal handler below so the
         // cursor — and therefore the selection rectangle — keeps moving.
       }
 
       if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMenuModal();
-        pendingKeyRef.current = '';
-        setLeaderPending(false);
-        clearHintState();
-        return;
+        event.preventDefault()
+        closeMenuModal()
+        pendingKeyRef.current = ''
+        setLeaderPending(false)
+        clearHintState()
+        return
       }
 
       // Leader sequences — Space is leader, LazyVim-style.
       if (pendingKeyRef.current === 'leader') {
-        pendingKeyRef.current = '';
-        setLeaderPending(false);
-        const leaderKey = event.key.toLowerCase();
-        event.preventDefault();
+        pendingKeyRef.current = ''
+        setLeaderPending(false)
+        const leaderKey = event.key.toLowerCase()
+        event.preventDefault()
         if (leaderKey === 'e') {
           setSidebarOpen((current) => {
-            setStatusLine(current ? 'Sidebar hidden.' : 'Sidebar shown.');
-            return !current;
-          });
+            setStatusLine(current ? 'Sidebar hidden.' : 'Sidebar shown.')
+            return !current
+          })
         } else if (leaderKey === 'h') {
           setHintRailOpen((current) => {
-            setStatusLine(current ? 'Hint engine hidden.' : 'Hint engine shown.');
-            return !current;
-          });
+            setStatusLine(
+              current ? 'Hint engine hidden.' : 'Hint engine shown.',
+            )
+            return !current
+          })
         } else if (leaderKey === 'n') {
-          openNewGame();
+          openNewGame()
         } else if (leaderKey === 'g') {
-          openGamePicker();
+          openGamePicker()
         } else if (leaderKey === 'l') {
-          openLeaderboards();
+          openLeaderboards()
         } else if (leaderKey === 'p') {
-          goToProfile();
+          goToProfile()
         } else if (leaderKey === 'i') {
-          fileInputRef.current?.click();
-          setStatusLine('Choose a puzzle image to import.');
+          fileInputRef.current?.click()
+          setStatusLine('Choose a puzzle image to import.')
         } else if (leaderKey === 's') {
-          openModalRoute('settings');
+          openModalRoute('settings')
         } else if (leaderKey === 't') {
-          openModalRoute('tools');
+          openModalRoute('tools')
         } else if (leaderKey === 'c') {
-          openModalRoute('theme');
+          openModalRoute('theme')
         } else if (leaderKey === 'm') {
-          openModalRoute('menu');
+          openModalRoute('menu')
         } else {
-          setStatusLine('Leader cancelled.');
+          setStatusLine('Leader cancelled.')
         }
-        return;
+        return
       }
 
       if (event.key === ' ') {
-        event.preventDefault();
-        pendingKeyRef.current = 'leader';
-        setLeaderPending(true);
-        return;
+        event.preventDefault()
+        pendingKeyRef.current = 'leader'
+        setLeaderPending(true)
+        return
       }
 
       if (event.key === ':') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        openCommand('command');
-        return;
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        openCommand('command')
+        return
       }
 
       if (event.key === '/') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        openCommand('search');
-        return;
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        openCommand('search')
+        return
       }
 
-      const numeric = digitFromKeyEvent(event);
+      const numeric = digitFromKeyEvent(event)
       if (numeric >= 1 && numeric <= CELL_COLORS.length && event.altKey) {
-        event.preventDefault();
-        applyColor(numeric - 1);
-        return;
+        event.preventDefault()
+        applyColor(numeric - 1)
+        return
       }
-      if (pendingKeyRef.current === 'f' && numeric >= 1 && numeric <= activeConfig.size) {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        jumpToDigit(numeric);
-        return;
+      if (
+        pendingKeyRef.current === 'f' &&
+        numeric >= 1 &&
+        numeric <= activeConfig.size
+      ) {
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        jumpToDigit(numeric)
+        return
       }
 
       if (numeric >= 1 && numeric <= activeConfig.size) {
-        event.preventDefault();
+        event.preventDefault()
         if (toolMode === 'color') {
-          applyColor((numeric - 1) % CELL_COLORS.length);
+          applyColor((numeric - 1) % CELL_COLORS.length)
         } else if (event.shiftKey || toolMode === 'corner') {
-          toggleCornerMark(numeric);
+          toggleCornerMark(numeric)
         } else if (noteMode || toolMode === 'center') {
-          toggleNote(numeric);
+          toggleNote(numeric)
         } else {
-          setCell(numeric);
+          setCell(numeric)
         }
-        return;
+        return
       }
 
       if (event.key === 'G') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        setSelected(activeCellCount - 1);
-        setStatusLine('Jumped to the last cell.');
-        return;
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        setSelected(activeCellCount - 1)
+        setStatusLine('Jumped to the last cell.')
+        return
       }
 
       if (event.key === 'P') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        toggleTimerPaused();
-        return;
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        toggleTimerPaused()
+        return
       }
 
-      const key = event.key.toLowerCase();
+      const key = event.key.toLowerCase()
       if (pendingKeyRef.current === 'g') {
-        pendingKeyRef.current = '';
+        pendingKeyRef.current = ''
         if (key === 'g') {
-          event.preventDefault();
-          setSelected(0);
-          setStatusLine('Jumped to the first cell.');
-          return;
+          event.preventDefault()
+          setSelected(0)
+          setStatusLine('Jumped to the first cell.')
+          return
         }
       }
 
@@ -3245,101 +3640,106 @@ function App() {
         arrowup: [-1, 0],
         l: [0, 1],
         arrowright: [0, 1],
-      };
+      }
 
       // Shift+hjkl jumps a whole box in that direction.
       if (event.shiftKey && ['h', 'j', 'k', 'l'].includes(key)) {
-        event.preventDefault();
-        const [deltaRow, deltaCol] = movement[key];
-        moveSelection(deltaRow * activeConfig.boxRows, deltaCol * activeConfig.boxCols);
-        return;
+        event.preventDefault()
+        const [deltaRow, deltaCol] = movement[key]
+        moveSelection(
+          deltaRow * activeConfig.boxRows,
+          deltaCol * activeConfig.boxCols,
+        )
+        return
       }
 
       if (movement[key]) {
-        event.preventDefault();
-        moveSelection(...movement[key]);
-        return;
+        event.preventDefault()
+        moveSelection(...movement[key])
+        return
       }
 
       if (['backspace', 'delete'].includes(key)) {
-        event.preventDefault();
-        clearCellsCompletely();
+        event.preventDefault()
+        clearCellsCompletely()
       } else if (['0', 'x'].includes(key)) {
-        event.preventDefault();
-        if (toolMode === 'color') applyColor(null);
-        else if (event.shiftKey || toolMode === 'corner') clearCornerMarksAcrossSelection();
-        else if (toolMode === 'center' || noteMode) clearNotesAcrossBlock();
-        else setCell(0);
+        event.preventDefault()
+        if (toolMode === 'color') applyColor(null)
+        else if (event.shiftKey || toolMode === 'corner')
+          clearCornerMarksAcrossSelection()
+        else if (toolMode === 'center' || noteMode) clearNotesAcrossBlock()
+        else setCell(0)
       } else if (key === 'n') {
-        event.preventDefault();
+        event.preventDefault()
         if (notesEnabled) {
           setNoteMode((current) => {
-            const next = !current;
-            setToolMode(next ? 'center' : 'digit');
-            return next;
-          });
-        }
-        else setStatusLine('Notes are disabled in speedrun.');
+            const next = !current
+            setToolMode(next ? 'center' : 'digit')
+            return next
+          })
+        } else setStatusLine('Notes are disabled in speedrun.')
       } else if (key === 'z') {
-        event.preventDefault();
-        chooseToolMode('digit');
+        event.preventDefault()
+        chooseToolMode('digit')
       } else if (key === 'm') {
-        event.preventDefault();
-        chooseToolMode('center');
+        event.preventDefault()
+        chooseToolMode('center')
       } else if (key === 'a') {
-        event.preventDefault();
-        chooseToolMode('corner');
+        event.preventDefault()
+        chooseToolMode('corner')
       } else if (key === 'c') {
-        event.preventDefault();
-        chooseToolMode('color');
+        event.preventDefault()
+        chooseToolMode('color')
       } else if (key === 'u') {
-        event.preventDefault();
-        undo();
+        event.preventDefault()
+        undo()
       } else if (key === '?') {
-        event.preventDefault();
+        event.preventDefault()
         if (hintsEnabled) {
-          setHintRailOpen(true);
-          askForHint();
+          setHintRailOpen(true)
+          askForHint()
         } else {
-          setStatusLine('Hints are disabled in speedrun.');
+          setStatusLine('Hints are disabled in speedrun.')
         }
       } else if (key === 'w') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        jumpToNextEmpty(1);
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        jumpToNextEmpty(1)
       } else if (key === 'b') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        jumpToNextEmpty(-1);
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        jumpToNextEmpty(-1)
       } else if (key === 'g') {
-        event.preventDefault();
-        pendingKeyRef.current = 'g';
-        setStatusLine('g...');
+        event.preventDefault()
+        pendingKeyRef.current = 'g'
+        setStatusLine('g...')
       } else if (key === 'f') {
-        event.preventDefault();
-        pendingKeyRef.current = 'f';
-        setStatusLine('f...');
+        event.preventDefault()
+        pendingKeyRef.current = 'f'
+        setStatusLine('f...')
       } else if (key === 'v') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        setExplicitSelection(null);
-        setVisualAnchor(selected);
-        setNoteMode(false);
-        setToolMode('corner');
-        setStatusLine(`VISUAL — numbers mark corners, z digit, m centre, c colour.`);
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        setExplicitSelection(null)
+        setVisualAnchor(selected)
+        setNoteMode(false)
+        setToolMode('corner')
+        setStatusLine(
+          `VISUAL — numbers mark corners, z digit, m centre, c colour.`,
+        )
       } else if (key === '}') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        moveBox(1);
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        moveBox(1)
       } else if (key === '{') {
-        event.preventDefault();
-        pendingKeyRef.current = '';
-        moveBox(-1);
+        event.preventDefault()
+        pendingKeyRef.current = ''
+        moveBox(-1)
       }
     }
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     activeCellCount,
     activeConfig,
@@ -3380,33 +3780,35 @@ function App() {
     toggleNote,
     undo,
     visualCells,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!review) return;
+    if (!review) return
 
     function onReviewKeyDown(event: KeyboardEvent) {
-      const numeric = digitFromKeyEvent(event);
+      const numeric = digitFromKeyEvent(event)
       if (numeric >= 1 && numeric <= 9) {
-        event.preventDefault();
-        setReview((current) =>
-          current?.map((cell, index) =>
-            index === reviewSelected ? { ...cell, value: numeric } : cell,
-          ) ?? null,
-        );
-        setReviewSelected((index) => Math.min(80, index + 1));
-        return;
+        event.preventDefault()
+        setReview(
+          (current) =>
+            current?.map((cell, index) =>
+              index === reviewSelected ? { ...cell, value: numeric } : cell,
+            ) ?? null,
+        )
+        setReviewSelected((index) => Math.min(80, index + 1))
+        return
       }
 
-      const key = event.key.toLowerCase();
+      const key = event.key.toLowerCase()
       if (['0', 'backspace', 'delete', 'x'].includes(key)) {
-        event.preventDefault();
-        setReview((current) =>
-          current?.map((cell, index) =>
-            index === reviewSelected ? { ...cell, value: 0 } : cell,
-          ) ?? null,
-        );
-        return;
+        event.preventDefault()
+        setReview(
+          (current) =>
+            current?.map((cell, index) =>
+              index === reviewSelected ? { ...cell, value: 0 } : cell,
+            ) ?? null,
+        )
+        return
       }
 
       const movement: Record<string, [number, number]> = {
@@ -3418,42 +3820,44 @@ function App() {
         arrowup: [-1, 0],
         l: [0, 1],
         arrowright: [0, 1],
-      };
+      }
 
       if (movement[key]) {
-        event.preventDefault();
+        event.preventDefault()
         setReviewSelected((index) => {
-          const [deltaRow, deltaCol] = movement[key];
-          const row = Math.max(0, Math.min(8, Math.floor(index / 9) + deltaRow));
-          const col = Math.max(0, Math.min(8, (index % 9) + deltaCol));
-          return row * 9 + col;
-        });
+          const [deltaRow, deltaCol] = movement[key]
+          const row = Math.max(0, Math.min(8, Math.floor(index / 9) + deltaRow))
+          const col = Math.max(0, Math.min(8, (index % 9) + deltaCol))
+          return row * 9 + col
+        })
       }
     }
 
-    window.addEventListener('keydown', onReviewKeyDown);
-    return () => window.removeEventListener('keydown', onReviewKeyDown);
-  }, [review, reviewSelected]);
+    window.addEventListener('keydown', onReviewKeyDown)
+    return () => window.removeEventListener('keydown', onReviewKeyDown)
+  }, [review, reviewSelected])
 
   async function importImage(file: File) {
-    setReview(null);
-    setImageUrl(URL.createObjectURL(file));
-    setOcrStatus('Preparing image');
+    setReview(null)
+    setImageUrl(URL.createObjectURL(file))
+    setOcrStatus('Preparing image')
 
     try {
       const cells = await recognizeSudokuImage(file, (done, total) => {
-        setOcrStatus(`Reading cells ${done}/${total}`);
-      });
-      setReview(cells);
-      setReviewSelected(0);
-      setOcrStatus('');
+        setOcrStatus(`Reading cells ${done}/${total}`)
+      })
+      setReview(cells)
+      setReviewSelected(0)
+      setOcrStatus('')
     } catch (error) {
-      setOcrStatus(error instanceof Error ? error.message : 'Could not read image');
+      setOcrStatus(
+        error instanceof Error ? error.message : 'Could not read image',
+      )
     }
   }
 
   function acceptReview() {
-    if (!review) return;
+    if (!review) return
     startNewPuzzle(
       review.map((cell) => cell.value),
       'Loaded image import.',
@@ -3461,9 +3865,9 @@ function App() {
       'custom',
       '9x9',
       newGameMode,
-    );
-    setReview(null);
-    setImageUrl(null);
+    )
+    setReview(null)
+    setImageUrl(null)
   }
 
   return (
@@ -3503,14 +3907,14 @@ function App() {
             currentRecord={currentRecord}
             currentMistakes={challengeMistakes}
             onChallenge={(nextChallenge) => {
-              setChallengeRace(nextChallenge);
+              setChallengeRace(nextChallenge)
               setChallengeStatus(
                 nextChallenge
                   ? ''
                   : routeChallengeId
                     ? 'Challenge not found.'
                     : '',
-              );
+              )
             }}
             onCreateResult={handleChallengeCreated}
             onStatus={setChallengeStatus}
@@ -3523,20 +3927,20 @@ function App() {
             currentRecord={currentRecord}
             onCreateResult={handleLiveBattleCreated}
             onRoom={(nextRoom) => {
-              setLiveBattleRoom(nextRoom);
+              setLiveBattleRoom(nextRoom)
               setLiveBattleStatus(
                 nextRoom
                   ? ''
                   : routeLiveBattleId
                     ? 'Live battle not found.'
                     : '',
-              );
+              )
             }}
             onStatus={setLiveBattleStatus}
             onTurnRequestHandled={(requestId) => {
               setLiveBattleTurnRequest((current) =>
                 current?.requestId === requestId ? null : current,
-              );
+              )
             }}
             playerName={playerName}
             roomId={routeLiveBattleId}
@@ -3553,7 +3957,12 @@ function App() {
           onSizeChange={setDashboardSize}
           onDifficultyChange={setDashboardDifficulty}
           onPlay={() =>
-            startGeneratedPuzzle(dashboardDifficulty, true, dashboardSize, dashboardMode)
+            startGeneratedPuzzle(
+              dashboardDifficulty,
+              true,
+              dashboardSize,
+              dashboardMode,
+            )
           }
           onSelect={dashboardSelect}
           puzzleSize={dashboardSize}
@@ -3561,7 +3970,10 @@ function App() {
       )}
 
       {activePage === 'games' && (
-        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="puzzle log">
+        <AppPageFrame
+          onOpenMenu={() => openModalRoute('menu')}
+          title="puzzle log"
+        >
           <GameLibrary
             activeGameId={activeGame.id}
             completedCount={completedGames.length}
@@ -3579,7 +3991,10 @@ function App() {
       )}
 
       {activePage === 'new' && (
-        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="new game">
+        <AppPageFrame
+          onOpenMenu={() => openModalRoute('menu')}
+          title="new game"
+        >
           <NewGamePanel
             dailyRecord={findDailyRecord(
               gameFinderRecords,
@@ -3601,22 +4016,37 @@ function App() {
             onImage={() => fileInputRef.current?.click()}
             onLoadPasted={startPastedPuzzle}
             onLocal={() =>
-              startGeneratedPuzzle(newGameDifficulty, false, newGameSize, newGameMode)
+              startGeneratedPuzzle(
+                newGameDifficulty,
+                false,
+                newGameSize,
+                newGameMode,
+              )
             }
             onMountain={() => void fetchSudokuMountainPuzzle(false)}
             onMountainDaily={() => void fetchSudokuMountainPuzzle(true)}
             onPuzzleTextChange={setNewPuzzleText}
             onOpenDaily={(selectedDateKey) => {
-              openDailyPuzzle(newGameDifficulty, selectedDateKey, newGameSize, newGameMode);
-              closeMenuModal();
-              setNewGameStatus('');
+              openDailyPuzzle(
+                newGameDifficulty,
+                selectedDateKey,
+                newGameSize,
+                newGameMode,
+              )
+              closeMenuModal()
+              setNewGameStatus('')
             }}
             onToday={() => setDailyDateKey(todayDateKey())}
             onYesterday={() => {
-              setDailyDateKey(offsetDateKey(-1));
-              openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize, newGameMode);
-              closeMenuModal();
-              setNewGameStatus('');
+              setDailyDateKey(offsetDateKey(-1))
+              openDailyPuzzle(
+                newGameDifficulty,
+                offsetDateKey(-1),
+                newGameSize,
+                newGameMode,
+              )
+              closeMenuModal()
+              setNewGameStatus('')
             }}
             puzzleText={newPuzzleText}
             puzzleSize={newGameSize}
@@ -3626,10 +4056,16 @@ function App() {
       )}
 
       {activePage === 'leaderboards' && (
-        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="leaderboards">
+        <AppPageFrame
+          onOpenMenu={() => openModalRoute('menu')}
+          title="leaderboards"
+        >
           <Leaderboards
             completedGames={completedGames}
             globalScores={globalScores}
+            indexMode={leaderboardFilters.mode}
+            indexSize={leaderboardFilters.size}
+            indexVariant={leaderboardFilters.variant}
             localScores={localLeaderboard}
             playerName={playerName}
             scope={leaderboardScope}
@@ -3640,34 +4076,64 @@ function App() {
       )}
 
       {activePage === 'challenge' && (
-        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="challenge">
+        <AppPageFrame
+          onOpenMenu={() => openModalRoute('menu')}
+          title="challenge"
+        >
           {routeChallengeId ? (
             <ChallengeRacePanel
               activeChallengeId={activeChallengeId}
               challenge={challengeRace}
               challengeId={routeChallengeId}
               isCurrentSolved={
-                Boolean(activeChallengeId && activeChallengeId === routeChallengeId) &&
-                currentRecord.status === 'completed'
+                Boolean(
+                  activeChallengeId && activeChallengeId === routeChallengeId,
+                ) && currentRecord.status === 'completed'
               }
               onContinue={goToPlay}
               onCopyLink={() => {
-                if (routeChallengeId) copyChallengeLink(routeChallengeId);
+                if (routeChallengeId) copyChallengeLink(routeChallengeId)
               }}
               onStart={startChallengeRace}
               shareUrl={challengeShareUrl}
               status={challengeStatus}
             />
-              ) : (
+          ) : routeChallengeResults ? (
+            hasConvexBackend() ? (
+              <ChallengeResultsView
+                onCopyLink={copyChallengeLink}
+                onNewChallenge={() => openChallengeSetup('race')}
+                onOpenChallenge={(challengeId) => {
+                  void navigate({
+                    to: '/challenge/$challengeId',
+                    params: { challengeId },
+                  })
+                }}
+              />
+            ) : (
+              <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5">
+                <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--accent)]">
+                  challenge results offline
+                </p>
+                <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+                  Challenge results use Convex so matches can sync between
+                  players.
+                </p>
+              </section>
+            )
+          ) : (
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
               {hasConvexBackend() ? (
                 <ChallengeHistoryPanel
                   onCopyLink={copyChallengeLink}
+                  onOpenResults={() =>
+                    void navigate({ to: '/challenge/results' })
+                  }
                   onOpenChallenge={(challengeId) => {
                     void navigate({
                       to: '/challenge/$challengeId',
                       params: { challengeId },
-                    });
+                    })
                   }}
                 />
               ) : (
@@ -3686,30 +4152,48 @@ function App() {
                   [challenge-actions]
                 </header>
                 <div className="space-y-3 p-3">
-                  <button
-                    type="button"
-                    className="w-full border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] transition active:translate-y-px"
-                    onClick={() => openChallengeSetup()}
-                  >
-                    new challenge
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
-                    onClick={() => createLiveBattleRoom('race')}
-                  >
-                    new live race
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-text)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:translate-y-px"
-                    onClick={() => createLiveBattleRoom('turns')}
-                  >
-                    new turn battle
-                  </button>
+                  {(
+                    [
+                      ['race', 'race', 'two-player live race with countdown'],
+                      [
+                        'streak',
+                        'streak battle',
+                        'async race with misses tracked',
+                      ],
+                      [
+                        'live-turns',
+                        'turn battle',
+                        'take turns with lives and a clock',
+                      ],
+                    ] as [ChallengeSetupKind, string, string][]
+                  ).map(([kind, label, description]) => (
+                    <button
+                      type="button"
+                      key={kind}
+                      className={`w-full border px-4 py-3 text-left font-mono transition active:translate-y-px ${
+                        kind === 'race'
+                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                      }`}
+                      onClick={() => openChallengeSetup(kind)}
+                    >
+                      <span className="block text-xs font-black uppercase tracking-[0.16em]">
+                        {label}
+                      </span>
+                      <span
+                        className={`mt-1 block text-xs leading-relaxed ${
+                          kind === 'race'
+                            ? 'text-[var(--app-bg)] opacity-80'
+                            : 'text-[var(--muted)]'
+                        }`}
+                      >
+                        {description}
+                      </span>
+                    </button>
+                  ))}
                   <p className="text-sm leading-relaxed text-[var(--muted)]">
-                    Create async challenges, live races, or turn battles with
-                    lives and a move clock. Then send the link to a friend.
+                    Pick a challenge type first, then tune the puzzle source,
+                    board, mode, variant, and difficulty.
                   </p>
                   {challengeStatus && (
                     <p className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--accent)]">
@@ -3724,17 +4208,21 @@ function App() {
       )}
 
       {activePage === 'live-battle' && !isLiveBattlePlay && (
-        <AppPageFrame onOpenMenu={() => openModalRoute('menu')} title="live battle">
+        <AppPageFrame
+          onOpenMenu={() => openModalRoute('menu')}
+          title="live battle"
+        >
           <LiveBattleRoomPanel
             activeRoomId={activeLiveBattleId}
             currentAnonId={guestId}
             isCurrentSolved={
-              Boolean(activeLiveBattleId && activeLiveBattleId === routeLiveBattleId) &&
-              currentRecord.status === 'completed'
+              Boolean(
+                activeLiveBattleId && activeLiveBattleId === routeLiveBattleId,
+              ) && currentRecord.status === 'completed'
             }
             onContinue={goToPlay}
             onCopyLink={() => {
-              if (routeLiveBattleId) copyLiveBattleLink(routeLiveBattleId);
+              if (routeLiveBattleId) copyLiveBattleLink(routeLiveBattleId)
             }}
             onStart={startLiveBattle}
             room={liveBattleRoom}
@@ -3756,12 +4244,12 @@ function App() {
                 friendCode={publicFriendCode}
                 onBack={goToProfile}
                 onChallenge={(profile) => {
-                  navigateToPage('challenge');
-                  openChallengeSetup({
+                  navigateToPage('challenge')
+                  openChallengeSetup('race', {
                     anonId: profile.anonId,
                     friendCode: profile.friendCode,
                     name: profile.name,
-                  });
+                  })
                 }}
               />
             ) : (
@@ -3774,11 +4262,13 @@ function App() {
               guestId={guestId}
               localStats={localProfileStats}
               onChallengeFriend={(friend) => {
-                navigateToPage('challenge');
-                openChallengeSetup(friend);
+                navigateToPage('challenge')
+                openChallengeSetup('race', friend)
               }}
               onNameChange={updatePlayerName}
-              onViewFriendProfile={(friend) => openPublicProfile(friend.friendCode)}
+              onViewFriendProfile={(friend) =>
+                openPublicProfile(friend.friendCode)
+              }
               playerName={playerName}
             />
           )}
@@ -3826,10 +4316,10 @@ function App() {
                   title="Hint"
                   disabled={!hintsEnabled}
                   onClick={() => {
-                    if (!hintsEnabled) return;
-                    resumeTimerFromActivity();
-                    setHintRailOpen(true);
-                    askForHint();
+                    if (!hintsEnabled) return
+                    resumeTimerFromActivity()
+                    setHintRailOpen(true)
+                    askForHint()
                   }}
                   className="grid h-9 w-9 place-items-center border border-[var(--border)] bg-[var(--button-bg)] font-mono text-sm font-bold text-[var(--accent)] transition hover:border-[var(--accent)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -3839,378 +4329,394 @@ function App() {
             }
           />
           <div
-          className="grid min-h-0 w-full flex-1 overflow-hidden grid-cols-1 transition-[grid-template-columns] duration-300 ease-out lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)_var(--hint-rail-width)] lg:grid-rows-[minmax(0,1fr)]"
-          style={
-            {
-              '--sidebar-width': sidebarOpen ? '340px' : '0px',
-              '--hint-rail-width': hintRailOpen ? '360px' : '0px',
-            } as CSSProperties
-          }
-        >
-        <section
-          className="column-rise relative order-2 flex min-h-0 flex-col justify-between overflow-hidden border-[var(--border)] bg-[var(--workspace-bg)] lg:border-l"
-          style={{ animationDelay: '80ms' }}
-        >
-          <button
-            type="button"
-            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-            title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-            onClick={() => {
-              setSidebarOpen((current) => {
-                setStatusLine(current ? 'Sidebar hidden.' : 'Sidebar shown.');
-                return !current;
-              });
-            }}
-            className="absolute bottom-20 left-0 z-50 hidden h-12 w-5 border-y border-r border-[var(--border)] bg-[var(--status-bg)] font-mono text-[0.65rem] font-black text-[var(--muted)] shadow-[1px_0_0_var(--app-bg)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] lg:grid lg:place-items-center"
+            className="grid min-h-0 w-full flex-1 overflow-hidden grid-cols-1 transition-[grid-template-columns] duration-300 ease-out lg:grid-cols-[var(--sidebar-width)_minmax(0,1fr)_var(--hint-rail-width)] lg:grid-rows-[minmax(0,1fr)]"
+            style={
+              {
+                '--sidebar-width': sidebarOpen ? '340px' : '0px',
+                '--hint-rail-width': hintRailOpen ? '360px' : '0px',
+              } as CSSProperties
+            }
           >
-            {sidebarOpen ? '<' : '>'}
-          </button>
-
-          <div
-            className={`relative grid min-h-0 flex-1 place-items-center overflow-hidden px-2 py-2 sm:px-5 sm:py-3 lg:px-8 lg:py-4 ${
-              timerPaused ? 'cursor-not-allowed' : ''
-            }`}
-            style={battleImpactStyle}
-          >
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 z-10 bg-[var(--danger)] mix-blend-screen"
-              style={battleImpactFlashStyle}
-            />
-            <div
-              className={`w-full max-w-[min(68dvh,calc(100dvh-220px),820px,100%)] transition duration-200 sm:max-w-[min(76vh,calc(100vh-176px),820px,100%)] ${
-                timerPaused ? 'scale-[0.98] blur-md brightness-50' : ''
-              }`}
-              aria-hidden={timerPaused}
+            <section
+              className="column-rise relative order-2 flex min-h-0 flex-col justify-between overflow-hidden border-[var(--border)] bg-[var(--workspace-bg)] lg:border-l"
+              style={{ animationDelay: '80ms' }}
             >
-              <section
-                className="board-settle grid aspect-square border-4 border-[var(--grid-line)] bg-[var(--grid-line)]"
-                style={{ gridTemplateColumns: `repeat(${activeConfig.size}, minmax(0, 1fr))` }}
-                aria-label={`${activeSize} Sudoku board`}
+              <button
+                type="button"
+                aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+                title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+                onClick={() => {
+                  setSidebarOpen((current) => {
+                    setStatusLine(
+                      current ? 'Sidebar hidden.' : 'Sidebar shown.',
+                    )
+                    return !current
+                  })
+                }}
+                className="absolute bottom-20 left-0 z-50 hidden h-12 w-5 border-y border-r border-[var(--border)] bg-[var(--status-bg)] font-mono text-[0.65rem] font-black text-[var(--muted)] shadow-[1px_0_0_var(--app-bg)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] lg:grid lg:place-items-center"
               >
-                {grid.map((value, index) => {
-                  const opponentNames = liveOpponentCursors.get(index) ?? [];
-                  const hasOpponentCursor = opponentNames.length > 0;
-                  return (
-                    <button
-                      type="button"
-                      key={labelCell(index, activeSize)}
-                      aria-label={`${labelCell(index, activeSize)} ${value || 'empty'}${
-                        hasOpponentCursor
-                          ? ` opponent ${opponentNames.join(', ')}`
-                          : ''
-                      }`}
-                      onClick={(event) => {
-                        resumeTimerFromActivity();
-                        setSelected(index);
-                        event.currentTarget.blur();
-                      }}
-                      className={cellClassName(
-                        index,
-                        selected,
-                        grid,
-                        givens,
-                        visibleConflicts,
-                        hint,
-                        highlightDigit,
-                        visualCells,
-                        cellColors[index],
-                        activeConfig,
-                        hasOpponentCursor,
-                      )}
-                      style={
-                        cellColors[index] !== null
-                          ? ({
-                              '--cell-user-color': CELL_COLORS[cellColors[index] ?? 0],
-                            } as CSSProperties)
-                          : undefined
-                      }
-                    >
-                      {hasOpponentCursor && (
-                        <span className="pointer-events-none absolute top-1 right-1 z-20 bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-1 font-mono text-[0.48rem] font-black uppercase leading-tight tracking-[0.08em] text-[var(--accent)]">
-                          {opponentCursorLabel(opponentNames)}
-                        </span>
-                      )}
-                      {!value && cornerMarks[index].length > 0 && (
-                        <span
-                          className={`absolute left-[8%] top-[7%] flex gap-[0.18em] font-mono text-[clamp(0.46rem,1.25vw,0.82rem)] font-black leading-none ${
-                            visualCells?.has(index) ||
-                            index === selected ||
-                            hintFocusCells(hint).includes(index)
-                              ? 'text-[var(--app-bg)]'
-                              : 'text-[var(--accent-2)]'
+                {sidebarOpen ? '<' : '>'}
+              </button>
+
+              <div
+                className={`relative grid min-h-0 flex-1 place-items-center overflow-hidden px-2 py-2 sm:px-5 sm:py-3 lg:px-8 lg:py-4 ${
+                  timerPaused ? 'cursor-not-allowed' : ''
+                }`}
+                style={battleImpactStyle}
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-10 bg-[var(--danger)] mix-blend-screen"
+                  style={battleImpactFlashStyle}
+                />
+                <div
+                  className={`w-full max-w-[min(68dvh,calc(100dvh-220px),820px,100%)] transition duration-200 sm:max-w-[min(76vh,calc(100vh-176px),820px,100%)] ${
+                    timerPaused ? 'scale-[0.98] blur-md brightness-50' : ''
+                  }`}
+                  aria-hidden={timerPaused}
+                >
+                  <section
+                    className="board-settle grid aspect-square border-4 border-[var(--grid-line)] bg-[var(--grid-line)]"
+                    style={{
+                      gridTemplateColumns: `repeat(${activeConfig.size}, minmax(0, 1fr))`,
+                    }}
+                    aria-label={`${activeSize} Sudoku board`}
+                  >
+                    {grid.map((value, index) => {
+                      const opponentNames = liveOpponentCursors.get(index) ?? []
+                      const hasOpponentCursor = opponentNames.length > 0
+                      return (
+                        <button
+                          type="button"
+                          key={labelCell(index, activeSize)}
+                          aria-label={`${labelCell(index, activeSize)} ${value || 'empty'}${
+                            hasOpponentCursor
+                              ? ` opponent ${opponentNames.join(', ')}`
+                              : ''
                           }`}
+                          onClick={(event) => {
+                            resumeTimerFromActivity()
+                            setSelected(index)
+                            event.currentTarget.blur()
+                          }}
+                          className={cellClassName(
+                            index,
+                            selected,
+                            grid,
+                            givens,
+                            visibleConflicts,
+                            hint,
+                            highlightDigit,
+                            visualCells,
+                            cellColors[index],
+                            activeConfig,
+                            hasOpponentCursor,
+                          )}
+                          style={
+                            cellColors[index] !== null
+                              ? ({
+                                  '--cell-user-color':
+                                    CELL_COLORS[cellColors[index] ?? 0],
+                                } as CSSProperties)
+                              : undefined
+                          }
                         >
-                          {cornerMarks[index].map((mark) => (
-                            <span key={mark}>{mark}</span>
-                          ))}
-                        </span>
-                      )}
-                      {value ? (
-                        <span className="text-[clamp(1.32rem,6.25vw,3.9rem)] leading-none sm:text-[clamp(1.55rem,7vw,3.9rem)]">
-                          {value}
-                        </span>
-                      ) : (
-                        <span
-                          className={`flex h-[70%] w-[72%] flex-wrap content-center items-center justify-center gap-x-[0.08em] gap-y-0 self-center justify-self-center font-mono text-[clamp(0.82rem,3.6vw,1.6rem)] font-medium leading-[0.92] sm:text-[clamp(1rem,2.6vw,1.9rem)] ${
-                            visualCells?.has(index) ||
-                            index === selected ||
-                            hintFocusCells(hint).includes(index)
-                              ? 'text-[var(--app-bg)]'
-                              : 'text-[var(--note)]'
-                          }`}
-                        >
-                          {notes[index].map((note, noteIndex) => (
+                          {hasOpponentCursor && (
+                            <span className="pointer-events-none absolute top-1 right-1 z-20 bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-1 font-mono text-[0.48rem] font-black uppercase leading-tight tracking-[0.08em] text-[var(--accent)]">
+                              {opponentCursorLabel(opponentNames)}
+                            </span>
+                          )}
+                          {!value && cornerMarks[index].length > 0 && (
                             <span
-                              key={note}
-                              className={
+                              className={`absolute left-[8%] top-[7%] flex gap-[0.18em] font-mono text-[clamp(0.46rem,1.25vw,0.82rem)] font-black leading-none ${
                                 visualCells?.has(index) ||
                                 index === selected ||
                                 hintFocusCells(hint).includes(index)
                                   ? 'text-[var(--app-bg)]'
-                                  : noteIndex % 2 === 0
-                                    ? 'text-[var(--accent)]'
-                                    : 'text-[var(--danger)]'
-                              }
+                                  : 'text-[var(--accent-2)]'
+                              }`}
                             >
-                              {note}
+                              {cornerMarks[index].map((mark) => (
+                                <span key={mark}>{mark}</span>
+                              ))}
                             </span>
-                          ))}
-                        </span>
-                      )}
+                          )}
+                          {value ? (
+                            <span className="text-[clamp(1.32rem,6.25vw,3.9rem)] leading-none sm:text-[clamp(1.55rem,7vw,3.9rem)]">
+                              {value}
+                            </span>
+                          ) : (
+                            <span
+                              className={`flex h-[70%] w-[72%] flex-wrap content-center items-center justify-center gap-x-[0.08em] gap-y-0 self-center justify-self-center font-mono text-[clamp(0.82rem,3.6vw,1.6rem)] font-medium leading-[0.92] sm:text-[clamp(1rem,2.6vw,1.9rem)] ${
+                                visualCells?.has(index) ||
+                                index === selected ||
+                                hintFocusCells(hint).includes(index)
+                                  ? 'text-[var(--app-bg)]'
+                                  : 'text-[var(--note)]'
+                              }`}
+                            >
+                              {notes[index].map((note, noteIndex) => (
+                                <span
+                                  key={note}
+                                  className={
+                                    visualCells?.has(index) ||
+                                    index === selected ||
+                                    hintFocusCells(hint).includes(index)
+                                      ? 'text-[var(--app-bg)]'
+                                      : noteIndex % 2 === 0
+                                        ? 'text-[var(--accent)]'
+                                        : 'text-[var(--danger)]'
+                                  }
+                                >
+                                  {note}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </section>
+                </div>
+                {timerPaused && (
+                  <div className="absolute inset-0 z-20 grid place-items-center bg-black/30 px-4">
+                    <button
+                      type="button"
+                      onClick={toggleTimerPaused}
+                      className="border border-[var(--accent)] bg-[var(--status-bg)] px-5 py-4 font-mono text-sm font-black uppercase tracking-[0.18em] text-[var(--accent)] shadow-[0_0_0_1px_var(--app-bg)] transition hover:bg-[var(--accent)] hover:text-[var(--app-bg)]"
+                    >
+                      {timerPauseReason === 'auto'
+                        ? 'auto-paused · resume'
+                        : 'timer paused · resume'}
                     </button>
-                  );
-                })}
-              </section>
-            </div>
-            {timerPaused && (
-              <div className="absolute inset-0 z-20 grid place-items-center bg-black/30 px-4">
-                <button
-                  type="button"
-                  onClick={toggleTimerPaused}
-                  className="border border-[var(--accent)] bg-[var(--status-bg)] px-5 py-4 font-mono text-sm font-black uppercase tracking-[0.18em] text-[var(--accent)] shadow-[0_0_0_1px_var(--app-bg)] transition hover:bg-[var(--accent)] hover:text-[var(--app-bg)]"
-                >
-                  {timerPauseReason === 'auto' ? 'auto-paused · resume' : 'timer paused · resume'}
-                </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <ToolModeBar
-            activeColor={activeColor}
-            colors={CELL_COLORS}
-            onColorChange={(index) => {
-              setActiveColor(index);
-              setToolMode('color');
-              applyColor(index);
-            }}
-            onColorClear={() => {
-              setToolMode('color');
-              applyColor(null);
-            }}
-            onModeChange={chooseToolMode}
-            toolMode={toolMode}
-          />
-
-          <NumberPad
-            activeColor={activeColor}
-            activeColorValue={CELL_COLORS[activeColor]}
-            digits={activeDigits}
-            notesEnabled={notesEnabled}
-            noteMode={noteMode || toolMode === 'center'}
-            onDigit={(digit) => {
-              resumeTimerFromActivity();
-              if (toolMode === 'color') applyColor((digit - 1) % CELL_COLORS.length);
-              else if (toolMode === 'corner') toggleCornerMark(digit);
-              else if ((noteMode || toolMode === 'center') && notesEnabled) toggleNote(digit);
-              else setCell(digit);
-            }}
-            onErase={() => {
-              resumeTimerFromActivity();
-              if (toolMode === 'color') applyColor(null);
-              else if (toolMode === 'corner') clearCornerMarksAcrossSelection();
-              else if ((noteMode || toolMode === 'center') && notesEnabled) clearNotesAcrossBlock();
-              else setCell(0);
-            }}
-            onToggleNotes={() => {
-              resumeTimerFromActivity();
-              if (notesEnabled) {
-                setNoteMode((current) => {
-                  const next = !current;
-                  setToolMode(next ? 'center' : 'digit');
-                  return next;
-                });
-              }
-            }}
-            toolMode={toolMode}
-          />
-
-          <StatusLine
-            cellLabel={labelCell(selected, activeSize)}
-            challengeMistakes={
-              activeChallengeKind === 'streak' ? challengeMistakes : undefined
-            }
-            compact={compactStatus}
-            completion={completion}
-            cellCount={activeCellCount}
-            elapsedMs={elapsedMs}
-            message={statusLine}
-            mode={editorMode}
-            noteMode={noteMode}
-            onToggleNotes={() => {
-              resumeTimerFromActivity();
-              setNoteMode((current) => {
-                const next = !current;
-                setToolMode(next ? 'center' : 'digit');
-                return next;
-              });
-            }}
-            onToggleTimer={toggleTimerPaused}
-            timerEnabled={timerEnabled}
-            timerPaused={timerPaused}
-          />
-
-        </section>
-
-        <aside
-          aria-hidden={!sidebarOpen}
-          className={`column-rise order-1 hidden min-h-0 overflow-hidden border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 lg:block ${
-            sidebarOpen ? 'opacity-100' : 'lg:pointer-events-none lg:opacity-0'
-          }`}
-        >
-          <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto p-3 lg:w-[340px]">
-          <input
-            ref={fileInputRef}
-            className="hidden"
-            type="file"
-            accept="image/*"
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              if (file) void importImage(file);
-              event.currentTarget.value = '';
-            }}
-          />
-          <Panel title="session">
-            <dl className="space-y-1 font-mono text-xs">
-              <div className="flex items-center justify-between">
-                <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
-                  grid
-                </dt>
-                <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                  {activeSize}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
-                  rules
-                </dt>
-                <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
-                  {modeLabel(activeMode)}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
-                  conflicts
-                </dt>
-                <dd
-                  className={`font-bold uppercase tracking-[0.12em] ${
-                    visibleConflicts.size > 0 && activeMode !== 'no-check'
-                      ? 'text-[var(--danger)]'
-                      : 'text-[var(--app-text)]'
-                  }`}
-                >
-                  {activeMode === 'no-check' ? 'hidden' : visibleConflicts.size}
-                </dd>
-              </div>
-            </dl>
-          </Panel>
-          {activeLiveBattleId && (
-            <Panel title="live battle">
-              <LiveBattlePresencePanel
-                cellCount={activeCellCount}
-                currentAnonId={guestId}
-                puzzleSize={activeSize}
-                room={liveBattleRoom}
+              <ToolModeBar
+                activeColor={activeColor}
+                colors={CELL_COLORS}
+                onColorChange={(index) => {
+                  setActiveColor(index)
+                  setToolMode('color')
+                  applyColor(index)
+                }}
+                onColorClear={() => {
+                  setToolMode('color')
+                  applyColor(null)
+                }}
+                onModeChange={chooseToolMode}
+                toolMode={toolMode}
               />
-            </Panel>
-          )}
-          <Panel title="timer">
-            <div className="space-y-3 font-mono">
-              <div className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
-                <span className="text-[0.65rem] font-black uppercase tracking-[0.18em] text-[var(--muted)]">
-                  clock
-                </span>
-                <span className="text-sm font-black uppercase tracking-[0.12em] text-[var(--accent)]">
-                  {timerEnabled ? formatDuration(elapsedMs) : 'zen'}
-                </span>
-              </div>
-              <button
-                type="button"
-                disabled={!timerEnabled || !pauseEnabled || isSolved}
-                onClick={toggleTimerPaused}
-                className={`flex w-full items-center justify-center gap-2 border px-3 py-2.5 text-xs font-black uppercase tracking-[0.16em] transition active:translate-y-px ${
-                  !timerEnabled || !pauseEnabled || isSolved
-                    ? 'cursor-not-allowed border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] opacity-50'
-                    : timerPaused
-                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
-                }`}
-              >
-                {timerPaused ? <Play size={14} /> : <Pause size={14} />}
-                {timerPaused ? 'resume' : 'pause'}
-              </button>
-              <p className="text-xs leading-relaxed text-[var(--muted)]">
-                Pausing hides the grid until play resumes.
-              </p>
-            </div>
-          </Panel>
-          <Panel
-            collapsed={!toolsPanelOpen}
-            onToggle={() => setToolsPanelOpen((current) => !current)}
-            title="tools"
-          >
-            <ToolModeBar
-              activeColor={activeColor}
-              colors={CELL_COLORS}
-              layout="panel"
-              onColorChange={(index) => {
-                setActiveColor(index);
-                setToolMode('color');
-                applyColor(index);
-              }}
-              onColorClear={() => {
-                setToolMode('color');
-                applyColor(null);
-              }}
-              onModeChange={chooseToolMode}
-              toolMode={toolMode}
-            />
-          </Panel>
-          </div>
-        </aside>
 
-        <aside
-          aria-hidden={!hintRailOpen}
-          className={`column-rise order-3 border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:max-h-[80vh] max-lg:border-t lg:min-h-0 lg:overflow-hidden lg:border-l ${
-            hintRailOpen
-              ? 'opacity-100'
-              : 'pointer-events-none opacity-0 max-lg:hidden'
-          }`}
-          style={{ animationDelay: '160ms' }}
-        >
-          <div className="h-full w-full lg:w-[360px]">
-            <HintRail
-              applyHint={applyHint}
-              askForHint={askForHint}
-              clearHints={clearHintState}
-              conflicts={visibleConflicts.size}
-              hint={hint}
-              hintMode={hintMode}
-              onClose={() => setHintRailOpen(false)}
-            />
+              <NumberPad
+                activeColor={activeColor}
+                activeColorValue={CELL_COLORS[activeColor]}
+                digits={activeDigits}
+                notesEnabled={notesEnabled}
+                noteMode={noteMode || toolMode === 'center'}
+                onDigit={(digit) => {
+                  resumeTimerFromActivity()
+                  if (toolMode === 'color')
+                    applyColor((digit - 1) % CELL_COLORS.length)
+                  else if (toolMode === 'corner') toggleCornerMark(digit)
+                  else if ((noteMode || toolMode === 'center') && notesEnabled)
+                    toggleNote(digit)
+                  else setCell(digit)
+                }}
+                onErase={() => {
+                  resumeTimerFromActivity()
+                  if (toolMode === 'color') applyColor(null)
+                  else if (toolMode === 'corner')
+                    clearCornerMarksAcrossSelection()
+                  else if ((noteMode || toolMode === 'center') && notesEnabled)
+                    clearNotesAcrossBlock()
+                  else setCell(0)
+                }}
+                onToggleNotes={() => {
+                  resumeTimerFromActivity()
+                  if (notesEnabled) {
+                    setNoteMode((current) => {
+                      const next = !current
+                      setToolMode(next ? 'center' : 'digit')
+                      return next
+                    })
+                  }
+                }}
+                toolMode={toolMode}
+              />
+
+              <StatusLine
+                cellLabel={labelCell(selected, activeSize)}
+                challengeMistakes={
+                  activeChallengeKind === 'streak'
+                    ? challengeMistakes
+                    : undefined
+                }
+                compact={compactStatus}
+                completion={completion}
+                cellCount={activeCellCount}
+                elapsedMs={elapsedMs}
+                message={statusLine}
+                mode={editorMode}
+                noteMode={noteMode}
+                onToggleNotes={() => {
+                  resumeTimerFromActivity()
+                  setNoteMode((current) => {
+                    const next = !current
+                    setToolMode(next ? 'center' : 'digit')
+                    return next
+                  })
+                }}
+                onToggleTimer={toggleTimerPaused}
+                timerEnabled={timerEnabled}
+                timerPaused={timerPaused}
+              />
+            </section>
+
+            <aside
+              aria-hidden={!sidebarOpen}
+              className={`column-rise order-1 hidden min-h-0 overflow-hidden border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 lg:block ${
+                sidebarOpen
+                  ? 'opacity-100'
+                  : 'lg:pointer-events-none lg:opacity-0'
+              }`}
+            >
+              <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto p-3 lg:w-[340px]">
+                <input
+                  ref={fileInputRef}
+                  className="hidden"
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0]
+                    if (file) void importImage(file)
+                    event.currentTarget.value = ''
+                  }}
+                />
+                <Panel title="session">
+                  <dl className="space-y-1 font-mono text-xs">
+                    <div className="flex items-center justify-between">
+                      <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                        grid
+                      </dt>
+                      <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                        {activeSize}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                        rules
+                      </dt>
+                      <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                        {modeLabel(activeMode)}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                        conflicts
+                      </dt>
+                      <dd
+                        className={`font-bold uppercase tracking-[0.12em] ${
+                          visibleConflicts.size > 0 && activeMode !== 'no-check'
+                            ? 'text-[var(--danger)]'
+                            : 'text-[var(--app-text)]'
+                        }`}
+                      >
+                        {activeMode === 'no-check'
+                          ? 'hidden'
+                          : visibleConflicts.size}
+                      </dd>
+                    </div>
+                  </dl>
+                </Panel>
+                {activeLiveBattleId && (
+                  <Panel title="live battle">
+                    <LiveBattlePresencePanel
+                      cellCount={activeCellCount}
+                      currentAnonId={guestId}
+                      puzzleSize={activeSize}
+                      room={liveBattleRoom}
+                    />
+                  </Panel>
+                )}
+                <Panel title="timer">
+                  <div className="space-y-3 font-mono">
+                    <div className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+                      <span className="text-[0.65rem] font-black uppercase tracking-[0.18em] text-[var(--muted)]">
+                        clock
+                      </span>
+                      <span className="text-sm font-black uppercase tracking-[0.12em] text-[var(--accent)]">
+                        {timerEnabled ? formatDuration(elapsedMs) : 'zen'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!timerEnabled || !pauseEnabled || isSolved}
+                      onClick={toggleTimerPaused}
+                      className={`flex w-full items-center justify-center gap-2 border px-3 py-2.5 text-xs font-black uppercase tracking-[0.16em] transition active:translate-y-px ${
+                        !timerEnabled || !pauseEnabled || isSolved
+                          ? 'cursor-not-allowed border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] opacity-50'
+                          : timerPaused
+                            ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                            : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
+                      }`}
+                    >
+                      {timerPaused ? <Play size={14} /> : <Pause size={14} />}
+                      {timerPaused ? 'resume' : 'pause'}
+                    </button>
+                    <p className="text-xs leading-relaxed text-[var(--muted)]">
+                      Pausing hides the grid until play resumes.
+                    </p>
+                  </div>
+                </Panel>
+                <Panel
+                  collapsed={!toolsPanelOpen}
+                  onToggle={() => setToolsPanelOpen((current) => !current)}
+                  title="tools"
+                >
+                  <ToolModeBar
+                    activeColor={activeColor}
+                    colors={CELL_COLORS}
+                    layout="panel"
+                    onColorChange={(index) => {
+                      setActiveColor(index)
+                      setToolMode('color')
+                      applyColor(index)
+                    }}
+                    onColorClear={() => {
+                      setToolMode('color')
+                      applyColor(null)
+                    }}
+                    onModeChange={chooseToolMode}
+                    toolMode={toolMode}
+                  />
+                </Panel>
+              </div>
+            </aside>
+
+            <aside
+              aria-hidden={!hintRailOpen}
+              className={`column-rise order-3 border-[var(--border)] bg-[var(--sidebar-bg)] transition-opacity duration-200 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:max-h-[80vh] max-lg:border-t lg:min-h-0 lg:overflow-hidden lg:border-l ${
+                hintRailOpen
+                  ? 'opacity-100'
+                  : 'pointer-events-none opacity-0 max-lg:hidden'
+              }`}
+              style={{ animationDelay: '160ms' }}
+            >
+              <div className="h-full w-full lg:w-[360px]">
+                <HintRail
+                  applyHint={applyHint}
+                  askForHint={askForHint}
+                  clearHints={clearHintState}
+                  conflicts={visibleConflicts.size}
+                  hint={hint}
+                  hintMode={hintMode}
+                  onClose={() => setHintRailOpen(false)}
+                />
+              </div>
+            </aside>
           </div>
-        </aside>
-        </div>
         </section>
       )}
 
@@ -4274,8 +4780,8 @@ function App() {
                   type="button"
                   className="border border-[var(--border)] px-4 py-3 text-xs font-bold uppercase tracking-[0.16em]"
                   onClick={() => {
-                    setReview(null);
-                    setImageUrl(null);
+                    setReview(null)
+                    setImageUrl(null)
                   }}
                 >
                   Cancel
@@ -4299,7 +4805,9 @@ function App() {
                     {leaderKey}
                   </span>
                   <span className="text-[var(--border)]">→</span>
-                  <span className="truncate text-[var(--app-text)]">{leaderLabel}</span>
+                  <span className="truncate text-[var(--app-text)]">
+                    {leaderLabel}
+                  </span>
                 </div>
               ))}
             </div>
@@ -4313,23 +4821,25 @@ function App() {
           role="presentation"
           className="fixed inset-0 z-30 flex justify-center bg-black/70 px-4 pt-[16vh]"
           onMouseDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            setCommandMode(null);
-            setCommandValue('');
-            setStatusLine('Command cancelled.');
+            if (event.target !== event.currentTarget) return
+            setCommandMode(null)
+            setCommandValue('')
+            setStatusLine('Command cancelled.')
           }}
         >
           <form
             className="relative h-fit w-full max-w-xl border border-[var(--border)] bg-[var(--panel-bg)] font-mono"
             onSubmit={(event) => {
-              event.preventDefault();
+              event.preventDefault()
               if (commandMode === 'search') {
-                const digit = Number(commandValue.slice(0, 1));
-                if (digit >= 1 && digit <= activeConfig.size) jumpToDigit(digit);
-                setCommandMode(null);
-                setCommandValue('');
+                const digit = Number(commandValue.slice(0, 1))
+                if (digit >= 1 && digit <= activeConfig.size) jumpToDigit(digit)
+                setCommandMode(null)
+                setCommandValue('')
               } else {
-                executeCommand(selectedCommandSuggestion?.command ?? commandValue);
+                executeCommand(
+                  selectedCommandSuggestion?.command ?? commandValue,
+                )
               }
             }}
           >
@@ -4350,51 +4860,57 @@ function App() {
                 }
                 value={commandValue}
                 onChange={(event) => {
-                  setCommandValue(event.target.value);
-                  setCommandCursor(0);
+                  setCommandValue(event.target.value)
+                  setCommandCursor(0)
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') {
-                    event.preventDefault();
-                    setCommandMode(null);
-                    setCommandValue('');
-                    setStatusLine('Command cancelled.');
+                    event.preventDefault()
+                    setCommandMode(null)
+                    setCommandValue('')
+                    setStatusLine('Command cancelled.')
                   }
 
                   if (event.key === 'Enter') {
-                    event.preventDefault();
+                    event.preventDefault()
                     if (commandMode === 'search') {
-                      const digit = Number(commandValue.slice(0, 1));
-                      if (digit >= 1 && digit <= activeConfig.size) jumpToDigit(digit);
-                      setCommandMode(null);
-                      setCommandValue('');
+                      const digit = Number(commandValue.slice(0, 1))
+                      if (digit >= 1 && digit <= activeConfig.size)
+                        jumpToDigit(digit)
+                      setCommandMode(null)
+                      setCommandValue('')
                     } else {
-                      executeCommand(selectedCommandSuggestion?.command ?? commandValue);
+                      executeCommand(
+                        selectedCommandSuggestion?.command ?? commandValue,
+                      )
                     }
-                    return;
+                    return
                   }
 
                   if (commandMode === 'command' && event.key === 'ArrowDown') {
-                    event.preventDefault();
+                    event.preventDefault()
                     setCommandCursor((current) =>
-                      Math.min(current + 1, Math.max(0, commandSuggestions.length - 1)),
-                    );
-                    return;
+                      Math.min(
+                        current + 1,
+                        Math.max(0, commandSuggestions.length - 1),
+                      ),
+                    )
+                    return
                   }
 
                   if (commandMode === 'command' && event.key === 'ArrowUp') {
-                    event.preventDefault();
-                    setCommandCursor((current) => Math.max(0, current - 1));
-                    return;
+                    event.preventDefault()
+                    setCommandCursor((current) => Math.max(0, current - 1))
+                    return
                   }
 
                   if (commandMode === 'search') {
-                    const digit = Number(event.key);
+                    const digit = Number(event.key)
                     if (digit >= 1 && digit <= activeConfig.size) {
-                      event.preventDefault();
-                      jumpToDigit(digit);
-                      setCommandMode(null);
-                      setCommandValue('');
+                      event.preventDefault()
+                      jumpToDigit(digit)
+                      setCommandMode(null)
+                      setCommandValue('')
                     }
                   }
                 }}
@@ -4418,7 +4934,8 @@ function App() {
                     </span>
                     <span
                       className={`truncate ${
-                        selectedCommandSuggestion?.command === suggestion.command
+                        selectedCommandSuggestion?.command ===
+                        suggestion.command
                           ? 'text-[var(--app-bg)]'
                           : 'text-[var(--muted)]'
                       }`}
@@ -4439,9 +4956,9 @@ function App() {
           role="presentation"
           className="fixed inset-0 z-30 flex justify-center bg-black/70 px-4 pt-[10vh]"
           onMouseDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            closeGamePicker();
-            setStatusLine('Closed puzzle picker.');
+            if (event.target !== event.currentTarget) return
+            closeGamePicker()
+            setStatusLine('Closed puzzle picker.')
           }}
         >
           <section className="h-fit w-full max-w-5xl border border-[var(--border)] bg-[var(--panel-bg)] font-mono shadow-2xl shadow-black/40">
@@ -4460,8 +4977,8 @@ function App() {
                 onCursorChange={setGameCursor}
                 onDelete={deleteGame}
                 onQueryChange={(value) => {
-                  setGameQuery(value);
-                  setGameCursor(0);
+                  setGameQuery(value)
+                  setGameCursor(0)
                 }}
                 onResume={resumeGame}
                 query={gameQuery}
@@ -4477,7 +4994,7 @@ function App() {
         <TuiModal
           footer="esc closes · create copies the link"
           onClose={() => setChallengeSetupOpen(false)}
-          title="new-challenge"
+          title={`new-${challengeSetupLabel(challengeKind).replace(/\s+/g, '-')}`}
           wide
         >
           <ChallengeSetupPanel
@@ -4485,19 +5002,38 @@ function App() {
             difficulty={challengeDifficulty}
             kind={challengeKind}
             mode={challengeMode}
-            onCreate={createConfiguredRaceChallenge}
-            onCreateCurrent={() => createRaceChallenge()}
+            onCreate={createConfiguredChallenge}
+            onCreateCurrent={() => {
+              if (isLiveChallengeSetup(challengeKind)) {
+                createLiveBattleRoom(liveBattleKindFromSetup(challengeKind))
+                return
+              }
+              createRaceChallenge({
+                challengeKind: asyncChallengeKindFromSetup(challengeKind),
+                difficulty: activeGame.difficulty,
+                playMode: activeMode,
+                puzzle: activeGame.puzzle,
+                puzzleSize: activeSize,
+                source: activeGame.source,
+                variantId,
+              })
+            }}
             onDifficultyChange={setChallengeDifficulty}
-            onKindChange={setChallengeKind}
             onModeChange={setChallengeMode}
             onRecipientChange={setChallengeRecipient}
             onRecipientClear={() => setChallengeRecipient(null)}
             onSizeChange={setChallengeSize}
             onSourceChange={setChallengeSource}
+            onTurnLivesChange={setChallengeTurnLives}
+            onTurnSecondsChange={setChallengeTurnSeconds}
+            onVariantChange={setChallengeVariant}
             puzzleSize={challengeSize}
             recipient={challengeRecipient}
             source={challengeSource}
             status={challengeStatus}
+            turnLives={challengeTurnLives}
+            turnSeconds={challengeTurnSeconds}
+            variant={challengeVariant}
           />
         </TuiModal>
       )}
@@ -4514,8 +5050,8 @@ function App() {
               <MenuItem
                 label="home"
                 onClick={() => {
-                  closeMenuModal();
-                  goToDashboard();
+                  closeMenuModal()
+                  goToDashboard()
                 }}
               >
                 <Home size={15} />
@@ -4523,8 +5059,8 @@ function App() {
               <MenuItem
                 label="new game"
                 onClick={() => {
-                  if (activePage !== 'play') closeMenuModal();
-                  openNewGame();
+                  if (activePage !== 'play') closeMenuModal()
+                  openNewGame()
                 }}
               >
                 <Plus size={15} />
@@ -4532,8 +5068,8 @@ function App() {
               <MenuItem
                 label="puzzle library"
                 onClick={() => {
-                  closeMenuModal();
-                  openGameLibrary();
+                  closeMenuModal()
+                  openGameLibrary()
                 }}
               >
                 <History size={15} />
@@ -4541,8 +5077,8 @@ function App() {
               <MenuItem
                 label="leaderboards"
                 onClick={() => {
-                  closeMenuModal();
-                  openLeaderboards();
+                  closeMenuModal()
+                  openLeaderboards()
                 }}
               >
                 <Trophy size={15} />
@@ -4550,8 +5086,8 @@ function App() {
               <MenuItem
                 label="challenges"
                 onClick={() => {
-                  closeMenuModal();
-                  void navigate({ to: '/challenge' });
+                  closeMenuModal()
+                  void navigate({ to: '/challenge' })
                 }}
               >
                 <Swords size={15} />
@@ -4559,8 +5095,8 @@ function App() {
               <MenuItem
                 label="profile"
                 onClick={() => {
-                  closeMenuModal();
-                  goToProfile();
+                  closeMenuModal()
+                  goToProfile()
                 }}
               >
                 <UserRound size={15} />
@@ -4580,7 +5116,10 @@ function App() {
               >
                 <Palette size={15} />
               </MenuItem>
-              <MenuItem label="settings" onClick={() => openModalRoute('settings')}>
+              <MenuItem
+                label="settings"
+                onClick={() => openModalRoute('settings')}
+              >
                 <Settings size={15} />
               </MenuItem>
               <MenuItem
@@ -4601,16 +5140,16 @@ function App() {
                 newGameSize,
                 newGameMode,
               )}
-            dateKey={dailyDateKey}
-            difficulty={newGameDifficulty}
-            isFetchingPuzzle={isFetchingPuzzle}
-            mode={newGameMode}
-            variant={newGameVariant}
-            onDateChange={setDailyDateKey}
-            onDifficultyChange={setNewGameDifficulty}
-            onModeChange={setNewGameMode}
-            onVariantChange={setNewGameVariant}
-            onSizeChange={setNewGameSize}
+              dateKey={dailyDateKey}
+              difficulty={newGameDifficulty}
+              isFetchingPuzzle={isFetchingPuzzle}
+              mode={newGameMode}
+              variant={newGameVariant}
+              onDateChange={setDailyDateKey}
+              onDifficultyChange={setNewGameDifficulty}
+              onModeChange={setNewGameMode}
+              onVariantChange={setNewGameVariant}
+              onSizeChange={setNewGameSize}
               onImage={() => fileInputRef.current?.click()}
               onLoadPasted={startPastedPuzzle}
               onLocal={() =>
@@ -4626,20 +5165,30 @@ function App() {
               onMountainDaily={() => void fetchSudokuMountainPuzzle(true)}
               onPuzzleTextChange={setNewPuzzleText}
               onOpenDaily={(selectedDateKey) => {
-                openDailyPuzzle(newGameDifficulty, selectedDateKey, newGameSize, newGameMode);
-                closeMenuModal();
-                setNewGameStatus('');
+                openDailyPuzzle(
+                  newGameDifficulty,
+                  selectedDateKey,
+                  newGameSize,
+                  newGameMode,
+                )
+                closeMenuModal()
+                setNewGameStatus('')
               }}
               onToday={() => setDailyDateKey(todayDateKey())}
               onYesterday={() => {
-                setDailyDateKey(offsetDateKey(-1));
-                openDailyPuzzle(newGameDifficulty, offsetDateKey(-1), newGameSize, newGameMode);
-                closeMenuModal();
-                setNewGameStatus('');
+                setDailyDateKey(offsetDateKey(-1))
+                openDailyPuzzle(
+                  newGameDifficulty,
+                  offsetDateKey(-1),
+                  newGameSize,
+                  newGameMode,
+                )
+                closeMenuModal()
+                setNewGameStatus('')
               }}
-            puzzleText={newPuzzleText}
-            puzzleSize={newGameSize}
-            status={newGameStatus}
+              puzzleText={newPuzzleText}
+              puzzleSize={newGameSize}
+              status={newGameStatus}
             />
           )}
 
@@ -4715,13 +5264,13 @@ function App() {
                     colors={CELL_COLORS}
                     layout="panel"
                     onColorChange={(index) => {
-                      setActiveColor(index);
-                      setToolMode('color');
-                      applyColor(index);
+                      setActiveColor(index)
+                      setToolMode('color')
+                      applyColor(index)
                     }}
                     onColorClear={() => {
-                      setToolMode('color');
-                      applyColor(null);
+                      setToolMode('color')
+                      applyColor(null)
                     }}
                     onModeChange={chooseToolMode}
                     toolMode={toolMode}
@@ -4738,9 +5287,24 @@ function App() {
                   ['copy state link', ':share-state', copyStateLink, false],
                   ['undo', 'u', undo, !history.length],
                   ['redo', 'C-r', redo, !future.length],
-                  ['clear centre notes', ':clear-notes', clearNotesAcrossBlock, false],
-                  ['clear corners', 'x in corners', clearCornerMarksAcrossSelection, false],
-                  ['clear colour', ':color clear', () => applyColor(null), false],
+                  [
+                    'clear centre notes',
+                    ':clear-notes',
+                    clearNotesAcrossBlock,
+                    false,
+                  ],
+                  [
+                    'clear corners',
+                    'x in corners',
+                    clearCornerMarksAcrossSelection,
+                    false,
+                  ],
+                  [
+                    'clear colour',
+                    ':color clear',
+                    () => applyColor(null),
+                    false,
+                  ],
                   [
                     timerPaused ? 'resume timer' : 'pause timer',
                     'Shift+p',
@@ -4755,7 +5319,7 @@ function App() {
                     key={String(label)}
                     disabled={Boolean(disabled)}
                     onClick={() => {
-                      (action as () => void)();
+                      ;(action as () => void)()
                     }}
                     className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--button-bg)] px-3 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-[var(--app-text)] transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
                   >
@@ -4780,8 +5344,13 @@ function App() {
                     ['a', 'Corners'],
                     ['c', 'Colour'],
                   ].map(([key, label]) => (
-                    <p key={key} className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
-                      <span className="mr-2 font-black text-[var(--accent)]">{key}</span>
+                    <p
+                      key={key}
+                      className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2"
+                    >
+                      <span className="mr-2 font-black text-[var(--accent)]">
+                        {key}
+                      </span>
                       {label}
                     </p>
                   ))}
@@ -4871,31 +5440,30 @@ function App() {
           onNameChange={updatePlayerName}
           onNameConfirm={() => {
             if (!isCustomPlayerName(playerName)) {
-              setLeaderboardStatus('Choose a leaderboard handle first.');
-              return;
+              setLeaderboardStatus('Choose a leaderboard handle first.')
+              return
             }
-            setSolvedNamePromptGameId(null);
+            setSolvedNamePromptGameId(null)
           }}
           source={activeGame.source}
           playerName={playerName}
           onLeaderboards={() => {
-            setSolvedDismissed(true);
-            navigateToPage('leaderboards');
+            setSolvedDismissed(true)
+            navigateToPage('leaderboards')
           }}
           onNewGame={() => {
-            setSolvedDismissed(true);
-            openNewGame();
+            setSolvedDismissed(true)
+            openNewGame()
           }}
           onPuzzleLog={() => {
-            setSolvedDismissed(true);
-            navigateToPage('games');
+            setSolvedDismissed(true)
+            navigateToPage('games')
           }}
           onReview={() => setSolvedDismissed(true)}
         />
       )}
-
     </main>
-  );
+  )
 }
 
 // Touch number entry — mobile/tablet only; desktop uses the keyboard.
@@ -4910,21 +5478,24 @@ function NumberPad({
   onToggleNotes,
   toolMode,
 }: {
-  activeColor: number;
-  activeColorValue: string;
-  digits: number[];
-  notesEnabled: boolean;
-  noteMode: boolean;
-  onDigit: (digit: number) => void;
-  onErase: () => void;
-  onToggleNotes: () => void;
-  toolMode: ToolMode;
+  activeColor: number
+  activeColorValue: string
+  digits: number[]
+  notesEnabled: boolean
+  noteMode: boolean
+  onDigit: (digit: number) => void
+  onErase: () => void
+  onToggleNotes: () => void
+  toolMode: ToolMode
 }) {
   return (
     <div className="shrink-0 border-t border-[var(--border)] bg-[var(--status-bg)] p-2 lg:hidden">
       <div className="mb-2 flex items-center justify-between gap-2 border border-[var(--border)] bg-[var(--input-bg)] px-2 py-1.5 font-mono text-[0.64rem] uppercase tracking-[0.14em] text-[var(--muted)]">
         <span>
-          mode <span className="text-[var(--accent)]">{toolModeLabel(toolMode)}</span>
+          mode{' '}
+          <span className="text-[var(--accent)]">
+            {toolModeLabel(toolMode)}
+          </span>
         </span>
         <span className="flex items-center gap-1.5">
           colour {activeColor + 1}
@@ -4936,7 +5507,9 @@ function NumberPad({
       </div>
       <div
         className="grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${digits.length}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `repeat(${digits.length}, minmax(0, 1fr))`,
+        }}
       >
         {digits.map((digit) => (
           <button
@@ -4958,8 +5531,8 @@ function NumberPad({
             !notesEnabled
               ? 'cursor-not-allowed border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] opacity-50'
               : noteMode
-              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-              : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)]'
+                ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
+                : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)]'
           }`}
         >
           centre {noteMode ? 'on' : 'off'}
@@ -4973,7 +5546,7 @@ function NumberPad({
         </button>
       </div>
     </div>
-  );
+  )
 }
 
 function RulesPanel({
@@ -4983,11 +5556,11 @@ function RulesPanel({
   source,
   variantId,
 }: {
-  onCopyLink: () => void;
-  onVariantChange: (variantId: VariantId) => void;
-  puzzleSize: PuzzleSize;
-  source: string;
-  variantId: VariantId;
+  onCopyLink: () => void
+  onVariantChange: (variantId: VariantId) => void
+  puzzleSize: PuzzleSize
+  source: string
+  variantId: VariantId
 }) {
   return (
     <div className="space-y-4 font-mono">
@@ -5042,7 +5615,9 @@ function RulesPanel({
             [':check', 'conflict check'],
           ].map(([key, label]) => (
             <p key={key} className="flex gap-2">
-              <span className="w-16 shrink-0 font-black text-[var(--accent)]">{key}</span>
+              <span className="w-16 shrink-0 font-black text-[var(--accent)]">
+                {key}
+              </span>
               <span>{label}</span>
             </p>
           ))}
@@ -5056,7 +5631,7 @@ function RulesPanel({
         copy puzzle link
       </button>
     </div>
-  );
+  )
 }
 
 function ToolModeBar({
@@ -5068,20 +5643,20 @@ function ToolModeBar({
   onModeChange,
   toolMode,
 }: {
-  activeColor: number;
-  colors: readonly string[];
-  layout?: 'bar' | 'panel';
-  onColorChange: (index: number) => void;
-  onColorClear: () => void;
-  onModeChange: (mode: ToolMode) => void;
-  toolMode: ToolMode;
+  activeColor: number
+  colors: readonly string[]
+  layout?: 'bar' | 'panel'
+  onColorChange: (index: number) => void
+  onColorClear: () => void
+  onModeChange: (mode: ToolMode) => void
+  toolMode: ToolMode
 }) {
   const modes: [ToolMode, string, string][] = [
     ['digit', 'z', 'digit'],
     ['center', 'm', 'centre'],
     ['corner', 'a', 'corners'],
     ['color', 'c', 'colour'],
-  ];
+  ]
 
   const modeButton = (mode: ToolMode, key: string, label: string) => (
     <button
@@ -5096,7 +5671,7 @@ function ToolModeBar({
     >
       <span className="text-[0.58rem] opacity-70">{key}</span> {label}
     </button>
-  );
+  )
 
   const colorButton = (color: string, index: number) => (
     <button
@@ -5111,7 +5686,7 @@ function ToolModeBar({
       }`}
       style={{ backgroundColor: color }}
     />
-  );
+  )
 
   const clearButton = (
     <button
@@ -5123,7 +5698,7 @@ function ToolModeBar({
     >
       <Eraser className="h-3.5 w-3.5" aria-hidden="true" />
     </button>
-  );
+  )
 
   if (layout === 'panel') {
     return (
@@ -5139,11 +5714,11 @@ function ToolModeBar({
           {clearButton}
         </div>
         <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
-          Use the eraser swatch or press x in colour mode to remove colour from the selected cell.
-          Backspace clears the cell completely.
+          Use the eraser swatch or press x in colour mode to remove colour from
+          the selected cell. Backspace clears the cell completely.
         </p>
       </div>
-    );
+    )
   }
 
   return (
@@ -5162,7 +5737,7 @@ function ToolModeBar({
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function SolvedModal({
@@ -5183,58 +5758,58 @@ function SolvedModal({
   playerName,
   source,
 }: {
-  completion: number;
-  difficulty?: PuzzleDifficulty | 'custom';
-  elapsedMs: number;
-  hintUses: number;
-  mistakes: number;
-  needsName: boolean;
-  pauseCount: number;
-  solveEvents: SolveEvent[];
-  onLeaderboards: () => void;
-  onNewGame: () => void;
-  onNameChange: (value: string) => void;
-  onNameConfirm: () => void;
-  onPuzzleLog: () => void;
-  onReview: () => void;
-  playerName: string;
-  source: string;
+  completion: number
+  difficulty?: PuzzleDifficulty | 'custom'
+  elapsedMs: number
+  hintUses: number
+  mistakes: number
+  needsName: boolean
+  pauseCount: number
+  solveEvents: SolveEvent[]
+  onLeaderboards: () => void
+  onNewGame: () => void
+  onNameChange: (value: string) => void
+  onNameConfirm: () => void
+  onPuzzleLog: () => void
+  onReview: () => void
+  playerName: string
+  source: string
 }) {
   const actions: [key: string, label: string, run: () => void][] = [
     ['click', 'new game', onNewGame],
     ['click', 'puzzle log', onPuzzleLog],
     ['click', 'leaderboards', onLeaderboards],
     ['esc', 'review board', onReview],
-  ];
+  ]
   const playerNameValue =
-    needsName && !isCustomPlayerName(playerName) ? '' : playerName;
-  const reviewStats = solveReviewStats(solveEvents);
+    needsName && !isCustomPlayerName(playerName) ? '' : playerName
+  const reviewStats = solveReviewStats(solveEvents)
   const [eventCursor, setEventCursor] = useState(
     Math.max(0, solveEvents.length - 1),
-  );
-  const selectedEvent = solveEvents[eventCursor] ?? null;
+  )
+  const selectedEvent = solveEvents[eventCursor] ?? null
 
   useEffect(() => {
-    setEventCursor(Math.max(0, solveEvents.length - 1));
-  }, [solveEvents.length]);
+    setEventCursor(Math.max(0, solveEvents.length - 1))
+  }, [solveEvents.length])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
-      if (!['j', 'k', 'ArrowDown', 'ArrowUp'].includes(event.key)) return;
-      event.preventDefault();
+      if (isTypingTarget(event.target)) return
+      if (!['j', 'k', 'ArrowDown', 'ArrowUp'].includes(event.key)) return
+      event.preventDefault()
       setEventCursor((current) => {
-        if (solveEvents.length === 0) return 0;
+        if (solveEvents.length === 0) return 0
         if (event.key === 'j' || event.key === 'ArrowDown') {
-          return Math.min(solveEvents.length - 1, current + 1);
+          return Math.min(solveEvents.length - 1, current + 1)
         }
-        return Math.max(0, current - 1);
-      });
+        return Math.max(0, current - 1)
+      })
     }
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [solveEvents.length]);
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [solveEvents.length])
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop returns to review when clicking outside the solved dialog.
@@ -5242,7 +5817,7 @@ function SolvedModal({
       role="presentation"
       className="fixed inset-0 z-40 grid place-items-center bg-black/80 p-4 font-mono"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onReview();
+        if (event.target === event.currentTarget) onReview()
       }}
     >
       <section className="w-full max-w-4xl border border-[var(--accent)] bg-[var(--panel-bg)]">
@@ -5279,10 +5854,10 @@ function SolvedModal({
                 value={playerNameValue}
                 onChange={(event) => onNameChange(event.target.value)}
                 onKeyDown={(event) => {
-                  event.stopPropagation();
+                  event.stopPropagation()
                   if (event.key === 'Enter') {
-                    event.preventDefault();
-                    onNameConfirm();
+                    event.preventDefault()
+                    onNameConfirm()
                   }
                 }}
               />
@@ -5302,14 +5877,17 @@ function SolvedModal({
               solve review
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <SolvedMetric label="entries" value={String(reviewStats.entries)} />
+              <SolvedMetric
+                label="entries"
+                value={String(reviewStats.entries)}
+              />
               <SolvedMetric label="notes" value={String(reviewStats.notes)} />
               <SolvedMetric label="clears" value={String(reviewStats.clears)} />
               <SolvedMetric label="first" value={reviewStats.firstEntry} />
             </div>
             <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)]">
-              j/k steps through the replay buffer. It tracks play actions and review events from
-              this solve.
+              j/k steps through the replay buffer. It tracks play actions and
+              review events from this solve.
             </p>
           </div>
           <div className="min-h-0 bg-[var(--input-bg)] p-3">
@@ -5362,14 +5940,20 @@ function SolvedModal({
                         {selectedEvent.label}
                       </p>
                       <p className="text-[var(--muted)]">
-                        {selectedEvent.detail ?? eventKindLabel(selectedEvent.kind)}
+                        {selectedEvent.detail ??
+                          eventKindLabel(selectedEvent.kind)}
                       </p>
-                      {selectedEvent.cells && selectedEvent.cells.length > 0 && (
-                        <p className="text-[var(--muted)]">
-                          cells {selectedEvent.cells.slice(0, 8).map((cell) => cell + 1).join(', ')}
-                          {selectedEvent.cells.length > 8 ? '...' : ''}
-                        </p>
-                      )}
+                      {selectedEvent.cells &&
+                        selectedEvent.cells.length > 0 && (
+                          <p className="text-[var(--muted)]">
+                            cells{' '}
+                            {selectedEvent.cells
+                              .slice(0, 8)
+                              .map((cell) => cell + 1)
+                              .join(', ')}
+                            {selectedEvent.cells.length > 8 ? '...' : ''}
+                          </p>
+                        )}
                     </div>
                   ) : (
                     <p className="mt-3 text-xs text-[var(--muted)]">
@@ -5380,8 +5964,8 @@ function SolvedModal({
               </div>
             ) : (
               <p className="border border-[var(--border)] bg-[var(--panel-bg)] p-3 text-sm text-[var(--muted)]">
-                This solve has no recorded timeline yet. New solves will build a replay buffer as
-                you play.
+                This solve has no recorded timeline yet. New solves will build a
+                replay buffer as you play.
               </p>
             )}
           </div>
@@ -5406,7 +5990,7 @@ function SolvedModal({
         </div>
       </section>
     </div>
-  );
+  )
 }
 
 function SolvedMetric({ label, value }: { label: string; value: string }) {
@@ -5415,46 +5999,48 @@ function SolvedMetric({ label, value }: { label: string; value: string }) {
       <p className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-[var(--muted)]">
         {label}
       </p>
-      <p className="mt-1 font-mono text-lg font-black text-[var(--accent)]">{value}</p>
+      <p className="mt-1 font-mono text-lg font-black text-[var(--accent)]">
+        {value}
+      </p>
     </div>
-  );
+  )
 }
 
 function solveReviewStats(events: SolveEvent[]) {
-  const entries = events.filter((event) => event.kind === 'entry').length;
+  const entries = events.filter((event) => event.kind === 'entry').length
   const notes = events.filter(
     (event) => event.kind === 'note' || event.kind === 'corner',
-  ).length;
-  const clears = events.filter((event) => event.kind === 'clear').length;
-  const firstEntry = events.find((event) => event.kind === 'entry');
+  ).length
+  const clears = events.filter((event) => event.kind === 'clear').length
+  const firstEntry = events.find((event) => event.kind === 'entry')
 
   return {
     clears,
     entries,
     firstEntry: firstEntry ? formatDuration(firstEntry.atMs) : '--',
     notes,
-  };
+  }
 }
 
 function eventKindLabel(kind: SolveEventKind) {
-  if (kind === 'entry') return 'put';
-  if (kind === 'note') return 'note';
-  if (kind === 'corner') return 'mark';
-  if (kind === 'color') return 'paint';
-  if (kind === 'hint') return 'hint';
-  if (kind === 'pause') return 'pause';
-  if (kind === 'resume') return 'resume';
-  if (kind === 'check') return 'check';
-  if (kind === 'reset') return 'reset';
-  return 'clear';
+  if (kind === 'entry') return 'put'
+  if (kind === 'note') return 'note'
+  if (kind === 'corner') return 'mark'
+  if (kind === 'color') return 'paint'
+  if (kind === 'hint') return 'hint'
+  if (kind === 'pause') return 'pause'
+  if (kind === 'resume') return 'resume'
+  if (kind === 'check') return 'check'
+  if (kind === 'reset') return 'reset'
+  return 'clear'
 }
 
 function NewGameSection({
   children,
   title,
 }: {
-  children: ReactNode;
-  title: string;
+  children: ReactNode
+  title: string
 }) {
   return (
     <section className="relative border border-[var(--border)] bg-[var(--input-bg)] p-4">
@@ -5463,15 +6049,15 @@ function NewGameSection({
       </span>
       {children}
     </section>
-  );
+  )
 }
 
 function NewGameField({
   children,
   label,
 }: {
-  children: ReactNode;
-  label: string;
+  children: ReactNode
+  label: string
 }) {
   return (
     <div>
@@ -5480,7 +6066,7 @@ function NewGameField({
       </p>
       {children}
     </div>
-  );
+  )
 }
 
 function NewGamePanel({
@@ -5508,29 +6094,29 @@ function NewGamePanel({
   puzzleSize,
   status,
 }: {
-  dailyRecord: GameRecord | null;
-  dateKey: string;
-  difficulty: PuzzleDifficulty;
-  isFetchingPuzzle: boolean;
-  mode: PlayMode;
-  variant: VariantId;
-  onDateChange: (dateKey: string) => void;
-  onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
-  onModeChange: (mode: PlayMode) => void;
-  onVariantChange: (variant: VariantId) => void;
-  onImage: () => void;
-  onLoadPasted: () => void;
-  onLocal: () => void;
-  onMountain: () => void;
-  onMountainDaily: () => void;
-  onOpenDaily: (dateKey: string) => void;
-  onPuzzleTextChange: (value: string) => void;
-  onSizeChange: (puzzleSize: PuzzleSize) => void;
-  onToday: () => void;
-  onYesterday: () => void;
-  puzzleText: string;
-  puzzleSize: PuzzleSize;
-  status: string;
+  dailyRecord: GameRecord | null
+  dateKey: string
+  difficulty: PuzzleDifficulty
+  isFetchingPuzzle: boolean
+  mode: PlayMode
+  variant: VariantId
+  onDateChange: (dateKey: string) => void
+  onDifficultyChange: (difficulty: PuzzleDifficulty) => void
+  onModeChange: (mode: PlayMode) => void
+  onVariantChange: (variant: VariantId) => void
+  onImage: () => void
+  onLoadPasted: () => void
+  onLocal: () => void
+  onMountain: () => void
+  onMountainDaily: () => void
+  onOpenDaily: (dateKey: string) => void
+  onPuzzleTextChange: (value: string) => void
+  onSizeChange: (puzzleSize: PuzzleSize) => void
+  onToday: () => void
+  onYesterday: () => void
+  puzzleText: string
+  puzzleSize: PuzzleSize
+  status: string
 }) {
   const dailyGrid = useMemo(
     () =>
@@ -5540,11 +6126,11 @@ function NewGamePanel({
         puzzleSize,
       ),
     [dateKey, difficulty, mode, puzzleSize],
-  );
-  const dateLabel = formatDailyDate(dateKey);
-  const canGoNext = dateKey < todayDateKey();
-  const dailyCompleted = dailyRecord?.status === 'completed';
-  const cellCount = boardConfigFor(puzzleSize).cellCount;
+  )
+  const dateLabel = formatDailyDate(dateKey)
+  const canGoNext = dateKey < todayDateKey()
+  const dailyCompleted = dailyRecord?.status === 'completed'
+  const cellCount = boardConfigFor(puzzleSize).cellCount
 
   return (
     <div className="space-y-4">
@@ -5552,12 +6138,12 @@ function NewGamePanel({
         <form
           className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start"
           onSubmit={(event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            const selectedDateKey = String(form.get('daily-date') ?? dateKey);
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            const selectedDateKey = String(form.get('daily-date') ?? dateKey)
             onOpenDaily(
               isValidDateKey(selectedDateKey) ? selectedDateKey : dateKey,
-            );
+            )
           }}
         >
           <div className="min-w-0 space-y-3">
@@ -5662,7 +6248,7 @@ function NewGamePanel({
                     value={dateKey}
                     onChange={(event) => {
                       if (isValidDateKey(event.target.value)) {
-                        onDateChange(event.target.value);
+                        onDateChange(event.target.value)
                       }
                     }}
                   />
@@ -5699,7 +6285,9 @@ function NewGamePanel({
                       : 'in progress'
                     : 'not started'
                 }
-                tone={dailyCompleted ? 'done' : dailyRecord ? 'active' : 'default'}
+                tone={
+                  dailyCompleted ? 'done' : dailyRecord ? 'active' : 'default'
+                }
               />
               <DailyMeta
                 label="progress"
@@ -5730,7 +6318,9 @@ function NewGamePanel({
           <button
             type="submit"
             className={`relative border bg-[var(--button-bg)] p-3 transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] ${
-              dailyCompleted ? 'border-[var(--accent)]' : 'border-[var(--border)]'
+              dailyCompleted
+                ? 'border-[var(--accent)]'
+                : 'border-[var(--border)]'
             }`}
           >
             {dailyCompleted && (
@@ -5813,7 +6403,7 @@ function NewGamePanel({
         </p>
       )}
     </div>
-  );
+  )
 }
 
 function NewGameAction({
@@ -5822,10 +6412,10 @@ function NewGameAction({
   disabled = false,
   onClick,
 }: {
-  command: string;
-  description: string;
-  disabled?: boolean;
-  onClick: () => void;
+  command: string
+  description: string
+  disabled?: boolean
+  onClick: () => void
 }) {
   return (
     <button
@@ -5846,7 +6436,7 @@ function NewGameAction({
         </span>
       </span>
     </button>
-  );
+  )
 }
 
 function DailyMeta({
@@ -5854,25 +6444,23 @@ function DailyMeta({
   tone = 'default',
   value,
 }: {
-  label: string;
-  tone?: 'default' | 'active' | 'done';
-  value: string;
+  label: string
+  tone?: 'default' | 'active' | 'done'
+  value: string
 }) {
   const toneClass =
     tone === 'done'
       ? 'text-[var(--accent)]'
       : tone === 'active'
         ? 'text-[var(--accent-2)]'
-        : 'text-[var(--app-text)]';
+        : 'text-[var(--app-text)]'
 
   return (
     <div>
       <p className="text-[0.62rem] text-[var(--muted)]">{label}</p>
-      <p className={`mt-1 ${toneClass}`}>
-        {value}
-      </p>
+      <p className={`mt-1 ${toneClass}`}>{value}</p>
     </div>
-  );
+  )
 }
 
 function DashboardPage({
@@ -5885,31 +6473,45 @@ function DashboardPage({
   onSizeChange,
   puzzleSize,
 }: {
-  difficulty: PuzzleDifficulty;
-  mode: PlayMode;
-  onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
-  onModeChange: (mode: PlayMode) => void;
-  onPlay: () => void;
-  onSelect: (key: string) => void;
-  onSizeChange: (puzzleSize: PuzzleSize) => void;
-  puzzleSize: PuzzleSize;
+  difficulty: PuzzleDifficulty
+  mode: PlayMode
+  onDifficultyChange: (difficulty: PuzzleDifficulty) => void
+  onModeChange: (mode: PlayMode) => void
+  onPlay: () => void
+  onSelect: (key: string) => void
+  onSizeChange: (puzzleSize: PuzzleSize) => void
+  puzzleSize: PuzzleSize
 }) {
-  const dailyDifficulties: PuzzleDifficulty[] = ['easy', 'medium', 'hard'];
+  const dailyDifficulties: PuzzleDifficulty[] = ['easy', 'medium', 'hard']
   // Generation is CPU-heavy — run it after first paint so the splash is instant.
-  const [dailyGrids, setDailyGrids] = useState<Record<string, Grid> | null>(null);
+  const [dailyGrids, setDailyGrids] = useState<Record<string, Grid> | null>(
+    null,
+  )
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setDailyGrids({
-        easy: generatePuzzle('easy', dailySeed('easy', 'vimdoku', todayDateKey(), puzzleSize, mode), puzzleSize),
-        medium: generatePuzzle('medium', dailySeed('medium', 'vimdoku', todayDateKey(), puzzleSize, mode), puzzleSize),
-        hard: generatePuzzle('hard', dailySeed('hard', 'vimdoku', todayDateKey(), puzzleSize, mode), puzzleSize),
-      });
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [mode, puzzleSize]);
+        easy: generatePuzzle(
+          'easy',
+          dailySeed('easy', 'vimdoku', todayDateKey(), puzzleSize, mode),
+          puzzleSize,
+        ),
+        medium: generatePuzzle(
+          'medium',
+          dailySeed('medium', 'vimdoku', todayDateKey(), puzzleSize, mode),
+          puzzleSize,
+        ),
+        hard: generatePuzzle(
+          'hard',
+          dailySeed('hard', 'vimdoku', todayDateKey(), puzzleSize, mode),
+          puzzleSize,
+        ),
+      })
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [mode, puzzleSize])
 
-  const grid = dailyGrids?.[difficulty] ?? emptyGrid(puzzleSize);
+  const grid = dailyGrids?.[difficulty] ?? emptyGrid(puzzleSize)
 
   return (
     <section className="flex min-h-screen flex-col bg-[var(--app-bg)] font-mono lg:h-screen lg:overflow-y-auto">
@@ -6035,7 +6637,7 @@ function DashboardPage({
         </div>
       </div>
     </section>
-  );
+  )
 }
 
 // One canonical header for every page: brand (→ home) + burger.
@@ -6046,10 +6648,10 @@ function AppShellHeader({
   onMenu,
   title,
 }: {
-  extraActions?: ReactNode;
-  onHome: () => void;
-  onMenu: () => void;
-  title?: string;
+  extraActions?: ReactNode
+  onHome: () => void
+  onMenu: () => void
+  title?: string
 }) {
   return (
     <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
@@ -6083,7 +6685,7 @@ function AppShellHeader({
         </button>
       </div>
     </header>
-  );
+  )
 }
 
 function AppPageFrame({
@@ -6092,12 +6694,12 @@ function AppPageFrame({
   onOpenMenu,
   title,
 }: {
-  children: ReactNode;
-  extraActions?: ReactNode;
-  onOpenMenu: () => void;
-  title?: string;
+  children: ReactNode
+  extraActions?: ReactNode
+  onOpenMenu: () => void
+  title?: string
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
   return (
     <section className="flex min-h-screen flex-col bg-[var(--workspace-bg)] font-mono lg:h-screen">
       <AppShellHeader
@@ -6110,7 +6712,7 @@ function AppPageFrame({
         <div className="mx-auto w-full max-w-6xl">{children}</div>
       </div>
     </section>
-  );
+  )
 }
 
 function MenuItem({
@@ -6121,12 +6723,12 @@ function MenuItem({
   label,
   onClick,
 }: {
-  active?: boolean;
-  children: ReactNode;
-  disabled?: boolean;
-  hint?: string;
-  label: string;
-  onClick: () => void;
+  active?: boolean
+  children: ReactNode
+  disabled?: boolean
+  hint?: string
+  label: string
+  onClick: () => void
 }) {
   return (
     <button
@@ -6141,7 +6743,9 @@ function MenuItem({
       }`}
       onClick={onClick}
     >
-      <span className="grid h-4 w-4 shrink-0 place-items-center">{children}</span>
+      <span className="grid h-4 w-4 shrink-0 place-items-center">
+        {children}
+      </span>
       <span className="flex-1 truncate">{label}</span>
       {hint && (
         <span
@@ -6151,7 +6755,7 @@ function MenuItem({
         </span>
       )}
     </button>
-  );
+  )
 }
 
 function HintRail({
@@ -6163,18 +6767,20 @@ function HintRail({
   hintMode,
   onClose,
 }: {
-  applyHint: () => void;
-  askForHint: (mode?: HintMode) => void;
-  clearHints: (closeRail?: boolean) => void;
-  conflicts: number;
-  hint: Hint | null;
-  hintMode: HintMode;
-  onClose: () => void;
+  applyHint: () => void
+  askForHint: (mode?: HintMode) => void
+  clearHints: (closeRail?: boolean) => void
+  conflicts: number
+  hint: Hint | null
+  hintMode: HintMode
+  onClose: () => void
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col font-mono">
       <header className="flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--status-bg)] px-4 text-[var(--status-text)]">
-        <span className="text-xs uppercase tracking-[0.16em]">[hint-engine]</span>
+        <span className="text-xs uppercase tracking-[0.16em]">
+          [hint-engine]
+        </span>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -6225,11 +6831,14 @@ function HintRail({
                   )}
                 </div>
               )}
-              <p className="font-sans leading-relaxed">{hintText(hint, hintMode)}</p>
+              <p className="font-sans leading-relaxed">
+                {hintText(hint, hintMode)}
+              </p>
               {'cells' in hint && (
                 <p className="border-l-2 border-[var(--accent)] pl-3 font-mono text-xs leading-relaxed text-[var(--muted)]">
-                  Highlighted cells are the candidate pattern and affected cells. Use your notes to
-                  remove the marked candidate; no digit is placed.
+                  Highlighted cells are the candidate pattern and affected
+                  cells. Use your notes to remove the marked candidate; no digit
+                  is placed.
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
@@ -6284,7 +6893,7 @@ function HintRail({
         </section>
       </div>
     </div>
-  );
+  )
 }
 
 function GameLibrary({
@@ -6300,25 +6909,25 @@ function GameLibrary({
   records,
   totalCount,
 }: {
-  activeGameId: string;
-  completedCount: number;
-  filter: GameLibraryFilter;
-  inProgressCount: number;
-  onDelete: (id: string) => void;
-  onFilterChange: (filter: GameLibraryFilter) => void;
-  onQueryChange: (value: string) => void;
-  onResume: (record: GameRecord) => void;
-  query: string;
-  records: GameRecord[];
-  totalCount: number;
+  activeGameId: string
+  completedCount: number
+  filter: GameLibraryFilter
+  inProgressCount: number
+  onDelete: (id: string) => void
+  onFilterChange: (filter: GameLibraryFilter) => void
+  onQueryChange: (value: string) => void
+  onResume: (record: GameRecord) => void
+  query: string
+  records: GameRecord[]
+  totalCount: number
 }) {
-  const [visibleCount, setVisibleCount] = useState(80);
-  const visibleRecords = records.slice(0, visibleCount);
+  const [visibleCount, setVisibleCount] = useState(80)
+  const visibleRecords = records.slice(0, visibleCount)
   const filters: [GameLibraryFilter, string, number][] = [
     ['all', 'all', totalCount],
     ['in-progress', 'active', inProgressCount],
     ['completed', 'done', completedCount],
-  ];
+  ]
 
   return (
     <div className="space-y-3">
@@ -6445,12 +7054,13 @@ function GameLibrary({
             className="w-full border-t border-[var(--border)] bg-[var(--button-bg)] px-3 py-3 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent)] hover:bg-[var(--panel-soft)]"
             onClick={() => setVisibleCount((count) => count + 80)}
           >
-            show next {Math.min(80, records.length - visibleRecords.length)} puzzles
+            show next {Math.min(80, records.length - visibleRecords.length)}{' '}
+            puzzles
           </button>
         )}
       </section>
     </div>
-  );
+  )
 }
 
 function ArchiveStat({ label, value }: { label: string; value: string }) {
@@ -6463,7 +7073,7 @@ function ArchiveStat({ label, value }: { label: string; value: string }) {
         {value}
       </p>
     </div>
-  );
+  )
 }
 
 function GameFinder({
@@ -6477,23 +7087,23 @@ function GameFinder({
   records,
   selectedRecord,
 }: {
-  activeGameId: string;
-  cursor: number;
-  onCursorChange: (value: number | ((current: number) => number)) => void;
-  onDelete: (id: string) => void;
-  onQueryChange: (value: string) => void;
-  onResume: (record: GameRecord) => void;
-  query: string;
-  records: GameRecord[];
-  selectedRecord: GameRecord | null;
+  activeGameId: string
+  cursor: number
+  onCursorChange: (value: number | ((current: number) => number)) => void
+  onDelete: (id: string) => void
+  onQueryChange: (value: string) => void
+  onResume: (record: GameRecord) => void
+  query: string
+  records: GameRecord[]
+  selectedRecord: GameRecord | null
 }) {
-  const selectedIndex = Math.min(cursor, Math.max(0, records.length - 1));
+  const selectedIndex = Math.min(cursor, Math.max(0, records.length - 1))
   const moveCursor = (delta: 1 | -1) => {
     onCursorChange((current) => {
-      if (records.length === 0) return 0;
-      return (current + delta + records.length) % records.length;
-    });
-  };
+      if (records.length === 0) return 0
+      return (current + delta + records.length) % records.length
+    })
+  }
 
   return (
     <div
@@ -6502,14 +7112,14 @@ function GameFinder({
       className="space-y-3"
       onKeyDown={(event) => {
         if (event.key === 'j' || event.key === 'ArrowDown') {
-          event.preventDefault();
-          moveCursor(1);
+          event.preventDefault()
+          moveCursor(1)
         } else if (event.key === 'k' || event.key === 'ArrowUp') {
-          event.preventDefault();
-          moveCursor(-1);
+          event.preventDefault()
+          moveCursor(-1)
         } else if (event.key === 'Enter' && selectedRecord) {
-          event.preventDefault();
-          onResume(selectedRecord);
+          event.preventDefault()
+          onResume(selectedRecord)
         }
       }}
     >
@@ -6536,8 +7146,8 @@ function GameFinder({
             <p className="p-4 text-sm text-[var(--muted)]">No puzzles match.</p>
           ) : (
             records.map((record, index) => {
-              const isSelected = index === selectedIndex;
-              const isCurrent = record.id === activeGameId;
+              const isSelected = index === selectedIndex
+              const isCurrent = record.id === activeGameId
               return (
                 <button
                   type="button"
@@ -6562,7 +7172,9 @@ function GameFinder({
                   </span>
                   <span
                     className={`text-xs uppercase tracking-[0.16em] ${
-                      isSelected ? 'text-[var(--app-bg)]' : 'text-[var(--muted)]'
+                      isSelected
+                        ? 'text-[var(--app-bg)]'
+                        : 'text-[var(--muted)]'
                     }`}
                   >
                     {record.status === 'completed'
@@ -6570,7 +7182,7 @@ function GameFinder({
                       : `${record.completion}/${cellCountFor(record)} · ${formatDuration(record.elapsedMs)}`}
                   </span>
                 </button>
-              );
+              )
             })
           )}
         </div>
@@ -6587,7 +7199,10 @@ function GameFinder({
               <dl className="flex-1 space-y-1.5 overflow-y-auto p-3 font-mono text-xs">
                 <PreviewRow label="source" value={selectedRecord.source} />
                 <PreviewRow label="size" value={selectedRecord.puzzleSize} />
-                <PreviewRow label="mode" value={modeLabel(selectedRecord.playMode)} />
+                <PreviewRow
+                  label="mode"
+                  value={modeLabel(selectedRecord.playMode)}
+                />
                 {selectedRecord.difficulty && (
                   <PreviewRow
                     label="difficulty"
@@ -6641,32 +7256,46 @@ function GameFinder({
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 type LeaderboardScope = {
-  size: PuzzleSize;
-  mode: PlayMode;
-  variant: VariantId;
-  difficulty: PuzzleDifficulty;
-};
+  size: PuzzleSize
+  mode: PlayMode
+  variant: VariantId
+  difficulty: PuzzleDifficulty
+}
+
+type LeaderboardFilters = Omit<LeaderboardScope, 'difficulty'>
+
+const DEFAULT_LEADERBOARD_FILTERS: LeaderboardFilters = {
+  size: '9x9',
+  mode: 'classic',
+  variant: 'classic',
+}
 
 function Leaderboards({
   completedGames,
   globalScores,
+  indexMode,
+  indexSize,
+  indexVariant,
   localScores,
   playerName,
   scope,
   scopedGlobalScores,
   status,
 }: {
-  completedGames: GameRecord[];
-  globalScores: LeaderboardEntry[];
-  localScores: GameRecord[];
-  playerName: string;
-  scope: LeaderboardScope | null;
-  scopedGlobalScores: LeaderboardEntry[];
-  status: string;
+  completedGames: GameRecord[]
+  globalScores: LeaderboardEntry[]
+  indexMode: PlayMode
+  indexSize: PuzzleSize
+  indexVariant: VariantId
+  localScores: GameRecord[]
+  playerName: string
+  scope: LeaderboardScope | null
+  scopedGlobalScores: LeaderboardEntry[]
+  status: string
 }) {
   if (scope) {
     return (
@@ -6676,41 +7305,53 @@ function Leaderboards({
         scope={scope}
         status={status}
       />
-    );
+    )
   }
   return (
     <LeaderboardsIndex
       completedGames={completedGames}
       globalScores={globalScores}
+      indexMode={indexMode}
+      indexSize={indexSize}
+      indexVariant={indexVariant}
       playerName={playerName}
     />
-  );
+  )
 }
 
 type LeaderboardComboEntry = {
-  id: string;
-  player: string;
-  source: string;
-  difficulty?: string;
-  elapsedMs: number;
-};
+  id: string
+  player: string
+  source: string
+  difficulty?: string
+  elapsedMs: number
+}
 
 function LeaderboardsIndex({
   completedGames,
   globalScores,
+  indexMode,
+  indexSize,
+  indexVariant,
   playerName,
 }: {
-  completedGames: GameRecord[];
-  globalScores: LeaderboardEntry[];
-  playerName: string;
+  completedGames: GameRecord[]
+  globalScores: LeaderboardEntry[]
+  indexMode: PlayMode
+  indexSize: PuzzleSize
+  indexVariant: VariantId
+  playerName: string
 }) {
-  const navigate = useNavigate();
-  const localPlayer = isCustomPlayerName(playerName) ? playerName : 'you';
-  const [indexMode, setIndexMode] = useState<PlayMode>('classic');
-  // Default scope: 9x9 classic variant. Filter by game mode only for now;
-  // size & variant can be browsed via direct URLs.
-  const indexSize: PuzzleSize = '9x9';
-  const indexVariant: VariantId = 'classic';
+  const navigate = useNavigate()
+  const localPlayer = isCustomPlayerName(playerName) ? playerName : 'you'
+  const navigateToFilters = useCallback(
+    (nextFilters: LeaderboardFilters) => {
+      void navigate({
+        to: leaderboardFiltersPath(nextFilters),
+      })
+    },
+    [navigate],
+  )
 
   const combos = useMemo(
     () =>
@@ -6720,13 +7361,13 @@ function LeaderboardsIndex({
           mode: indexMode,
           variant: indexVariant,
           difficulty,
-        };
+        }
         const localTop: LeaderboardComboEntry[] = completedGames
           .filter(
             (record) =>
-              record.puzzleSize === indexSize &&
-              record.playMode === indexMode &&
-              record.variantId === indexVariant &&
+              (record.puzzleSize ?? '9x9') === indexSize &&
+              (record.playMode ?? 'classic') === indexMode &&
+              (record.variantId ?? 'classic') === indexVariant &&
               record.difficulty === difficulty &&
               record.elapsedMs > 0,
           )
@@ -6736,12 +7377,16 @@ function LeaderboardsIndex({
             source: record.source,
             difficulty: record.difficulty,
             elapsedMs: record.elapsedMs,
-          }));
+          }))
         const globalTop: LeaderboardComboEntry[] = globalScores
           .filter(
             (score) =>
-              leaderboardEntryMatches(score, indexSize, indexMode, indexVariant) &&
-              score.difficulty === difficulty,
+              leaderboardEntryMatches(
+                score,
+                indexSize,
+                indexMode,
+                indexVariant,
+              ) && score.difficulty === difficulty,
           )
           .map((score) => ({
             id: `global-${score.id}`,
@@ -6749,112 +7394,155 @@ function LeaderboardsIndex({
             source: score.source,
             difficulty: score.difficulty,
             elapsedMs: score.elapsedMs,
-          }));
+          }))
         const top = [...localTop, ...globalTop]
           .sort((a, b) => a.elapsedMs - b.elapsedMs)
-          .slice(0, 10);
-        return { scope, top };
+          .slice(0, 10)
+        return { scope, top }
       }),
-    [completedGames, globalScores, indexMode, localPlayer],
-  );
+    [
+      completedGames,
+      globalScores,
+      indexMode,
+      indexSize,
+      indexVariant,
+      localPlayer,
+    ],
+  )
 
   return (
     <div className="space-y-3">
       <section className="flex flex-wrap items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
         <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-[var(--muted)]">
-          <span className="text-[var(--accent)]">9x9</span>
+          <span className="text-[var(--accent)]">{indexSize}</span>
           <span className="mx-1.5 text-[var(--border)]">·</span>
-          <span className="text-[var(--app-text)]">daily boards</span>
+          <span className="text-[var(--app-text)]">{modeLabel(indexMode)}</span>
+          <span className="mx-1.5 text-[var(--border)]">·</span>
+          <span className="text-[var(--app-text)]">
+            {VARIANTS[indexVariant].label}
+          </span>
         </p>
-        <div className="flex flex-wrap gap-1">
-          {LEADERBOARD_PLAY_MODES.map((mode) => (
-            <button
-              type="button"
-              key={mode}
-              onClick={() => setIndexMode(mode)}
-              className={`border px-2.5 py-1.5 font-mono text-[0.68rem] font-bold uppercase tracking-[0.14em] transition ${
-                indexMode === mode
-                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                  : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)]'
-              }`}
-            >
-              {modeLabel(mode)}
-            </button>
-          ))}
+        <div className="grid w-full gap-2 sm:grid-cols-3 xl:w-[520px]">
+          <ChallengeSelectField
+            value={indexSize}
+            label="size"
+            hideLabel
+            onChange={(value) =>
+              navigateToFilters({
+                size: value as PuzzleSize,
+                mode: indexMode,
+                variant: indexVariant,
+              })
+            }
+            options={PUZZLE_SIZES.map((value) => ({ label: value, value }))}
+          />
+          <ChallengeSelectField
+            value={indexMode}
+            label="mode"
+            hideLabel
+            onChange={(value) =>
+              navigateToFilters({
+                size: indexSize,
+                mode: value as PlayMode,
+                variant: indexVariant,
+              })
+            }
+            options={LEADERBOARD_PLAY_MODES.map((value) => ({
+              label: modeLabel(value),
+              value,
+            }))}
+          />
+          <ChallengeSelectField
+            value={indexVariant}
+            label="variant"
+            hideLabel
+            onChange={(value) =>
+              navigateToFilters({
+                size: indexSize,
+                mode: indexMode,
+                variant: value as VariantId,
+              })
+            }
+            options={(Object.keys(VARIANTS) as VariantId[]).map((value) => ({
+              label: VARIANTS[value].label,
+              value,
+            }))}
+          />
         </div>
       </section>
       <div className="grid gap-3 lg:grid-cols-2">
-      {combos.map(({ scope: combo, top }) => {
-        const hasEntries = top.length > 0;
-        return (
-          <button
-            type="button"
-            key={`${combo.size}-${combo.mode}-${combo.variant}-${combo.difficulty}`}
-            onClick={() =>
-              void navigate({
-                to: '/leaderboards/$size/$mode/$variant/$difficulty',
-                params: combo,
-              })
-            }
-            className={`group flex flex-col gap-4 border border-[var(--border)] bg-[var(--input-bg)] p-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] ${
-              hasEntries ? 'min-h-64' : ''
-            }`}
-          >
-            <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-[0.7rem] uppercase tracking-[0.14em]">
-              <span className="font-black text-[var(--accent)]">
-                {combo.size}
-              </span>
-              <span className="text-[var(--border)]">·</span>
-              <span className="font-bold text-[var(--app-text)]">
-                {modeLabel(combo.mode)}
-              </span>
-              {combo.variant !== 'classic' && (
-                <>
-                  <span className="text-[var(--border)]">·</span>
-                  <span className="text-[var(--muted)]">
-                    {VARIANTS[combo.variant].label}
-                  </span>
-                </>
-              )}
-              <span className="text-[var(--border)]">·</span>
-              <span className="font-bold text-[var(--accent-2)]">
-                {combo.difficulty}
-              </span>
-            </header>
-            {!hasEntries ? (
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
-                no entries yet
-              </p>
-            ) : (
-              <ol className="grid gap-1 font-mono text-xs">
-                {top.map((entry, index) => (
-                  <li
-                    key={entry.id}
-                    className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-2"
-                  >
+        {combos.map(({ scope: combo, top }) => {
+          const hasEntries = top.length > 0
+          return (
+            <button
+              type="button"
+              key={`${combo.size}-${combo.mode}-${combo.variant}-${combo.difficulty}`}
+              onClick={() =>
+                void navigate({
+                  to: leaderboardScopePath(combo),
+                })
+              }
+              className={`group flex flex-col gap-4 border border-[var(--border)] bg-[var(--input-bg)] p-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] ${
+                hasEntries ? 'min-h-64' : ''
+              }`}
+            >
+              <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-[0.7rem] uppercase tracking-[0.14em]">
+                <span className="font-black text-[var(--accent)]">
+                  {combo.size}
+                </span>
+                <span className="text-[var(--border)]">·</span>
+                <span className="font-bold text-[var(--app-text)]">
+                  {modeLabel(combo.mode)}
+                </span>
+                {combo.variant !== 'classic' && (
+                  <>
+                    <span className="text-[var(--border)]">·</span>
                     <span className="text-[var(--muted)]">
-                      {String(index + 1).padStart(2, '0')}
+                      {VARIANTS[combo.variant].label}
                     </span>
-                    <span className="min-w-0 truncate">
-                      <span className="font-bold uppercase tracking-[0.1em] text-[var(--app-text)]">
-                        {entry.player}
+                  </>
+                )}
+                <span className="text-[var(--border)]">·</span>
+                <span className="font-bold text-[var(--accent-2)]">
+                  {combo.difficulty}
+                </span>
+              </header>
+              {!hasEntries ? (
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+                  no entries yet
+                </p>
+              ) : (
+                <ol className="grid gap-1 font-mono text-xs">
+                  {top.map((entry, index) => (
+                    <li
+                      key={entry.id}
+                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-2"
+                    >
+                      <span className="text-[var(--muted)]">
+                        {String(index + 1).padStart(2, '0')}
                       </span>
-                      <span className="mx-1.5 text-[var(--border)]">·</span>
-                      <span className="text-[var(--muted)]">{entry.source}</span>
-                    </span>
-                    <span className="font-bold text-[var(--accent)]">
-                      {formatDuration(entry.elapsedMs)}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </button>
-        );
-      })}
+                      <span className="min-w-0 truncate">
+                        <span className="font-bold uppercase tracking-[0.1em] text-[var(--app-text)]">
+                          {entry.player}
+                        </span>
+                        <span className="mx-1.5 text-[var(--border)]">·</span>
+                        <span className="text-[var(--muted)]">
+                          {entry.source}
+                        </span>
+                      </span>
+                      <span className="font-bold text-[var(--accent)]">
+                        {formatDuration(entry.elapsedMs)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
-  );
+  )
 }
 
 function LeaderboardsDetail({
@@ -6863,20 +7551,24 @@ function LeaderboardsDetail({
   scope,
   status,
 }: {
-  globalScores: LeaderboardEntry[];
-  localScores: GameRecord[];
-  scope: LeaderboardScope;
-  status: string;
+  globalScores: LeaderboardEntry[]
+  localScores: GameRecord[]
+  scope: LeaderboardScope
+  status: string
 }) {
-  const navigate = useNavigate();
-  const scopeLabel = leaderboardScopeLabel(scope);
+  const navigate = useNavigate()
+  const scopeLabel = leaderboardScopeLabel(scope)
 
   return (
     <div className="space-y-3">
       <header className="flex flex-wrap items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em]">
         <button
           type="button"
-          onClick={() => void navigate({ to: '/leaderboards' })}
+          onClick={() =>
+            void navigate({
+              to: leaderboardFiltersPath(scope),
+            })
+          }
           className="border border-[var(--border)] bg-[var(--button-bg)] px-2 py-1 font-bold text-[var(--accent)] transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)]"
         >
           ← all boards
@@ -6915,9 +7607,8 @@ function LeaderboardsDetail({
         </LeaderboardPanel>
       </div>
     </div>
-  );
+  )
 }
-
 
 function ChallengeSetupPanel({
   currentGame,
@@ -6927,355 +7618,435 @@ function ChallengeSetupPanel({
   onCreate,
   onCreateCurrent,
   onDifficultyChange,
-  onKindChange,
   onModeChange,
   onRecipientChange,
   onRecipientClear,
   onSizeChange,
   onSourceChange,
+  onTurnLivesChange,
+  onTurnSecondsChange,
+  onVariantChange,
   puzzleSize,
   recipient,
   source,
   status,
+  turnLives,
+  turnSeconds,
+  variant,
 }: {
-  currentGame: GameMeta;
-  difficulty: PuzzleDifficulty;
-  kind: ChallengeKind;
-  mode: PlayMode;
-  onCreate: () => void;
-  onCreateCurrent: () => void;
-  onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
-  onKindChange: (kind: ChallengeKind) => void;
-  onModeChange: (mode: PlayMode) => void;
-  onRecipientChange: (friend: FriendSummary | null) => void;
-  onRecipientClear: () => void;
-  onSizeChange: (puzzleSize: PuzzleSize) => void;
-  onSourceChange: (source: ChallengePuzzleSource) => void;
-  puzzleSize: PuzzleSize;
-  recipient: FriendSummary | null;
-  source: ChallengePuzzleSource;
-  status: string;
+  currentGame: GameMeta
+  difficulty: PuzzleDifficulty
+  kind: ChallengeSetupKind
+  mode: PlayMode
+  onCreate: () => void
+  onCreateCurrent: () => void
+  onDifficultyChange: (difficulty: PuzzleDifficulty) => void
+  onModeChange: (mode: PlayMode) => void
+  onRecipientChange: (friend: FriendSummary | null) => void
+  onRecipientClear: () => void
+  onSizeChange: (puzzleSize: PuzzleSize) => void
+  onSourceChange: (source: ChallengePuzzleSource) => void
+  onTurnLivesChange: (lives: number) => void
+  onTurnSecondsChange: (seconds: number) => void
+  onVariantChange: (variant: VariantId) => void
+  puzzleSize: PuzzleSize
+  recipient: FriendSummary | null
+  source: ChallengePuzzleSource
+  status: string
+  turnLives: number
+  turnSeconds: number
+  variant: VariantId
 }) {
-  const previewGrid = useMemo(() => {
-    if (source === 'current') {
-      return parseGrid(currentGame.puzzle, currentGame.puzzleSize);
-    }
-    return generatePuzzle(
-      difficulty,
-      dailySeed(
-        difficulty,
-        source === 'daily' ? 'vimdoku-preview' : 'generated-preview',
-        todayDateKey(),
-        puzzleSize,
-        mode,
-      ),
-      puzzleSize,
-    );
-  }, [currentGame, difficulty, mode, puzzleSize, source]);
-  const activeSize = source === 'current' ? currentGame.puzzleSize : puzzleSize;
-  const activeMode = source === 'current' ? currentGame.playMode : mode;
+  const activeSize = source === 'current' ? currentGame.puzzleSize : puzzleSize
+  const activeMode = source === 'current' ? currentGame.playMode : mode
   const activeDifficulty =
-    source === 'current' ? currentGame.difficulty ?? 'custom' : difficulty;
+    source === 'current' ? (currentGame.difficulty ?? 'custom') : difficulty
+  const activeVariant = source === 'current' ? currentGame.variantId : variant
+  const filledCount =
+    source === 'current'
+      ? parseGrid(currentGame.puzzle, currentGame.puzzleSize).filter(Boolean)
+          .length
+      : null
+  const isLive = isLiveChallengeSetup(kind)
+  const isTurnBattle = kind === 'live-turns'
   const sources: [ChallengePuzzleSource, string, string][] = [
     ['daily', 'daily', 'stable puzzle for today'],
     ['generated', 'generated', 'fresh random puzzle'],
     ['current', 'current', 'use loaded board'],
-  ];
-  const challengeKinds: [ChallengeKind, string, string][] = [
-    ['race', 'race', 'fastest clean finish wins'],
-    ['streak', 'streak battle', 'bad entries break ties before time'],
-  ];
+  ]
+  const details = [
+    challengeSetupLabel(kind),
+    source,
+    activeSize,
+    modeLabel(activeMode),
+    activeDifficulty,
+    VARIANTS[activeVariant ?? 'classic'].label,
+    isTurnBattle ? `${turnSeconds}s turns` : null,
+    isTurnBattle ? `${turnLives} lives` : null,
+    isLive ? 'live link' : (recipient?.name ?? 'open link'),
+  ].filter(Boolean)
 
   return (
-    <div className="flex flex-col">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <section className="border border-[var(--border)] bg-[var(--input-bg)]">
-        <div className="space-y-3 p-3">
-          {hasConvexBackend() ? (
-            <ChallengeTargetPicker
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-4 pb-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <section className="space-y-3">
+          <div className="border-b border-[var(--border)] pb-3">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[var(--accent)]">
+              {challengeSetupLabel(kind)}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+              {challengeSetupDescription(kind)}
+            </p>
+          </div>
+
+          {isLive ? (
+            <ChallengeReadOnlyField
+              label="target"
+              value="Live room link"
+              helper="Copy the invite link after the room is created."
+            />
+          ) : hasConvexBackend() ? (
+            <ChallengeTargetSelect
               onRecipientChange={onRecipientChange}
               onRecipientClear={onRecipientClear}
               recipient={recipient}
             />
           ) : (
-            <NewGameField label="target">
-              <div className="border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
-                open link only · friend targets need Convex
-              </div>
-            </NewGameField>
+            <ChallengeReadOnlyField
+              label="target"
+              value="Open link"
+              helper="Direct friend targets are unavailable right now. You can still create an open challenge link."
+            />
           )}
 
-          <NewGameField label="challenge mode">
-            <div className="grid gap-2 md:grid-cols-2">
-              {challengeKinds.map(([kindId, label, description]) => (
-                <button
-                  type="button"
-                  key={kindId}
-                  className={`border p-3 text-left font-mono transition ${
-                    kind === kindId
-                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
-                  }`}
-                  onClick={() => onKindChange(kindId)}
-                >
-                  <span className="block text-xs font-black uppercase tracking-[0.16em]">
-                    {label}
-                  </span>
-                  <span
-                    className={`mt-2 block text-xs leading-relaxed ${
-                      kind === kindId
-                        ? 'text-[var(--app-bg)] opacity-80'
-                        : 'text-[var(--muted)]'
-                    }`}
-                  >
-                    {description}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </NewGameField>
-
-          <NewGameField label="puzzle source">
-            <div className="grid gap-2 md:grid-cols-3">
-              {sources.map(([sourceId, label, description]) => (
-                <button
-                  type="button"
-                  key={sourceId}
-                  className={`border p-3 text-left font-mono transition ${
-                    source === sourceId
-                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
-                  }`}
-                  onClick={() => onSourceChange(sourceId)}
-                >
-                  <span className="block text-xs font-black uppercase tracking-[0.16em]">
-                    {label}
-                  </span>
-                  <span
-                    className={`mt-2 block text-xs leading-relaxed ${
-                      source === sourceId
-                        ? 'text-[var(--app-bg)] opacity-80'
-                        : 'text-[var(--muted)]'
-                    }`}
-                  >
-                    {description}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </NewGameField>
+          <ChallengeSelectField
+            label="puzzle source"
+            value={source}
+            onChange={(value) => onSourceChange(value as ChallengePuzzleSource)}
+            options={sources.map(([value, label, description]) => ({
+              description,
+              label,
+              value,
+            }))}
+          />
 
           {source !== 'current' && (
-            <>
-              <NewGameField label="board">
-                <div className="grid grid-cols-2 gap-2">
-                  {PUZZLE_SIZES.map((option) => (
-                    <button
-                      type="button"
-                      key={option}
-                      className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
-                        puzzleSize === option
-                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
-                      }`}
-                      onClick={() => onSizeChange(option)}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </NewGameField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ChallengeSelectField
+                label="board"
+                value={puzzleSize}
+                onChange={(value) => onSizeChange(value as PuzzleSize)}
+                options={PUZZLE_SIZES.map((value) => ({ label: value, value }))}
+              />
+              <ChallengeSelectField
+                label="mode"
+                value={mode}
+                onChange={(value) => onModeChange(value as PlayMode)}
+                options={PLAY_MODES.map((value) => ({
+                  label: modeLabel(value),
+                  value,
+                }))}
+              />
+              <ChallengeSelectField
+                label="difficulty"
+                value={difficulty}
+                onChange={(value) =>
+                  onDifficultyChange(value as PuzzleDifficulty)
+                }
+                options={NEW_GAME_DIFFICULTIES.map((value) => ({
+                  label: value,
+                  value,
+                }))}
+              />
+              <ChallengeSelectField
+                label="variant"
+                value={variant}
+                onChange={(value) => onVariantChange(value as VariantId)}
+                options={(Object.keys(VARIANTS) as VariantId[]).map(
+                  (value) => ({
+                    label: VARIANTS[value].label,
+                    value,
+                  }),
+                )}
+              />
+            </div>
+          )}
 
-              <NewGameField label="mode">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {PLAY_MODES.map((option) => (
-                    <button
-                      type="button"
-                      key={option}
-                      className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
-                        mode === option
-                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
-                      }`}
-                      onClick={() => onModeChange(option)}
-                    >
-                      {modeLabel(option)}
-                    </button>
-                  ))}
-                </div>
-              </NewGameField>
-
-              <NewGameField label="difficulty">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {NEW_GAME_DIFFICULTIES.map((option) => (
-                    <button
-                      type="button"
-                      key={option}
-                      className={`border px-3 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] transition ${
-                        difficulty === option
-                          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                          : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] hover:border-[var(--accent-2)] hover:text-[var(--app-text)]'
-                      }`}
-                      onClick={() => onDifficultyChange(option)}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </NewGameField>
-            </>
+          {isTurnBattle && (
+            <div className="grid gap-3 border-t border-[var(--border)] pt-3 sm:grid-cols-2">
+              <ChallengeRangeField
+                label="turn timer"
+                max={60}
+                min={8}
+                name="turn-seconds"
+                suffix="s"
+                value={turnSeconds}
+                onChange={onTurnSecondsChange}
+              />
+              <ChallengeRangeField
+                label="lives"
+                max={9}
+                min={1}
+                name="turn-lives"
+                value={turnLives}
+                onChange={onTurnLivesChange}
+              />
+            </div>
           )}
 
           {status && (
-            <p className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--accent)]">
+            <p className="border-t border-[var(--border)] pt-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--accent)]">
               {status}
             </p>
           )}
-        </div>
-      </section>
+        </section>
 
-      <section className="border border-[var(--border)] bg-[var(--input-bg)]">
-        <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-          [challenge-preview]
-        </header>
-        <div className="space-y-3 p-3">
-          <PuzzlePreview
-            grid={previewGrid}
-            givens={previewGrid.map((value) => value !== 0)}
-          />
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
-            <span className="font-bold text-[var(--accent)]">
-              {challengeKindLabel(kind)}
-            </span>
-            {recipient && (
-              <>
-                <span className="text-[var(--border)]">·</span>
-                <span className="text-[var(--app-text)]">{recipient.name}</span>
-              </>
-            )}
-            <span className="text-[var(--border)]">·</span>
-            <span>{source}</span>
-            <span className="text-[var(--border)]">·</span>
-            <span>{activeSize}</span>
-            <span className="text-[var(--border)]">·</span>
-            <span>{modeLabel(activeMode)}</span>
-            <span className="text-[var(--border)]">·</span>
-            <span>{activeDifficulty}</span>
-            <span className="text-[var(--border)]">·</span>
-            <span className="text-[var(--app-text)]">
-              {previewGrid.filter(Boolean).length}/
-              {boardConfigFor(activeSize).cellCount}
-            </span>
-            <span>filled</span>
-          </p>
-        </div>
-      </section>
+        <section className="space-y-3 border-l border-[var(--border)] pl-4 max-lg:border-l-0 max-lg:border-t max-lg:pl-0 max-lg:pt-4">
+          <div>
+            <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-[var(--muted)]">
+              summary
+            </p>
+            <p className="mt-1 font-mono text-xs uppercase leading-5 tracking-[0.12em] text-[var(--app-text)]">
+              {details.join(' · ')}
+            </p>
+            <p className="mt-2 font-mono text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
+              {filledCount === null
+                ? 'puzzle generated on create'
+                : `${filledCount}/${boardConfigFor(activeSize).cellCount} filled`}
+            </p>
+          </div>
+        </section>
       </div>
 
-      <div className="sticky bottom-0 z-10 -mx-3 -mb-3 mt-3 flex flex-col gap-2 border-t border-[var(--border)] bg-[var(--status-bg)] p-3 sm:flex-row">
+      <div className="sticky bottom-0 z-10 -mx-3 -mb-3 flex flex-col gap-2 border-t border-[var(--border)] bg-[var(--status-bg)] p-3 sm:flex-row sm:items-center">
         <button
           type="button"
-          className="border border-[var(--accent)] bg-[var(--accent)] px-4 py-3 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] sm:flex-1"
+          className="border border-[var(--accent)] bg-[var(--accent)] px-4 py-2.5 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] sm:min-w-72"
           onClick={onCreate}
         >
-          {recipient
-            ? `send ${challengeKindLabel(kind)}`
-            : `create ${challengeKindLabel(kind)} link`}
+          {!isLive && recipient
+            ? `send ${challengeSetupLabel(kind)}`
+            : `create ${challengeSetupLabel(kind)} link`}
         </button>
         {source !== 'current' && (
           <button
             type="button"
-            className="border border-[var(--border)] bg-[var(--button-bg)] px-4 py-3 font-mono text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--app-text)] sm:flex-1"
+            className="px-2 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.16em] text-[var(--muted)] transition hover:text-[var(--accent)] sm:ml-auto"
             onClick={onCreateCurrent}
           >
-            challenge current puzzle
+            use current puzzle
           </button>
         )}
       </div>
     </div>
-  );
+  )
 }
 
-function ChallengeTargetPicker({
+function ChallengeSelectField({
+  hideLabel = false,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  hideLabel?: boolean
+  label: string
+  onChange: (value: string) => void
+  options: { description?: string; label: string; value: string }[]
+  value: string
+}) {
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  )
+  const selected = options[selectedIndex] ?? options[0]
+
+  return (
+    <div className="grid gap-1.5 font-mono">
+      <p
+        className={`text-[0.65rem] uppercase tracking-[0.18em] text-[var(--muted)] ${
+          hideLabel ? 'sr-only' : ''
+        }`}
+      >
+        {label}
+      </p>
+      <SelectPrimitive.Root value={value} onValueChange={onChange}>
+        <SelectPrimitive.Trigger
+          aria-label={label}
+          className="group grid min-h-10 grid-cols-[minmax(0,1fr)_2rem] items-center border border-[var(--border)] bg-[var(--button-bg)] text-left transition hover:border-[var(--accent)] data-[state=open]:border-[var(--accent)]"
+        >
+          <SelectPrimitive.Value asChild>
+            <span className="min-w-0 truncate px-3 py-2 text-sm font-bold uppercase tracking-[0.08em] text-[var(--app-text)]">
+              {selected?.label ?? value}
+            </span>
+          </SelectPrimitive.Value>
+          <SelectPrimitive.Icon asChild>
+            <ChevronDown
+              aria-hidden="true"
+              className="place-self-center text-[var(--muted)] transition group-data-[state=open]:rotate-180 group-data-[state=open]:text-[var(--accent)]"
+              size={16}
+            />
+          </SelectPrimitive.Icon>
+        </SelectPrimitive.Trigger>
+        <SelectPrimitive.Portal>
+          <SelectPrimitive.Content
+            className="z-[60] max-h-64 w-[var(--radix-select-trigger-width)] overflow-hidden border border-[var(--accent)] bg-[var(--panel-bg)] font-mono shadow-[0_10px_24px_rgba(0,0,0,0.35)]"
+            collisionPadding={12}
+            position="popper"
+            sideOffset={4}
+          >
+            <SelectPrimitive.Viewport>
+              {options.map((option) => (
+                <SelectPrimitive.Item
+                  key={option.value}
+                  value={option.value}
+                  className="group grid cursor-pointer gap-1 px-3 py-2 text-left outline-none transition data-[highlighted]:bg-[var(--status-bg)] data-[highlighted]:text-[var(--accent)] data-[state=checked]:bg-[var(--accent)] data-[state=checked]:text-[var(--app-bg)]"
+                >
+                  <SelectPrimitive.ItemText>
+                    <span className="block truncate text-xs font-black uppercase tracking-[0.14em]">
+                      {option.label}
+                    </span>
+                    {option.description && (
+                      <span className="block text-xs leading-5 text-[var(--muted)] group-data-[state=checked]:text-[var(--app-bg)]">
+                        {option.description}
+                      </span>
+                    )}
+                  </SelectPrimitive.ItemText>
+                </SelectPrimitive.Item>
+              ))}
+            </SelectPrimitive.Viewport>
+          </SelectPrimitive.Content>
+        </SelectPrimitive.Portal>
+      </SelectPrimitive.Root>
+      {selected?.description && (
+        <p className="text-xs leading-5 text-[var(--muted)]">
+          {selected.description}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ChallengeReadOnlyField({
+  helper,
+  label,
+  value,
+}: {
+  helper: string
+  label: string
+  value: string
+}) {
+  return (
+    <div className="grid gap-1.5 font-mono">
+      <p className="text-[0.65rem] uppercase tracking-[0.18em] text-[var(--muted)]">
+        {label}
+      </p>
+      <div className="min-h-10 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-sm font-bold uppercase tracking-[0.08em] text-[var(--app-text)]">
+        {value}
+      </div>
+      <p className="text-xs leading-5 text-[var(--muted)]">{helper}</p>
+    </div>
+  )
+}
+
+function ChallengeRangeField({
+  label,
+  max,
+  min,
+  name,
+  onChange,
+  suffix = '',
+  value,
+}: {
+  label: string
+  max: number
+  min: number
+  name: string
+  onChange: (value: number) => void
+  suffix?: string
+  value: number
+}) {
+  return (
+    <label className="grid gap-1.5 font-mono">
+      <span className="flex items-baseline justify-between gap-3">
+        <span className="text-[0.65rem] uppercase tracking-[0.18em] text-[var(--muted)]">
+          {label}
+        </span>
+        <span className="text-sm font-black text-[var(--accent)] tabular-nums">
+          {value}
+          {suffix}
+        </span>
+      </span>
+      <input
+        className="h-10 w-full accent-[var(--accent)]"
+        max={max}
+        min={min}
+        name={name}
+        step={1}
+        type="range"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  )
+}
+
+function ChallengeTargetSelect({
   onRecipientChange,
   onRecipientClear,
   recipient,
 }: {
-  onRecipientChange: (friend: FriendSummary | null) => void;
-  onRecipientClear: () => void;
-  recipient: FriendSummary | null;
+  onRecipientChange: (friend: FriendSummary | null) => void
+  onRecipientClear: () => void
+  recipient: FriendSummary | null
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), []);
+  const anonId = useMemo(() => getOrCreateGuestId(), [])
   const rows = useQuery(listFriendsRef as FunctionReference<'query'>, {
     anonId,
-  }) as FriendshipRow[] | undefined;
-  const friends = rows?.filter((row) => row.status === 'accepted') ?? [];
+  }) as FriendshipRow[] | undefined
+  const friends = rows?.filter((row) => row.status === 'accepted') ?? []
+  const options = [
+    {
+      description: 'Anyone with the link can join.',
+      label: 'Open challenge link',
+      value: 'open',
+    },
+    ...friends.map((row) => ({
+      description: row.friend.friendCode || 'friend',
+      label: row.friend.name,
+      value: row.friend.anonId,
+    })),
+  ]
 
   return (
-    <NewGameField label="target">
-      <div className="grid gap-2">
-        <button
-          type="button"
-          className={`border p-3 text-left font-mono transition ${
-            recipient === null
-              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-              : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
-          }`}
-          onClick={onRecipientClear}
-        >
-          <span className="block text-xs font-black uppercase tracking-[0.16em]">
-            open challenge link
-          </span>
-          <span
-            className={`mt-2 block text-xs leading-relaxed ${
-              recipient === null ? 'text-[var(--app-bg)] opacity-80' : 'text-[var(--muted)]'
-            }`}
-          >
-            anyone with the link can join
-          </span>
-        </button>
-
-        {rows === undefined ? (
-          <div className="border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
-            loading friends...
-          </div>
-        ) : friends.length === 0 ? (
-          <div className="border border-[var(--border)] bg-[var(--status-bg)] p-3 font-mono text-xs leading-relaxed text-[var(--muted)]">
-            Add a friend from your profile before sending a direct challenge.
-          </div>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {friends.map((row) => {
-              const selected = recipient?.anonId === row.friend.anonId;
-              return (
-                <button
-                  type="button"
-                  key={row.friend.anonId}
-                  className={`border p-3 text-left font-mono transition ${
-                    selected
-                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
-                      : 'border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]'
-                  }`}
-                  onClick={() => onRecipientChange(row.friend)}
-                >
-                  <span className="block truncate text-xs font-black uppercase tracking-[0.16em]">
-                    {row.friend.name}
-                  </span>
-                  <span
-                    className={`mt-2 block text-[0.65rem] uppercase tracking-[0.14em] ${
-                      selected ? 'text-[var(--app-bg)] opacity-80' : 'text-[var(--muted)]'
-                    }`}
-                  >
-                    {row.friend.friendCode || 'friend'}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </NewGameField>
-  );
+    <div className="grid gap-1.5">
+      <ChallengeSelectField
+        label="target"
+        value={recipient?.anonId ?? 'open'}
+        onChange={(value) => {
+          if (value === 'open') {
+            onRecipientClear()
+            return
+          }
+          const row = friends.find(
+            (friendship) => friendship.friend.anonId === value,
+          )
+          onRecipientChange(row?.friend ?? null)
+        }}
+        options={options}
+      />
+      {rows === undefined && (
+        <p className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+          loading friends...
+        </p>
+      )}
+      {rows !== undefined && friends.length === 0 && (
+        <p className="font-mono text-xs leading-5 text-[var(--muted)]">
+          Add a friend from your profile before sending a direct challenge.
+        </p>
+      )}
+    </div>
+  )
 }
 
 function ChallengeRacePanel({
@@ -7289,23 +8060,23 @@ function ChallengeRacePanel({
   shareUrl,
   status,
 }: {
-  activeChallengeId: string | null;
-  challenge: ChallengeRace | null;
-  challengeId: string | null;
-  isCurrentSolved: boolean;
-  onContinue: () => void;
-  onCopyLink: () => void;
-  onStart: (challenge: ChallengeRace) => void;
-  shareUrl: string;
-  status: string;
+  activeChallengeId: string | null
+  challenge: ChallengeRace | null
+  challengeId: string | null
+  isCurrentSolved: boolean
+  onContinue: () => void
+  onCopyLink: () => void
+  onStart: (challenge: ChallengeRace) => void
+  shareUrl: string
+  status: string
 }) {
-  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
 
   useEffect(() => {
-    if (copyState !== 'copied') return;
-    const timer = window.setTimeout(() => setCopyState('idle'), 1800);
-    return () => window.clearTimeout(timer);
-  }, [copyState]);
+    if (copyState !== 'copied') return
+    const timer = window.setTimeout(() => setCopyState('idle'), 1800)
+    return () => window.clearTimeout(timer)
+  }, [copyState])
 
   if (!hasConvexBackend()) {
     return (
@@ -7314,11 +8085,11 @@ function ChallengeRacePanel({
           challenge backend offline
         </p>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
-          Challenge links use Convex so both players can see the same lobby
-          and submit results. Set `VITE_CONVEX_URL` to enable this mode.
+          Challenge links use Convex so both players can see the same lobby and
+          submit results. Set `VITE_CONVEX_URL` to enable this mode.
         </p>
       </section>
-    );
+    )
   }
 
   if (!challengeId) {
@@ -7326,7 +8097,7 @@ function ChallengeRacePanel({
       <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5 text-sm text-[var(--muted)]">
         No challenge selected.
       </section>
-    );
+    )
   }
 
   if (!challenge) {
@@ -7339,21 +8110,24 @@ function ChallengeRacePanel({
           {status || `Looking up ${challengeId}...`}
         </p>
       </section>
-    );
+    )
   }
 
-  const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize);
+  const puzzleGrid = parseGrid(challenge.puzzle, challenge.puzzleSize)
   const completedAttempts = challenge.attempts.filter(
     (attempt) => attempt.status === 'completed',
-  );
-  const leader = completedAttempts[0] ?? null;
-  const modeName = challengeKindLabel(challenge.challengeKind);
-  const isActiveRace = activeChallengeId === challenge.challengeId;
-  const actionLabel = isCurrentSolved
+  )
+  const leader = completedAttempts[0] ?? null
+  const modeName = challengeKindLabel(challenge.challengeKind)
+  const isActiveRace = activeChallengeId === challenge.challengeId
+  const isClosed = challenge.status === 'closed'
+  const actionLabel = isClosed
+    ? `${modeName} closed`
+    : isCurrentSolved
     ? 'result submitted'
     : isActiveRace
       ? `continue ${modeName}`
-      : `start ${modeName}`;
+      : `start ${modeName}`
 
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -7370,10 +8144,11 @@ function ChallengeRacePanel({
           <button
             type="button"
             className="border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isCurrentSolved}
+            disabled={isClosed || isCurrentSolved}
             onClick={() => {
-              if (isActiveRace) onContinue();
-              else onStart(challenge);
+              if (isClosed) return
+              if (isActiveRace) onContinue()
+              else onStart(challenge)
             }}
           >
             {actionLabel}
@@ -7394,7 +8169,10 @@ function ChallengeRacePanel({
               />
               <ChallengeMeta label="challenge" value={modeName} />
               <ChallengeMeta label="grid" value={challenge.puzzleSize} />
-              <ChallengeMeta label="rules" value={modeLabel(challenge.playMode)} />
+              <ChallengeMeta
+                label="rules"
+                value={modeLabel(challenge.playMode)}
+              />
               <ChallengeMeta
                 label="difficulty"
                 value={challenge.difficulty ?? 'custom'}
@@ -7406,7 +8184,8 @@ function ChallengeRacePanel({
               </p>
               <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <code className="min-w-0 truncate border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs text-[var(--app-text)]">
-                  {shareUrl || `${window.location.origin}${challengePath(challenge.challengeId)}`}
+                  {shareUrl ||
+                    `${window.location.origin}${challengePath(challenge.challengeId)}`}
                 </code>
                 <button
                   type="button"
@@ -7417,8 +8196,8 @@ function ChallengeRacePanel({
                       : 'border-[var(--border)] bg-[var(--button-bg)] hover:border-[var(--accent)]'
                   }`}
                   onClick={() => {
-                    onCopyLink();
-                    setCopyState('copied');
+                    onCopyLink()
+                    setCopyState('copied')
                   }}
                 >
                   {copyState === 'copied' ? 'copied' : 'copy'}
@@ -7435,7 +8214,9 @@ function ChallengeRacePanel({
               </p>
             </div>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
-              {challenge.challengeKind === 'streak'
+              {isClosed
+                ? 'This legacy race is closed. The preserved result is still visible here, but the link no longer accepts new attempts.'
+                : challenge.challengeKind === 'streak'
                 ? 'Both players solve this exact puzzle. Bad entries count against your streak score, then time breaks ties.'
                 : 'Both players solve this exact puzzle. The race starts when each player presses start, and fastest completed time wins.'}
             </p>
@@ -7445,7 +8226,9 @@ function ChallengeRacePanel({
 
       <section className="border border-[var(--border)] bg-[var(--input-bg)]">
         <header className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
-          [{challenge.challengeKind === 'streak' ? 'streak-board' : 'race-board'}]
+          [
+          {challenge.challengeKind === 'streak' ? 'streak-board' : 'race-board'}
+          ]
         </header>
         {challenge.attempts.length === 0 ? (
           <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
@@ -7485,7 +8268,7 @@ function ChallengeRacePanel({
         )}
       </section>
     </div>
-  );
+  )
 }
 
 function LiveBattleRoomPanel({
@@ -7500,24 +8283,30 @@ function LiveBattleRoomPanel({
   shareUrl,
   status,
 }: {
-  activeRoomId: string | null;
-  currentAnonId: string;
-  isCurrentSolved: boolean;
-  onContinue: () => void;
-  onCopyLink: () => void;
-  onStart: (room: LiveBattleRoom) => void;
-  room: LiveBattleRoom | null;
-  roomId: string | null;
-  shareUrl: string;
-  status: string;
+  activeRoomId: string | null
+  currentAnonId: string
+  isCurrentSolved: boolean
+  onContinue: () => void
+  onCopyLink: () => void
+  onStart: (room: LiveBattleRoom) => void
+  room: LiveBattleRoom | null
+  roomId: string | null
+  shareUrl: string
+  status: string
 }) {
-  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
-    if (copyState !== 'copied') return;
-    const timer = window.setTimeout(() => setCopyState('idle'), 1800);
-    return () => window.clearTimeout(timer);
-  }, [copyState]);
+    if (copyState !== 'copied') return
+    const timer = window.setTimeout(() => setCopyState('idle'), 1800)
+    return () => window.clearTimeout(timer)
+  }, [copyState])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 250)
+    return () => window.clearInterval(timer)
+  }, [])
 
   if (!hasConvexBackend()) {
     return (
@@ -7530,7 +8319,7 @@ function LiveBattleRoomPanel({
           `VITE_CONVEX_URL` to enable this mode.
         </p>
       </section>
-    );
+    )
   }
 
   if (!roomId) {
@@ -7538,7 +8327,7 @@ function LiveBattleRoomPanel({
       <section className="border border-[var(--border)] bg-[var(--input-bg)] p-5 text-sm text-[var(--muted)]">
         No live room selected.
       </section>
-    );
+    )
   }
 
   if (!room) {
@@ -7551,24 +8340,54 @@ function LiveBattleRoomPanel({
           {status || `Looking up ${roomId}...`}
         </p>
       </section>
-    );
+    )
   }
 
-  const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize);
-  const isActiveRoom = activeRoomId === room.roomId;
-  const roomLabel = room.battleKind === 'turns' ? 'turn battle' : 'live race';
-  const actionLabel = isCurrentSolved
-    ? 'finished'
-    : isActiveRoom
-      ? `continue ${roomLabel}`
-      : `join ${roomLabel}`;
-  const cellCount = boardConfigFor(room.puzzleSize).cellCount;
-  const now = Date.now();
-  const me = room.presence.find((player) => player.anonId === currentAnonId) ?? null;
-  const opponents = room.presence.filter((player) => player.anonId !== currentAnonId);
-  const onlineOpponents = opponents.filter((player) => now - player.lastSeenAt < 8000);
-  const currentTurnPlayer =
-    room.turnAnonId ? room.presence.find((player) => player.anonId === room.turnAnonId) : null;
+  const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize)
+  const isActiveRoom = activeRoomId === room.roomId
+  const roomLabel = room.battleKind === 'turns' ? 'turn battle' : 'live race'
+  const cellCount = boardConfigFor(room.puzzleSize).cellCount
+  const now = nowMs
+  const me =
+    room.presence.find((player) => player.anonId === currentAnonId) ?? null
+  const opponents = room.presence.filter(
+    (player) => player.anonId !== currentAnonId,
+  )
+  const onlineOpponents = opponents.filter(
+    (player) => now - player.lastSeenAt < 8000,
+  )
+  const currentTurnPlayer = room.turnAnonId
+    ? room.presence.find((player) => player.anonId === room.turnAnonId)
+    : null
+  const winner = room.winnerAnonId
+    ? room.presence.find((player) => player.anonId === room.winnerAnonId)
+    : null
+  const raceCountdownMs =
+    room.battleKind === 'race' && room.raceStartsAt
+      ? Math.max(0, room.raceStartsAt - now)
+      : null
+  const canStartRace =
+    room.battleKind !== 'race' ||
+    room.status === 'live' ||
+    (typeof raceCountdownMs === 'number' && raceCountdownMs <= 0)
+  const actionLabel =
+    room.battleKind === 'race' && room.status === 'finished'
+      ? winner?.anonId === currentAnonId
+        ? 'you won'
+        : 'race finished'
+      : isCurrentSolved
+        ? 'finished'
+        : isActiveRoom
+          ? `continue ${roomLabel}`
+          : room.battleKind === 'race' && room.status === 'waiting'
+            ? typeof raceCountdownMs === 'number'
+              ? `starts in ${Math.max(1, Math.ceil(raceCountdownMs / 1000))}`
+              : 'ready / waiting'
+            : `join ${roomLabel}`
+  const actionDisabled =
+    isCurrentSolved ||
+    room.status === 'finished' ||
+    (room.battleKind === 'race' && !isActiveRoom && !canStartRace)
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -7576,7 +8395,11 @@ function LiveBattleRoomPanel({
         <header className="grid gap-3 border-b border-[var(--border)] bg-[var(--status-bg)] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div className="min-w-0">
             <p className="font-mono text-[0.65rem] font-black uppercase tracking-[0.2em] text-[var(--accent)]">
-              [{room.battleKind === 'turns' ? 'turn-battle-room' : 'live-race-room'}]
+              [
+              {room.battleKind === 'turns'
+                ? 'turn-battle-room'
+                : 'live-race-room'}
+              ]
             </p>
             <h2 className="mt-1 truncate font-mono text-xl font-black uppercase tracking-[0.12em] text-[var(--app-text)]">
               {room.roomId}
@@ -7586,6 +8409,16 @@ function LiveBattleRoomPanel({
                 ? `${onlineOpponents.length} opponent${onlineOpponents.length === 1 ? '' : 's'} online`
                 : 'waiting for opponent'}
               {me ? ` · you are ${me.status}` : ' · joining presence'}
+              {room.battleKind === 'race' &&
+              typeof raceCountdownMs === 'number' &&
+              room.status === 'waiting'
+                ? ` · starts in ${Math.max(1, Math.ceil(raceCountdownMs / 1000))}s`
+                : ''}
+              {room.battleKind === 'race' &&
+              room.status === 'finished' &&
+              winner
+                ? ` · ${winner.player} finished first`
+                : ''}
               {room.battleKind === 'turns' && currentTurnPlayer
                 ? ` · turn: ${currentTurnPlayer.player}`
                 : ''}
@@ -7594,10 +8427,10 @@ function LiveBattleRoomPanel({
           <button
             type="button"
             className="border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isCurrentSolved}
+            disabled={actionDisabled}
             onClick={() => {
-              if (isActiveRoom) onContinue();
-              else onStart(room);
+              if (isActiveRoom) onContinue()
+              else onStart(room)
             }}
           >
             {actionLabel}
@@ -7616,15 +8449,18 @@ function LiveBattleRoomPanel({
                 label="battle"
                 value={
                   room.battleKind === 'turns'
-                    ? `turns / ${room.turnSeconds}s`
-                    : 'race'
+                    ? `turns / ${room.turnSeconds}s / ${room.turnLives} lives`
+                    : '2-player race'
                 }
               />
               <ChallengeMeta
                 label="difficulty"
                 value={room.difficulty ?? 'custom'}
               />
-              <ChallengeMeta label="variant" value={VARIANTS[room.variantId].label} />
+              <ChallengeMeta
+                label="variant"
+                value={VARIANTS[room.variantId].label}
+              />
             </div>
             <div className="border border-[var(--border)] bg-[var(--panel-bg)] p-3">
               <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -7632,7 +8468,8 @@ function LiveBattleRoomPanel({
               </p>
               <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <code className="min-w-0 truncate border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs text-[var(--app-text)]">
-                  {shareUrl || `${window.location.origin}${liveBattlePath(room.roomId)}`}
+                  {shareUrl ||
+                    `${window.location.origin}${liveBattlePath(room.roomId)}`}
                 </code>
                 <button
                   type="button"
@@ -7643,8 +8480,8 @@ function LiveBattleRoomPanel({
                       : 'border-[var(--border)] bg-[var(--button-bg)] hover:border-[var(--accent)]'
                   }`}
                   onClick={() => {
-                    onCopyLink();
-                    setCopyState('copied');
+                    onCopyLink()
+                    setCopyState('copied')
                   }}
                 >
                   {copyState === 'copied' ? 'copied' : 'copy'}
@@ -7652,9 +8489,9 @@ function LiveBattleRoomPanel({
               </div>
             </div>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
-              This is a live room. You should appear in presence as ready within a few seconds.
-              Open the invite in another device, another browser, or an incognito window to see a
-              second player.
+              {room.battleKind === 'race'
+                ? 'This race has two seats. Once both players are present, a short countdown starts and the first completed grid wins.'
+                : 'This is a live room. You should appear in presence as ready within a few seconds. Open the invite in another device, another browser, or an incognito window to see a second player.'}
             </p>
           </div>
         </div>
@@ -7671,73 +8508,80 @@ function LiveBattleRoomPanel({
         ) : (
           <div>
             <div className="border-b border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
-              {me ? 'you are visible in this live room' : 'joining live presence...'}
+              {me
+                ? 'you are visible in this live room'
+                : 'joining live presence...'}
               {opponents.length === 0 ? ' · no opponents yet' : ''}
             </div>
             <div className="divide-y divide-[var(--border)]">
-            {room.presence.map((player, index) => {
-              const online = now - player.lastSeenAt < 8000;
-              const percent = Math.round((player.completion / cellCount) * 100);
-              const isMe = player.anonId === currentAnonId;
-              return (
-                <div
-                  key={player.anonId}
-                  className={`grid gap-2 px-3 py-3 font-mono ${
-                    room.turnAnonId === player.anonId
-                      ? 'bg-[var(--cell-peer)] text-[var(--app-bg)]'
-                      : ''
-                  }`}
-                >
-                  <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-baseline gap-2">
-                    <span className="text-xs font-black text-[var(--accent)]">
-                      {String(index + 1).padStart(2, '0')}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black uppercase tracking-[0.08em] text-[var(--app-text)]">
-                        {player.player}
-                        {isMe ? ' / you' : ''}
-                      </p>
-                      <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
-                        {online ? 'online' : 'away'} · {player.status}
-                        {room.turnAnonId === player.anonId ? ' · turn' : ''}
-                        {typeof player.selectedCell === 'number'
-                          ? ` · ${labelCell(player.selectedCell, room.puzzleSize)}`
-                          : ''}
-                      </p>
+              {room.presence.map((player, index) => {
+                const online = now - player.lastSeenAt < 8000
+                const percent = Math.round(
+                  (player.completion / cellCount) * 100,
+                )
+                const isMe = player.anonId === currentAnonId
+                return (
+                  <div
+                    key={player.anonId}
+                    className={`grid gap-2 px-3 py-3 font-mono ${
+                      room.turnAnonId === player.anonId
+                        ? 'bg-[var(--cell-peer)] text-[var(--app-bg)]'
+                        : ''
+                    }`}
+                  >
+                    <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-baseline gap-2">
+                      <span className="text-xs font-black text-[var(--accent)]">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black uppercase tracking-[0.08em] text-[var(--app-text)]">
+                          {player.player}
+                          {isMe ? ' / you' : ''}
+                        </p>
+                        <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+                          {online ? 'online' : 'away'} · {player.status}
+                          {room.turnAnonId === player.anonId ? ' · turn' : ''}
+                          {typeof player.selectedCell === 'number'
+                            ? ` · ${labelCell(player.selectedCell, room.puzzleSize)}`
+                            : ''}
+                        </p>
+                      </div>
+                      <span className="text-sm font-black text-[var(--accent)]">
+                        {formatDuration(player.elapsedMs)}
+                      </span>
                     </div>
-                    <span className="text-sm font-black text-[var(--accent)]">
-                      {formatDuration(player.elapsedMs)}
-                    </span>
+                    <div className="h-2 border border-[var(--border)] bg-[var(--status-bg)]">
+                      <div
+                        className="h-full bg-[var(--accent)] transition-all"
+                        style={{ width: `${Math.min(100, percent)}%` }}
+                      />
+                    </div>
+                    <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+                      {player.completion}/{cellCount} filled
+                      {player.mistakes > 0
+                        ? ` · ${player.mistakes} misses`
+                        : ''}
+                      {room.battleKind === 'turns'
+                        ? ` · ${player.lives ?? room.turnLives} lives`
+                        : ''}
+                    </p>
                   </div>
-                  <div className="h-2 border border-[var(--border)] bg-[var(--status-bg)]">
-                    <div
-                      className="h-full bg-[var(--accent)] transition-all"
-                      style={{ width: `${Math.min(100, percent)}%` }}
-                    />
-                  </div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
-                    {player.completion}/{cellCount} filled
-                    {player.mistakes > 0 ? ` · ${player.mistakes} misses` : ''}
-                    {room.battleKind === 'turns'
-                      ? ` · ${player.lives ?? 3} lives`
-                      : ''}
-                  </p>
-                </div>
-              );
-            })}
+                )
+              })}
             </div>
             {opponents.length === 0 && (
               <p className="border-t border-[var(--border)] p-3 text-sm leading-relaxed text-[var(--muted)]">
-                Send the invite link to a friend, or open it in an incognito window to test a
-                second guest identity. A normal duplicate tab uses the same local guest id, so it
-                updates your row instead of creating another player.
+                Send the invite link to a friend, or open it in an incognito
+                window to test a second guest identity. A normal duplicate tab
+                uses the same local guest id, so it updates your row instead of
+                creating another player.
               </p>
             )}
           </div>
         )}
       </section>
     </div>
-  );
+  )
 }
 
 function LiveBattlePresencePanel({
@@ -7746,45 +8590,57 @@ function LiveBattlePresencePanel({
   puzzleSize,
   room,
 }: {
-  cellCount: number;
-  currentAnonId: string;
-  puzzleSize: PuzzleSize;
-  room: LiveBattleRoom | null;
+  cellCount: number
+  currentAnonId: string
+  puzzleSize: PuzzleSize
+  room: LiveBattleRoom | null
 }) {
-  const now = Date.now();
+  const now = Date.now()
 
   if (!room) {
     return (
       <p className="font-mono text-xs leading-relaxed text-[var(--muted)]">
         Connecting to live room...
       </p>
-    );
+    )
   }
 
-  const opponents = room.presence.filter((player) => player.anonId !== currentAnonId);
+  const opponents = room.presence.filter(
+    (player) => player.anonId !== currentAnonId,
+  )
   const currentTurn = room.turnAnonId
     ? room.presence.find((player) => player.anonId === room.turnAnonId)
-    : null;
-  const remainingMs = room.turnEndsAt
-    ? Math.max(0, room.turnEndsAt - now)
-    : 0;
+    : null
+  const winner = room.winnerAnonId
+    ? room.presence.find((player) => player.anonId === room.winnerAnonId)
+    : null
+  const remainingMs = room.turnEndsAt ? Math.max(0, room.turnEndsAt - now) : 0
+  const raceCountdownMs = room.raceStartsAt
+    ? Math.max(0, room.raceStartsAt - now)
+    : 0
 
   return (
     <div className="space-y-2 font-mono">
       <div className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
-        {room.battleKind === 'turns'
-          ? currentTurn
-            ? `${currentTurn.anonId === currentAnonId ? 'your' : currentTurn.player} turn · ${Math.ceil(remainingMs / 1000)}s`
-            : 'waiting to assign turn'
-          : opponents.length === 0
-            ? 'waiting for opponent'
-            : `${opponents.length} opponent${opponents.length === 1 ? '' : 's'}`}
+        {room.status === 'finished' && winner
+          ? winner.anonId === currentAnonId
+            ? 'race finished · you won'
+            : `race finished · ${winner.player} won`
+          : room.battleKind === 'turns'
+            ? currentTurn
+              ? `${currentTurn.anonId === currentAnonId ? 'your' : currentTurn.player} turn · ${Math.ceil(remainingMs / 1000)}s`
+              : 'waiting to assign turn'
+            : room.status === 'waiting' && room.raceStartsAt
+              ? `race starts in ${Math.max(1, Math.ceil(raceCountdownMs / 1000))}s`
+              : opponents.length === 0
+                ? 'waiting for opponent'
+                : `${opponents.length} opponent${opponents.length === 1 ? '' : 's'}`}
       </div>
       <div className="space-y-2">
         {room.presence.map((player) => {
-          const online = now - player.lastSeenAt < 8000;
-          const percent = Math.round((player.completion / cellCount) * 100);
-          const hasTurn = room.turnAnonId === player.anonId;
+          const online = now - player.lastSeenAt < 8000
+          const percent = Math.round((player.completion / cellCount) * 100)
+          const hasTurn = room.turnAnonId === player.anonId
           return (
             <div
               key={player.anonId}
@@ -7801,7 +8657,7 @@ function LiveBattlePresencePanel({
                 </p>
                 <span className="text-[0.65rem] text-[var(--accent)]">
                   {room.battleKind === 'turns'
-                    ? `${player.lives ?? 3} lives`
+                    ? `${player.lives ?? room.turnLives} lives`
                     : formatDuration(player.elapsedMs)}
                 </span>
               </div>
@@ -7822,11 +8678,11 @@ function LiveBattlePresencePanel({
                 {player.completion}/{cellCount}
               </p>
             </div>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }
 
 function ChallengeMeta({ label, value }: { label: string; value: string }) {
@@ -7839,7 +8695,7 @@ function ChallengeMeta({ label, value }: { label: string; value: string }) {
         {value}
       </p>
     </div>
-  );
+  )
 }
 
 function LeaderboardPanel({
@@ -7847,11 +8703,13 @@ function LeaderboardPanel({
   empty,
   title,
 }: {
-  children: ReactNode;
-  empty: string;
-  title: string;
+  children: ReactNode
+  empty: string
+  title: string
 }) {
-  const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children);
+  const hasRows = Array.isArray(children)
+    ? children.length > 0
+    : Boolean(children)
 
   return (
     <section className="min-h-[420px] border border-[var(--border)] bg-[var(--input-bg)]">
@@ -7862,11 +8720,13 @@ function LeaderboardPanel({
         {hasRows ? (
           children
         ) : (
-          <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">{empty}</p>
+          <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
+            {empty}
+          </p>
         )}
       </div>
     </section>
-  );
+  )
 }
 
 function LeaderboardRow({
@@ -7875,10 +8735,10 @@ function LeaderboardRow({
   secondary,
   time,
 }: {
-  primary: string;
-  rank: number;
-  secondary: string;
-  time: string;
+  primary: string
+  rank: number
+  secondary: string
+  time: string
 }) {
   return (
     <div className="grid grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border)] px-3 py-2 font-mono last:border-b-0">
@@ -7897,18 +8757,18 @@ function LeaderboardRow({
         {time}
       </span>
     </div>
-  );
+  )
 }
 
 type ProfileStats = {
-  averageElapsedMs?: number;
-  bestElapsedMs?: number;
-  completedCount: number;
-  currentStreak: number;
-  inProgressCount: number;
-  lastCompletedAt?: string;
-  syncedGames: number;
-};
+  averageElapsedMs?: number
+  bestElapsedMs?: number
+  completedCount: number
+  currentStreak: number
+  inProgressCount: number
+  lastCompletedAt?: string
+  syncedGames: number
+}
 
 function ProfilePanel({
   cloudProfile,
@@ -7920,21 +8780,21 @@ function ProfilePanel({
   onViewFriendProfile,
   playerName,
 }: {
-  cloudProfile: CloudProfile | null;
-  cloudStats: CloudStats | null;
-  guestId: string;
-  localStats: ProfileStats;
-  onChallengeFriend: (friend: FriendSummary) => void;
-  onNameChange: (value: string) => void;
-  onViewFriendProfile: (friend: FriendSummary) => void;
-  playerName: string;
+  cloudProfile: CloudProfile | null
+  cloudStats: CloudStats | null
+  guestId: string
+  localStats: ProfileStats
+  onChallengeFriend: (friend: FriendSummary) => void
+  onNameChange: (value: string) => void
+  onViewFriendProfile: (friend: FriendSummary) => void
+  playerName: string
 }) {
-  const isCloud = Boolean(cloudStats);
-  const syncedCompleted = cloudStats?.completedCount ?? 0;
-  const completedCount = Math.max(localStats.completedCount, syncedCompleted);
+  const isCloud = Boolean(cloudStats)
+  const syncedCompleted = cloudStats?.completedCount ?? 0
+  const completedCount = Math.max(localStats.completedCount, syncedCompleted)
   const joined = cloudProfile?.createdAt
     ? formatGameDate(cloudProfile.createdAt)
-    : 'local guest';
+    : 'local guest'
 
   return (
     <div className="grid gap-3 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -7959,7 +8819,10 @@ function ProfilePanel({
             />
           </label>
           <ProfileMeta label="guest id" value={shortGuestId(guestId)} />
-          <ProfileMeta label="friend code" value={cloudProfile?.friendCode ?? 'syncing'} />
+          <ProfileMeta
+            label="friend code"
+            value={cloudProfile?.friendCode ?? 'syncing'}
+          />
           <ProfileMeta label="joined" value={joined} />
           <ProfileMeta
             label="sync"
@@ -7975,12 +8838,17 @@ function ProfilePanel({
         </header>
         <div className="grid grid-cols-2 gap-px bg-[var(--border)] lg:grid-cols-3">
           <ProfileStat label="completed" value={String(completedCount)} />
-          <ProfileStat label="in progress" value={String(localStats.inProgressCount)} />
+          <ProfileStat
+            label="in progress"
+            value={String(localStats.inProgressCount)}
+          />
           <ProfileStat label="streak" value={`${localStats.currentStreak}d`} />
           <ProfileStat
             label="best"
             value={
-              localStats.bestElapsedMs ? formatDuration(localStats.bestElapsedMs) : '--'
+              localStats.bestElapsedMs
+                ? formatDuration(localStats.bestElapsedMs)
+                : '--'
             }
           />
           <ProfileStat
@@ -8024,14 +8892,14 @@ function ProfilePanel({
               [friends offline]
             </p>
             <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-              Friends use the Convex backend so guest codes and requests can sync
-              between browsers.
+              Friends use the Convex backend so guest codes and requests can
+              sync between browsers.
             </p>
           </section>
         )}
       </div>
     </div>
-  );
+  )
 }
 
 function PublicProfileOffline({ onBack }: { onBack: () => void }) {
@@ -8041,8 +8909,8 @@ function PublicProfileOffline({ onBack }: { onBack: () => void }) {
         [public profile offline]
       </p>
       <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-        Public profiles use the Convex backend so stats and recent solves can sync
-        between players.
+        Public profiles use the Convex backend so stats and recent solves can
+        sync between players.
       </p>
       <button
         type="button"
@@ -8052,7 +8920,7 @@ function PublicProfileOffline({ onBack }: { onBack: () => void }) {
         back
       </button>
     </section>
-  );
+  )
 }
 
 function ProfileMeta({
@@ -8060,18 +8928,20 @@ function ProfileMeta({
   label,
   value,
 }: {
-  accent?: boolean;
-  label: string;
-  value: string;
+  accent?: boolean
+  label: string
+  value: string
 }) {
   return (
     <div className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em]">
       <span className="text-[var(--muted)]">{label}</span>
-      <span className={accent ? 'text-[var(--accent)]' : 'text-[var(--app-text)]'}>
+      <span
+        className={accent ? 'text-[var(--accent)]' : 'text-[var(--app-text)]'}
+      >
         {value}
       </span>
     </div>
-  );
+  )
 }
 
 function ProfileStat({ label, value }: { label: string; value: string }) {
@@ -8084,7 +8954,7 @@ function ProfileStat({ label, value }: { label: string; value: string }) {
         {value}
       </p>
     </div>
-  );
+  )
 }
 
 function PreviewRow({ label, value }: { label: string; value: string }) {
@@ -8095,26 +8965,20 @@ function PreviewRow({ label, value }: { label: string; value: string }) {
       </dt>
       <dd className="truncate text-right text-[var(--app-text)]">{value}</dd>
     </div>
-  );
+  )
 }
 
 // A real mini board — digits sized in cqw so they fit the preview at any width.
-function PuzzlePreview({
-  grid,
-  givens,
-}: {
-  grid: Grid;
-  givens: boolean[];
-}) {
-  const config = boardConfigFor(puzzleSizeFromGrid(grid));
+function PuzzlePreview({ grid, givens }: { grid: Grid; givens: boolean[] }) {
+  const config = boardConfigFor(puzzleSizeFromGrid(grid))
   return (
     <div
       className="@container mx-auto grid aspect-square w-full max-w-[300px] border-2 border-[var(--grid-line)] bg-[var(--grid-line)]"
       style={{ gridTemplateColumns: `repeat(${config.size}, minmax(0, 1fr))` }}
     >
       {grid.map((value, index) => {
-        const row = Math.floor(index / config.size);
-        const col = index % config.size;
+        const row = Math.floor(index / config.size)
+        const col = index % config.size
         return (
           <div
             key={labelCell(index, config.puzzleSize)}
@@ -8128,10 +8992,10 @@ function PuzzlePreview({
           >
             {value || ''}
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 function TuiModal({
@@ -8142,19 +9006,19 @@ function TuiModal({
   title,
   wide = false,
 }: {
-  children: ReactNode;
-  footer?: string;
-  narrow?: boolean;
-  onClose: () => void;
-  title: string;
-  wide?: boolean;
+  children: ReactNode
+  footer?: string
+  narrow?: boolean
+  onClose: () => void
+  title: string
+  wide?: boolean
 }) {
   return (
     <TuiDialog
       footer={footer}
       narrow={narrow}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) onClose()
       }}
       open
       title={title}
@@ -8162,7 +9026,7 @@ function TuiModal({
     >
       {children}
     </TuiDialog>
-  );
+  )
 }
 
 function Panel({
@@ -8171,15 +9035,15 @@ function Panel({
   onToggle,
   title,
 }: {
-  children: React.ReactNode;
-  collapsed?: boolean;
-  onToggle?: () => void;
-  title?: string;
+  children: React.ReactNode
+  collapsed?: boolean
+  onToggle?: () => void
+  title?: string
 }) {
   return (
     <section className="relative border border-[var(--border)] bg-[var(--panel-bg)] p-4">
-      {title && (
-        onToggle ? (
+      {title &&
+        (onToggle ? (
           <button
             type="button"
             aria-expanded={!collapsed}
@@ -8192,8 +9056,7 @@ function Panel({
           <span className="absolute -top-[7px] left-3 bg-[var(--sidebar-bg)] px-1.5 font-mono text-[0.65rem] font-bold uppercase leading-none tracking-[0.2em] text-[var(--accent)]">
             {title}
           </span>
-        )
-      )}
+        ))}
       <div
         className={`overflow-hidden transition-[max-height,opacity] duration-200 ${
           collapsed ? 'max-h-0 opacity-0' : 'max-h-96 opacity-100'
@@ -8202,7 +9065,7 @@ function Panel({
         {children}
       </div>
     </section>
-  );
+  )
 }
 
 function StatusLine({
@@ -8220,42 +9083,45 @@ function StatusLine({
   timerEnabled,
   timerPaused,
 }: {
-  cellLabel: string;
-  cellCount: number;
-  challengeMistakes?: number;
-  compact: boolean;
-  completion: number;
-  elapsedMs: number;
-  message: string;
-  mode: EditorMode;
-  noteMode: boolean;
-  onToggleNotes: () => void;
-  onToggleTimer: () => void;
-  timerEnabled: boolean;
-  timerPaused: boolean;
+  cellLabel: string
+  cellCount: number
+  challengeMistakes?: number
+  compact: boolean
+  completion: number
+  elapsedMs: number
+  message: string
+  mode: EditorMode
+  noteMode: boolean
+  onToggleNotes: () => void
+  onToggleTimer: () => void
+  timerEnabled: boolean
+  timerPaused: boolean
 }) {
-  const percent = Math.round((completion / cellCount) * 100);
+  const percent = Math.round((completion / cellCount) * 100)
   const modeBg =
     mode === 'visual'
       ? 'var(--cell-search)'
       : mode === 'color'
         ? 'var(--cell-hint)'
-      : mode === 'corner'
-        ? 'var(--accent-2)'
-      : mode === 'annotate'
-        ? 'var(--accent-2)'
-        : 'var(--accent)';
+        : mode === 'corner'
+          ? 'var(--accent-2)'
+          : mode === 'annotate'
+            ? 'var(--accent-2)'
+            : 'var(--accent)'
 
   // Lualine-style sections: A=mode, B=context, C=message, X=keys, Y=stats, Z=done.
   const section =
-    'flex h-full shrink-0 items-center whitespace-nowrap px-3 font-bold uppercase tracking-[0.16em]';
+    'flex h-full shrink-0 items-center whitespace-nowrap px-3 font-bold uppercase tracking-[0.16em]'
 
   return (
     <div
       data-testid="status-line"
       className="flex h-8 shrink-0 select-none items-stretch overflow-hidden border-t border-[var(--border)] bg-[var(--status-bg)] font-mono text-xs"
     >
-      <div className={section} style={{ background: modeBg, color: 'var(--app-bg)' }}>
+      <div
+        className={section}
+        style={{ background: modeBg, color: 'var(--app-bg)' }}
+      >
         {editorModeLabel(mode)}
       </div>
       <Wedge direction="right" tip={modeBg} field="var(--panel-soft)" />
@@ -8275,7 +9141,11 @@ function StatusLine({
           centre {noteMode ? 'on' : 'off'}
         </button>
       </div>
-      <Wedge direction="right" tip="var(--panel-soft)" field="var(--status-bg)" />
+      <Wedge
+        direction="right"
+        tip="var(--panel-soft)"
+        field="var(--status-bg)"
+      />
 
       <div className="flex min-w-0 flex-1 items-center gap-2 px-3">
         <span className="text-[var(--accent)]">{'›'}</span>
@@ -8295,19 +9165,35 @@ function StatusLine({
           </span>
         </div>
       )}
-      <Wedge direction="left" tip="var(--panel-soft)" field="var(--status-bg)" />
+      <Wedge
+        direction="left"
+        tip="var(--panel-soft)"
+        field="var(--status-bg)"
+      />
 
       <div
         className={`${section} gap-3`}
         style={{ background: 'var(--panel-soft)', color: 'var(--app-text)' }}
       >
-        {!compact && <span>{completion}/{cellCount}</span>}
+        {!compact && (
+          <span>
+            {completion}/{cellCount}
+          </span>
+        )}
         {challengeMistakes !== undefined && (
-          <span className="text-[var(--accent-2)]">{challengeMistakes} miss</span>
+          <span className="text-[var(--accent-2)]">
+            {challengeMistakes} miss
+          </span>
         )}
         <button
           type="button"
-          title={timerEnabled ? (timerPaused ? 'Resume timer' : 'Pause timer') : 'Zen mode does not track time'}
+          title={
+            timerEnabled
+              ? timerPaused
+                ? 'Resume timer'
+                : 'Pause timer'
+              : 'Zen mode does not track time'
+          }
           onClick={onToggleTimer}
           disabled={!timerEnabled}
           className={`inline-flex items-center gap-1.5 uppercase tracking-[0.14em] transition hover:brightness-150 ${
@@ -8318,80 +9204,84 @@ function StatusLine({
                 : 'text-[var(--muted)]'
           }`}
         >
-          {timerEnabled && (timerPaused ? <Play size={13} /> : <Pause size={13} />)}
+          {timerEnabled &&
+            (timerPaused ? <Play size={13} /> : <Pause size={13} />)}
           <span>{timerEnabled ? formatDuration(elapsedMs) : 'zen'}</span>
         </button>
       </div>
       <Wedge direction="left" tip="var(--accent)" field="var(--panel-soft)" />
 
-      <div className={section} style={{ background: 'var(--accent)', color: 'var(--app-bg)' }}>
+      <div
+        className={section}
+        style={{ background: 'var(--accent)', color: 'var(--app-bg)' }}
+      >
         {percent}%
       </div>
     </div>
-  );
+  )
 }
 
 function useScreenImpact() {
-  const [frame, setFrame] = useState({ flash: 0, x: 0, y: 0 });
-  const animationRef = useRef<number | null>(null);
-  const decayRef = useRef(0.8);
-  const flashRef = useRef(0);
-  const intensityRef = useRef(0);
-  const reducedMotionRef = useRef(false);
+  const [frame, setFrame] = useState({ flash: 0, x: 0, y: 0 })
+  const animationRef = useRef<number | null>(null)
+  const decayRef = useRef(0.8)
+  const flashRef = useRef(0)
+  const intensityRef = useRef(0)
+  const reducedMotionRef = useRef(false)
 
   useEffect(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-    reducedMotionRef.current = media.matches;
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    reducedMotionRef.current = media.matches
 
     function onChange() {
-      reducedMotionRef.current = media.matches;
+      reducedMotionRef.current = media.matches
     }
 
-    media.addEventListener('change', onChange);
+    media.addEventListener('change', onChange)
     return () => {
-      media.removeEventListener('change', onChange);
+      media.removeEventListener('change', onChange)
       if (animationRef.current !== null) {
-        window.cancelAnimationFrame(animationRef.current);
+        window.cancelAnimationFrame(animationRef.current)
       }
-    };
-  }, []);
+    }
+  }, [])
 
   const tick = useCallback(() => {
-    intensityRef.current *= decayRef.current;
-    flashRef.current *= 0.84;
+    intensityRef.current *= decayRef.current
+    flashRef.current *= 0.84
 
-    if (intensityRef.current < 0.35) intensityRef.current = 0;
-    if (flashRef.current < 0.015) flashRef.current = 0;
+    if (intensityRef.current < 0.35) intensityRef.current = 0
+    if (flashRef.current < 0.015) flashRef.current = 0
 
     if (intensityRef.current === 0 && flashRef.current === 0) {
-      animationRef.current = null;
-      setFrame({ flash: 0, x: 0, y: 0 });
-      return;
+      animationRef.current = null
+      setFrame({ flash: 0, x: 0, y: 0 })
+      return
     }
 
-    const intensity = intensityRef.current;
+    const intensity = intensityRef.current
     setFrame({
       flash: flashRef.current,
       x: (Math.random() - 0.5) * intensity * 2,
       y: (Math.random() - 0.5) * intensity * 2,
-    });
-    animationRef.current = window.requestAnimationFrame(tick);
-  }, []);
+    })
+    animationRef.current = window.requestAnimationFrame(tick)
+  }, [])
 
   const triggerImpact = useCallback(
     (intensity = 8, flash = 0.25, decay = 0.82) => {
-      if (reducedMotionRef.current) return;
+      if (reducedMotionRef.current) return
 
-      intensityRef.current = Math.max(intensityRef.current, intensity);
-      flashRef.current = Math.max(flashRef.current, flash);
-      decayRef.current = decay;
+      intensityRef.current = Math.max(intensityRef.current, intensity)
+      flashRef.current = Math.max(flashRef.current, flash)
+      decayRef.current = decay
 
       if (animationRef.current === null) {
-        animationRef.current = window.requestAnimationFrame(tick);
+        animationRef.current = window.requestAnimationFrame(tick)
       }
     },
     [tick],
-  );
+  )
 
   const impactStyle = useMemo<CSSProperties>(
     () => ({
@@ -8402,7 +9292,7 @@ function useScreenImpact() {
       willChange: frame.x === 0 && frame.y === 0 ? undefined : 'transform',
     }),
     [frame.x, frame.y],
-  );
+  )
 
   const flashStyle = useMemo<CSSProperties>(
     () => ({
@@ -8410,9 +9300,9 @@ function useScreenImpact() {
       transition: frame.flash === 0 ? 'opacity 120ms ease-out' : undefined,
     }),
     [frame.flash],
-  );
+  )
 
-  return { flashStyle, impactStyle, triggerImpact };
+  return { flashStyle, impactStyle, triggerImpact }
 }
 
 function Wedge({
@@ -8420,9 +9310,9 @@ function Wedge({
   field,
   tip,
 }: {
-  direction: 'left' | 'right';
-  field: string;
-  tip: string;
+  direction: 'left' | 'right'
+  field: string
+  tip: string
 }) {
   return (
     <div
@@ -8441,37 +9331,38 @@ function Wedge({
         }}
       />
     </div>
-  );
+  )
 }
 
 function modalTitle(modal: Exclude<MenuModal, null>) {
-  if (modal === 'menu') return 'menu';
-  if (modal === 'new') return 'new-game';
-  if (modal === 'settings') return 'settings';
-  if (modal === 'rules') return 'rules';
-  if (modal === 'theme') return 'colorscheme';
-  if (modal === 'tools') return 'tools';
-  return 'commands';
+  if (modal === 'menu') return 'menu'
+  if (modal === 'new') return 'new-game'
+  if (modal === 'settings') return 'settings'
+  if (modal === 'rules') return 'rules'
+  if (modal === 'theme') return 'colorscheme'
+  if (modal === 'tools') return 'tools'
+  return 'commands'
 }
 
 function modalFromPath(pathname: string): MenuModal {
-  if (pathname === '/settings') return 'settings';
-  if (pathname === '/commands') return 'commands';
-  return null;
+  if (pathname === '/settings') return 'settings'
+  if (pathname === '/commands') return 'commands'
+  return null
 }
 
 function pageFromPath(pathname: string): PageRoute {
-  if (pathname === '/') return 'dashboard';
-  if (pathname === '/new') return 'new';
-  if (pathname === '/games') return 'games';
+  if (pathname === '/') return 'dashboard'
+  if (pathname === '/new') return 'new'
+  if (pathname === '/games') return 'games'
   if (pathname === '/leaderboards' || pathname.startsWith('/leaderboards/'))
-    return 'leaderboards';
-  if (pathname === '/challenge') return 'challenge';
-  if (challengeIdFromPath(pathname)) return 'challenge';
-  if (liveBattleIdFromPath(pathname)) return 'live-battle';
-  if (pathname === '/profile') return 'profile';
-  if (publicFriendCodeFromPath(pathname)) return 'profile';
-  return 'play';
+    return 'leaderboards'
+  if (pathname === '/challenge' || pathname === '/challenge/results')
+    return 'challenge'
+  if (challengeIdFromPath(pathname)) return 'challenge'
+  if (liveBattleIdFromPath(pathname)) return 'live-battle'
+  if (pathname === '/profile') return 'profile'
+  if (publicFriendCodeFromPath(pathname)) return 'profile'
+  return 'play'
 }
 
 const LEADERBOARD_DIFFICULTIES: PuzzleDifficulty[] = [
@@ -8479,30 +9370,82 @@ const LEADERBOARD_DIFFICULTIES: PuzzleDifficulty[] = [
   'medium',
   'hard',
   'expert',
-];
+]
 
 function leaderboardScopeFromPath(pathname: string): {
-  size: PuzzleSize;
-  mode: PlayMode;
-  variant: VariantId;
-  difficulty: PuzzleDifficulty;
+  size: PuzzleSize
+  mode: PlayMode
+  variant: VariantId
+  difficulty: PuzzleDifficulty
 } | null {
-  const match = pathname.match(
-    /^\/leaderboards\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/,
-  );
-  if (!match) return null;
-  const [, size, mode, variant, difficulty] = match;
-  if (!PUZZLE_SIZES.includes(size as PuzzleSize)) return null;
-  if (!LEADERBOARD_PLAY_MODES.includes(mode as PlayMode)) return null;
-  if (!(variant in VARIANTS)) return null;
-  if (!LEADERBOARD_DIFFICULTIES.includes(difficulty as PuzzleDifficulty))
-    return null;
+  const route = parseLeaderboardRoute(pathname)
+  if (!route?.difficulty) return null
   return {
-    size: size as PuzzleSize,
-    mode: mode as PlayMode,
-    variant: variant as VariantId,
-    difficulty: difficulty as PuzzleDifficulty,
-  };
+    ...route.filters,
+    difficulty: route.difficulty,
+  }
+}
+
+function leaderboardFiltersFromPath(
+  pathname: string,
+): LeaderboardFilters | null {
+  return parseLeaderboardRoute(pathname)?.filters ?? null
+}
+
+function parseLeaderboardRoute(pathname: string): {
+  filters: LeaderboardFilters
+  difficulty?: PuzzleDifficulty
+} | null {
+  const parts = pathname.split('/').filter(Boolean)
+  if (parts[0] !== 'leaderboards' || parts.length < 2 || parts.length > 5)
+    return null
+
+  const [, size, ...segments] = parts
+  if (!PUZZLE_SIZES.includes(size as PuzzleSize)) return null
+
+  let mode: PlayMode = 'classic'
+  let variant: VariantId = 'classic'
+  let difficulty: PuzzleDifficulty | undefined
+
+  for (const segment of segments) {
+    if (segment === 'classic') continue
+    if (LEADERBOARD_DIFFICULTIES.includes(segment as PuzzleDifficulty)) {
+      if (difficulty) return null
+      difficulty = segment as PuzzleDifficulty
+      continue
+    }
+    if (LEADERBOARD_PLAY_MODES.includes(segment as PlayMode)) {
+      if (mode !== 'classic') return null
+      mode = segment as PlayMode
+      continue
+    }
+    if (segment in VARIANTS) {
+      if (variant !== 'classic') return null
+      variant = segment as VariantId
+      continue
+    }
+    return null
+  }
+
+  return {
+    filters: {
+      size: size as PuzzleSize,
+      mode,
+      variant,
+    },
+    difficulty,
+  }
+}
+
+function leaderboardFiltersPath(filters: LeaderboardFilters) {
+  const parts: string[] = ['/leaderboards', filters.size]
+  if (filters.mode !== 'classic') parts.push(filters.mode)
+  if (filters.variant !== 'classic') parts.push(filters.variant)
+  return parts.join('/')
+}
+
+function leaderboardScopePath(scope: LeaderboardScope) {
+  return `${leaderboardFiltersPath(scope)}/${scope.difficulty}`
 }
 
 function leaderboardScopeLabel(scope: LeaderboardScope) {
@@ -8513,46 +9456,48 @@ function leaderboardScopeLabel(scope: LeaderboardScope) {
     scope.difficulty,
   ]
     .filter(Boolean)
-    .join(' / ');
+    .join(' / ')
 }
 
 function cleanLeaderboardSource(source: string, scope: LeaderboardScope) {
-  const escapedSize = escapeRegExp(scope.size);
-  const escapedMode = escapeRegExp(scope.mode);
-  const escapedVariant = escapeRegExp(scope.variant);
-  const escapedDifficulty = escapeRegExp(scope.difficulty);
+  const escapedSize = escapeRegExp(scope.size)
+  const escapedMode = escapeRegExp(scope.mode)
+  const escapedVariant = escapeRegExp(scope.variant)
+  const escapedDifficulty = escapeRegExp(scope.difficulty)
 
-  return source
-    .replace(new RegExp(`\\b${escapedSize}\\b`, 'gi'), '')
-    .replace(new RegExp(`\\b${escapedMode}\\b`, 'gi'), '')
-    .replace(new RegExp(`\\b${escapedVariant}\\b`, 'gi'), '')
-    .replace(new RegExp(`\\b${escapedDifficulty}\\b`, 'gi'), '')
-    .replace(/\s*\/\s*/g, ' / ')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+·\s+/g, ' · ')
-    .replace(/^[\s/·-]+|[\s/·-]+$/g, '')
-    .trim() || 'vimdoku';
+  return (
+    source
+      .replace(new RegExp(`\\b${escapedSize}\\b`, 'gi'), '')
+      .replace(new RegExp(`\\b${escapedMode}\\b`, 'gi'), '')
+      .replace(new RegExp(`\\b${escapedVariant}\\b`, 'gi'), '')
+      .replace(new RegExp(`\\b${escapedDifficulty}\\b`, 'gi'), '')
+      .replace(/\s*\/\s*/g, ' / ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+·\s+/g, ' · ')
+      .replace(/^[\s/·-]+|[\s/·-]+$/g, '')
+      .trim() || 'vimdoku'
+  )
 }
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function publicFriendCodeFromPath(pathname: string) {
-  const match = pathname.match(/^\/u\/([^/]+)$/);
-  if (!match) return null;
-  return compactFriendCode(decodeURIComponent(match[1]));
+  const match = pathname.match(/^\/u\/([^/]+)$/)
+  if (!match) return null
+  return compactFriendCode(decodeURIComponent(match[1]))
 }
 
 function sharedPuzzlePayloadFromPath(pathname: string) {
-  const match = pathname.match(/^\/p\/([^/]+)$/);
-  return match?.[1] ?? null;
+  const match = pathname.match(/^\/p\/([^/]+)$/)
+  return match?.[1] ?? null
 }
 
 function puzzleRules(puzzleSize: PuzzleSize, variantId: VariantId = 'classic') {
   return `${VARIANTS[variantId].rules} This puzzle uses a ${puzzleSize} grid with digits ${boardConfigFor(
     puzzleSize,
-  ).digits.join(', ')}.`;
+  ).digits.join(', ')}.`
 }
 
 function generatePuzzleForVariant(
@@ -8561,59 +9506,92 @@ function generatePuzzleForVariant(
   puzzleSize: PuzzleSize,
   variantId: VariantId,
 ) {
-  if (variantId === 'classic') return generatePuzzle(difficulty, seed, puzzleSize);
+  if (variantId === 'classic')
+    return generatePuzzle(difficulty, seed, puzzleSize)
 
   for (let attempt = 0; attempt < 24; attempt += 1) {
-    const puzzle = generatePuzzle(difficulty, seed + attempt * 7919, puzzleSize);
-    const solution = solveGrid(puzzle, puzzleSize);
-    if (solution && checkVariant(solution, puzzleSize, variantId).length === 0) {
-      return puzzle;
+    const puzzle = generatePuzzle(difficulty, seed + attempt * 7919, puzzleSize)
+    const solution = solveGrid(puzzle, puzzleSize)
+    if (
+      solution &&
+      checkVariant(solution, puzzleSize, variantId).length === 0
+    ) {
+      return puzzle
     }
   }
 
-  return generatePuzzle(difficulty, seed, puzzleSize);
+  return generatePuzzle(difficulty, seed, puzzleSize)
 }
 
 function toolModeMessage(mode: ToolMode) {
-  if (mode === 'digit') return 'Digit tool.';
-  if (mode === 'center') return 'Centre notes tool.';
-  if (mode === 'corner') return 'Corner notes tool.';
-  return 'Colour tool. Press 1-6 or Alt+number.';
+  if (mode === 'digit') return 'Digit tool.'
+  if (mode === 'center') return 'Centre notes tool.'
+  if (mode === 'corner') return 'Corner notes tool.'
+  return 'Colour tool. Press 1-6 or Alt+number.'
 }
 
 function toolModeLabel(mode: ToolMode) {
-  if (mode === 'center') return 'centre';
-  if (mode === 'corner') return 'corners';
-  if (mode === 'color') return 'colour';
-  return 'digit';
+  if (mode === 'center') return 'centre'
+  if (mode === 'corner') return 'corners'
+  if (mode === 'color') return 'colour'
+  return 'digit'
+}
+
+function isLiveChallengeSetup(kind: ChallengeSetupKind) {
+  return kind === 'race' || kind === 'live-race' || kind === 'live-turns'
+}
+
+function asyncChallengeKindFromSetup(kind: ChallengeSetupKind): ChallengeKind {
+  return kind === 'streak' ? 'streak' : 'race'
+}
+
+function liveBattleKindFromSetup(kind: ChallengeSetupKind): LiveBattleKind {
+  return kind === 'live-turns' ? 'turns' : 'race'
+}
+
+function challengeSetupLabel(kind: ChallengeSetupKind) {
+  if (kind === 'streak') return 'streak battle'
+  if (kind === 'live-race') return 'live race'
+  if (kind === 'live-turns') return 'turn battle'
+  return 'race'
+}
+
+function challengeSetupDescription(kind: ChallengeSetupKind) {
+  if (kind === 'streak')
+    return 'Async race where bad entries count against the result.'
+  if (kind === 'live-race')
+    return 'A shared room where players race the same puzzle with presence.'
+  if (kind === 'live-turns')
+    return 'A shared room where players alternate entries against a turn clock.'
+  return 'Two-player live race with presence and a synchronized start.'
 }
 
 function editorModeLabel(mode: EditorMode) {
-  if (mode === 'annotate') return 'centre';
-  if (mode === 'corner') return 'corners';
-  if (mode === 'color') return 'colour';
-  return mode;
+  if (mode === 'annotate') return 'centre'
+  if (mode === 'corner') return 'corners'
+  if (mode === 'color') return 'colour'
+  return mode
 }
 
 function compactFriendCode(value: string) {
-  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, '')
   return compact.startsWith('VIM')
     ? `VIM-${compact.slice(3, 9)}`
-    : `VIM-${compact.slice(0, 6)}`;
+    : `VIM-${compact.slice(0, 6)}`
 }
 
 function hintText(hint: Hint, mode: HintMode) {
-  if (!('technique' in hint)) return hint.message;
-  if (mode === 'nudge') return hint.nudge;
-  if (mode === 'explain') return `${hint.message} ${hint.detail}`;
-  return hint.message;
+  if (!('technique' in hint)) return hint.message
+  if (mode === 'nudge') return hint.nudge
+  if (mode === 'explain') return `${hint.message} ${hint.detail}`
+  return hint.message
 }
 
 function hintFocusCells(hint: Hint | null): number[] {
-  if (!hint) return [];
-  if ('cells' in hint) return hint.cells;
-  if ('cell' in hint) return [hint.cell];
-  return [];
+  if (!hint) return []
+  if ('cells' in hint) return hint.cells
+  if ('cell' in hint) return [hint.cell]
+  return []
 }
 
 function cellClassName(
@@ -8629,17 +9607,19 @@ function cellClassName(
   config: BoardConfig,
   hasOpponentCursor = false,
 ) {
-  const row = Math.floor(index / config.size);
-  const col = index % config.size;
-  const sameRow = row === Math.floor(selected / config.size);
-  const sameCol = col === selected % config.size;
-  const selectedValue = grid[selected];
+  const row = Math.floor(index / config.size)
+  const col = index % config.size
+  const sameRow = row === Math.floor(selected / config.size)
+  const sameCol = col === selected % config.size
+  const selectedValue = grid[selected]
   const sameValue =
-    selectedValue > 0 && index !== selected && grid[index] === selectedValue;
+    selectedValue > 0 && index !== selected && grid[index] === selectedValue
   const searchMatch =
-    highlightDigit !== null && index !== selected && grid[index] === highlightDigit;
-  const isHint = hintFocusCells(hint).includes(index);
-  const inVisualBlock = visualCells?.has(index) ?? false;
+    highlightDigit !== null &&
+    index !== selected &&
+    grid[index] === highlightDigit
+  const isHint = hintFocusCells(hint).includes(index)
+  const inVisualBlock = visualCells?.has(index) ?? false
 
   // Every state below paints a bright background, so cell text must
   // flip to the dark app color or it disappears into the highlight.
@@ -8650,7 +9630,7 @@ function cellClassName(
     isHint ||
     searchMatch ||
     sameValue ||
-    cellColor !== null;
+    cellColor !== null
 
   return [
     'relative grid aspect-square place-items-center border border-[var(--grid-line)] font-black outline-none transition focus-visible:outline-none focus-visible:outline-offset-0',
@@ -8661,53 +9641,46 @@ function cellClassName(
       : index === selected
         ? 'bg-[var(--cell-selected)]'
         : conflicts.has(index)
-        ? 'bg-[var(--cell-conflict)]'
-        : isHint
-          ? 'bg-[var(--cell-hint)]'
-          : searchMatch
-            ? 'bg-[var(--cell-search)]'
-          : sameValue
-            ? 'bg-[var(--cell-same)]'
-          : hasOpponentCursor
-            ? 'bg-[color-mix(in_srgb,var(--accent)_12%,var(--cell-bg))]'
-          : cellColor !== null
-            ? 'bg-[var(--cell-user-color)]'
-          : sameRow || sameCol
-            ? 'bg-[var(--cell-peer)]'
-            : 'bg-[var(--cell-bg)]',
+          ? 'bg-[var(--cell-conflict)]'
+          : isHint
+            ? 'bg-[var(--cell-hint)]'
+            : searchMatch
+              ? 'bg-[var(--cell-search)]'
+              : sameValue
+                ? 'bg-[var(--cell-same)]'
+                : hasOpponentCursor
+                  ? 'bg-[color-mix(in_srgb,var(--accent)_12%,var(--cell-bg))]'
+                  : cellColor !== null
+                    ? 'bg-[var(--cell-user-color)]'
+                    : sameRow || sameCol
+                      ? 'bg-[var(--cell-peer)]'
+                      : 'bg-[var(--cell-bg)]',
     brightBg
       ? 'text-[var(--app-bg)]'
       : givens[index]
         ? 'text-[var(--given)]'
         : 'text-[var(--entry)]',
-  ].join(' ');
+  ].join(' ')
 }
 
 function opponentCursorLabel(names: string[]) {
-  if (names.length === 0) return '';
-  const initials = names.map((name) => playerInitials(name));
-  if (initials.length <= 2) return initials.join('/');
-  return `${initials.slice(0, 2).join('/')}+${initials.length - 2}`;
+  if (names.length === 0) return ''
+  const initials = names.map((name) => playerInitials(name))
+  if (initials.length <= 2) return initials.join('/')
+  return `${initials.slice(0, 2).join('/')}+${initials.length - 2}`
 }
 
 function playerInitials(name: string) {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase()
 }
 
 function filterGameRecords(records: GameRecord[], query: string) {
-  const terms = query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
 
-  if (terms.length === 0) return records;
+  if (terms.length === 0) return records
 
   return records.filter((record) => {
     const haystack = [
@@ -8722,37 +9695,38 @@ function filterGameRecords(records: GameRecord[], query: string) {
     ]
       .filter(Boolean)
       .join(' ')
-      .toLowerCase();
+      .toLowerCase()
 
-    return terms.every((term) => haystack.includes(term));
-  });
+    return terms.every((term) => haystack.includes(term))
+  })
 }
 
 function filterCommandSuggestions(query: string) {
-  const terms = query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (terms.length === 0) return COMMAND_SUGGESTIONS;
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return COMMAND_SUGGESTIONS
   return COMMAND_SUGGESTIONS.filter((suggestion) => {
     const haystack = `${suggestion.command} ${suggestion.description} ${
       suggestion.keywords ?? ''
-    }`.toLowerCase();
-    return terms.every((term) => haystack.includes(term));
-  });
+    }`.toLowerCase()
+    return terms.every((term) => haystack.includes(term))
+  })
 }
 
 function cellCountFor(record: GameRecord) {
-  return boardConfigFor(record.puzzleSize).cellCount;
+  return boardConfigFor(record.puzzleSize).cellCount
 }
 
 function buildLocalStats(records: GameRecord[]): ProfileStats {
-  const completed = records.filter((record) => record.status === 'completed');
-  const timed = completed.filter((record) => record.elapsedMs > 0);
-  const totalElapsedMs = timed.reduce((total, record) => total + record.elapsedMs, 0);
+  const completed = records.filter((record) => record.status === 'completed')
+  const timed = completed.filter((record) => record.elapsedMs > 0)
+  const totalElapsedMs = timed.reduce(
+    (total, record) => total + record.elapsedMs,
+    0,
+  )
   const bestElapsedMs =
-    timed.length > 0 ? Math.min(...timed.map((record) => record.elapsedMs)) : undefined;
+    timed.length > 0
+      ? Math.min(...timed.map((record) => record.elapsedMs))
+      : undefined
 
   return {
     averageElapsedMs:
@@ -8762,10 +9736,11 @@ function buildLocalStats(records: GameRecord[]): ProfileStats {
     currentStreak: countCompletionStreak(
       completed.map((record) => record.completedAt ?? record.updatedAt),
     ),
-    inProgressCount: records.filter((record) => record.status === 'in-progress').length,
+    inProgressCount: records.filter((record) => record.status === 'in-progress')
+      .length,
     lastCompletedAt: completed[0]?.completedAt ?? completed[0]?.updatedAt,
     syncedGames: records.length,
-  };
+  }
 }
 
 function countCompletionStreak(values: string[]) {
@@ -8774,127 +9749,129 @@ function countCompletionStreak(values: string[]) {
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .map((date) => date.toISOString().slice(0, 10)),
-  );
+  )
 
-  let streak = 0;
-  const cursor = new Date();
+  let streak = 0
+  const cursor = new Date()
   while (days.has(cursor.toISOString().slice(0, 10))) {
-    streak += 1;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    streak += 1
+    cursor.setUTCDate(cursor.getUTCDate() - 1)
   }
-  return streak;
+  return streak
 }
 
 function formatGameDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'unknown';
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'unknown'
   return new Intl.DateTimeFormat(undefined, {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     month: 'short',
-  }).format(date);
+  }).format(date)
 }
 
 function formatDuration(value: number) {
-  const totalSeconds = Math.max(0, Math.floor(value / 1000));
-  const seconds = String(totalSeconds % 60).padStart(2, '0');
-  const minutes = Math.floor(totalSeconds / 60) % 60;
-  const hours = Math.floor(totalSeconds / 3600);
+  const totalSeconds = Math.max(0, Math.floor(value / 1000))
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+  const minutes = Math.floor(totalSeconds / 60) % 60
+  const hours = Math.floor(totalSeconds / 3600)
 
   if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${seconds}`;
+    return `${hours}:${String(minutes).padStart(2, '0')}:${seconds}`
   }
 
-  return `${minutes}:${seconds}`;
+  return `${minutes}:${seconds}`
 }
 
 function loadTheme(): ThemeId {
-  const stored = localStorage.getItem(THEME_KEY);
+  const stored = localStorage.getItem(THEME_KEY)
   return CODE_THEMES.some((theme) => theme.id === stored)
     ? (stored as ThemeId)
-    : CODE_THEMES[0].id;
+    : CODE_THEMES[0].id
 }
 
 function loadPausedGameId() {
-  return localStorage.getItem(TIMER_PAUSED_GAME_KEY);
+  return localStorage.getItem(TIMER_PAUSED_GAME_KEY)
 }
 
 function isTypingTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+  if (!(target instanceof HTMLElement)) return false
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
 function isCustomPlayerName(value: string | null | undefined) {
-  const trimmed = value?.trim() ?? '';
-  return Boolean(trimmed && trimmed.toLowerCase() !== 'anonymous');
+  const trimmed = value?.trim() ?? ''
+  return Boolean(trimmed && trimmed.toLowerCase() !== 'anonymous')
 }
 
 function digitFromKeyEvent(event: KeyboardEvent) {
-  if (/^[1-9]$/.test(event.key)) return Number(event.key);
-  if (/^Digit[1-9]$/.test(event.code)) return Number(event.code.replace('Digit', ''));
-  if (/^Numpad[1-9]$/.test(event.code)) return Number(event.code.replace('Numpad', ''));
-  return Number.NaN;
+  if (/^[1-9]$/.test(event.key)) return Number(event.key)
+  if (/^Digit[1-9]$/.test(event.code))
+    return Number(event.code.replace('Digit', ''))
+  if (/^Numpad[1-9]$/.test(event.code))
+    return Number(event.code.replace('Numpad', ''))
+  return Number.NaN
 }
 
 async function recognizeSudokuImage(
   file: File,
   onProgress: (done: number, total: number) => void,
 ): Promise<ReviewCell[]> {
-  const image = await loadImage(file);
-  const worker = await Tesseract.createWorker('eng');
+  const image = await loadImage(file)
+  const worker = await Tesseract.createWorker('eng')
 
   await worker.setParameters({
     tessedit_char_whitelist: '123456789',
     tessedit_pageseg_mode: Tesseract.PSM.SINGLE_CHAR,
-  });
+  })
 
-  const cells: ReviewCell[] = [];
+  const cells: ReviewCell[] = []
   try {
     for (let index = 0; index < 81; index += 1) {
-      const canvas = cropCell(image, index);
-      const result = await worker.recognize(canvas);
-      const text = result.data.text.replace(/\D/g, '').slice(0, 1);
-      const value = text ? Number(text) : 0;
-      cells.push({ value, confidence: value ? result.data.confidence : 0 });
-      onProgress(index + 1, 81);
+      const canvas = cropCell(image, index)
+      const result = await worker.recognize(canvas)
+      const text = result.data.text.replace(/\D/g, '').slice(0, 1)
+      const value = text ? Number(text) : 0
+      cells.push({ value, confidence: value ? result.data.confidence : 0 })
+      onProgress(index + 1, 81)
     }
   } finally {
-    await worker.terminate();
+    await worker.terminate()
   }
 
-  return cells;
+  return cells
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('The image could not be loaded.'));
-    image.src = URL.createObjectURL(file);
-  });
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('The image could not be loaded.'))
+    image.src = URL.createObjectURL(file)
+  })
 }
 
 function cropCell(image: HTMLImageElement, index: number): HTMLCanvasElement {
-  const size = Math.min(image.naturalWidth, image.naturalHeight);
-  const offsetX = (image.naturalWidth - size) / 2;
-  const offsetY = (image.naturalHeight - size) / 2;
-  const cellSize = size / 9;
-  const row = Math.floor(index / 9);
-  const col = index % 9;
-  const padding = cellSize * 0.18;
-  const sourceX = offsetX + col * cellSize + padding;
-  const sourceY = offsetY + row * cellSize + padding;
-  const sourceSize = cellSize - padding * 2;
-  const canvas = document.createElement('canvas');
-  const outputSize = 96;
-  canvas.width = outputSize;
-  canvas.height = outputSize;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (!context) return canvas;
+  const size = Math.min(image.naturalWidth, image.naturalHeight)
+  const offsetX = (image.naturalWidth - size) / 2
+  const offsetY = (image.naturalHeight - size) / 2
+  const cellSize = size / 9
+  const row = Math.floor(index / 9)
+  const col = index % 9
+  const padding = cellSize * 0.18
+  const sourceX = offsetX + col * cellSize + padding
+  const sourceY = offsetY + row * cellSize + padding
+  const sourceSize = cellSize - padding * 2
+  const canvas = document.createElement('canvas')
+  const outputSize = 96
+  canvas.width = outputSize
+  canvas.height = outputSize
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return canvas
 
-  context.fillStyle = 'white';
-  context.fillRect(0, 0, outputSize, outputSize);
+  context.fillStyle = 'white'
+  context.fillRect(0, 0, outputSize, outputSize)
   context.drawImage(
     image,
     sourceX,
@@ -8905,20 +9882,20 @@ function cropCell(image: HTMLImageElement, index: number): HTMLCanvasElement {
     10,
     outputSize - 20,
     outputSize - 20,
-  );
+  )
 
-  const data = context.getImageData(0, 0, outputSize, outputSize);
+  const data = context.getImageData(0, 0, outputSize, outputSize)
   for (let i = 0; i < data.data.length; i += 4) {
     const gray =
-      data.data[i] * 0.299 + data.data[i + 1] * 0.587 + data.data[i + 2] * 0.114;
-    const value = gray < 150 ? 0 : 255;
-    data.data[i] = value;
-    data.data[i + 1] = value;
-    data.data[i + 2] = value;
+      data.data[i] * 0.299 + data.data[i + 1] * 0.587 + data.data[i + 2] * 0.114
+    const value = gray < 150 ? 0 : 255
+    data.data[i] = value
+    data.data[i + 1] = value
+    data.data[i + 2] = value
   }
-  context.putImageData(data, 0, 0);
+  context.putImageData(data, 0, 0)
 
-  return canvas;
+  return canvas
 }
 
-export default App;
+export default App

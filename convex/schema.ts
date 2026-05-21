@@ -1,5 +1,5 @@
-import { defineSchema, defineTable } from 'convex/server';
-import { v } from 'convex/values';
+import { defineSchema, defineTable } from 'convex/server'
+import { v } from 'convex/values'
 
 export default defineSchema({
   profiles: defineTable({
@@ -106,12 +106,18 @@ export default defineSchema({
     playMode: v.optional(v.string()),
     puzzle: v.string(),
     puzzleSize: v.optional(v.string()),
+    raceStartsAt: v.optional(v.number()),
     roomId: v.string(),
     source: v.string(),
-    status: v.union(v.literal('waiting'), v.literal('live'), v.literal('finished')),
+    status: v.union(
+      v.literal('waiting'),
+      v.literal('live'),
+      v.literal('finished'),
+    ),
     title: v.string(),
     turnAnonId: v.optional(v.string()),
     turnEndsAt: v.optional(v.number()),
+    turnLives: v.optional(v.number()),
     turnNumber: v.optional(v.number()),
     turnSeconds: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
@@ -153,4 +159,4 @@ export default defineSchema({
     .index('by_requesterAnonId', ['requesterAnonId'])
     .index('by_recipientAnonId', ['recipientAnonId'])
     .index('by_status', ['status']),
-});
+})

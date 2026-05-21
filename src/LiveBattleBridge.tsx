@@ -1,82 +1,83 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { useMutation, useQuery } from 'convex/react';
-import { makeFunctionReference } from 'convex/server';
-import type { FunctionReference } from 'convex/server';
-import { getOrCreateGuestId } from './identity';
+import { useEffect, useMemo, useRef } from 'react'
+import { useMutation, useQuery } from 'convex/react'
+import { makeFunctionReference } from 'convex/server'
+import type { FunctionReference } from 'convex/server'
+import { getOrCreateGuestId } from './identity'
 import type {
   LiveBattleCreateRequest,
   LiveBattleRoom,
   LiveBattleTurnRequest,
-} from './liveBattles';
-import type { GameRecord } from './storage';
+} from './liveBattles'
+import type { GameRecord } from './storage'
 
 type CreateRoomArgs = {
-  battleKind?: 'race' | 'turns';
-  creatorAnonId: string;
-  creatorName: string;
-  difficulty?: string;
-  playMode?: string;
-  puzzle: string;
-  puzzleSize?: string;
-  roomId: string;
-  source: string;
-  turnSeconds?: number;
-  variantId?: string;
-};
+  battleKind?: 'race' | 'turns'
+  creatorAnonId: string
+  creatorName: string
+  difficulty?: string
+  playMode?: string
+  puzzle: string
+  puzzleSize?: string
+  roomId: string
+  source: string
+  turnLives?: number
+  turnSeconds?: number
+  variantId?: string
+}
 
 type HeartbeatArgs = {
-  anonId: string;
-  completion: number;
-  elapsedMs: number;
-  mistakes?: number;
-  player: string;
-  recordId?: string;
-  roomId: string;
-  selectedCell?: number;
-  status: 'online' | 'ready' | 'solving' | 'finished';
-};
+  anonId: string
+  completion: number
+  elapsedMs: number
+  mistakes?: number
+  player: string
+  recordId?: string
+  roomId: string
+  selectedCell?: number
+  status: 'online' | 'ready' | 'solving' | 'finished'
+}
 
 type SubmitTurnArgs = {
-  anonId: string;
-  completion: number;
-  correct: boolean;
-  elapsedMs: number;
-  player: string;
-  recordId: string;
-  roomId: string;
-  selectedCell: number;
-};
+  anonId: string
+  completion: number
+  correct: boolean
+  elapsedMs: number
+  player: string
+  recordId: string
+  roomId: string
+  selectedCell: number
+}
 
 type ClaimTimeoutArgs = {
-  anonId: string;
-  roomId: string;
-};
+  anonId: string
+  roomId: string
+}
 
 const getRoomRef = makeFunctionReference<
   'query',
   { roomId: string },
   LiveBattleRoom | null
->('liveBattles:getRoom');
+>('liveBattles:getRoom')
 
 const createRoomRef = makeFunctionReference<'mutation', CreateRoomArgs, string>(
   'liveBattles:createRoom',
-);
+)
 
 const heartbeatRef = makeFunctionReference<'mutation', HeartbeatArgs, string>(
   'liveBattles:heartbeat',
-);
+)
 
 const submitTurnRef = makeFunctionReference<
   'mutation',
   SubmitTurnArgs,
   { ok: boolean; message?: string }
->('liveBattles:submitTurn');
+>('liveBattles:submitTurn')
 
 const claimTimeoutRef = makeFunctionReference<
   'mutation',
   ClaimTimeoutArgs,
   { ok: boolean }
->('liveBattles:claimTimeout');
+>('liveBattles:claimTimeout')
 
 export function LiveBattleBridge({
   activeRoomId,
@@ -92,48 +93,48 @@ export function LiveBattleBridge({
   selectedCell,
   turnRequest,
 }: {
-  activeRoomId: string | null;
-  createRequest: LiveBattleCreateRequest | null;
-  currentMistakes: number;
-  currentRecord: GameRecord;
-  onCreateResult: (roomId: string, requestId: string) => void;
-  onRoom: (room: LiveBattleRoom | null) => void;
-  onStatus: (status: string) => void;
-  onTurnRequestHandled: (requestId: string) => void;
-  playerName: string;
-  roomId: string | null;
-  selectedCell: number;
-  turnRequest: LiveBattleTurnRequest | null;
+  activeRoomId: string | null
+  createRequest: LiveBattleCreateRequest | null
+  currentMistakes: number
+  currentRecord: GameRecord
+  onCreateResult: (roomId: string, requestId: string) => void
+  onRoom: (room: LiveBattleRoom | null) => void
+  onStatus: (status: string) => void
+  onTurnRequestHandled: (requestId: string) => void
+  playerName: string
+  roomId: string | null
+  selectedCell: number
+  turnRequest: LiveBattleTurnRequest | null
 }) {
-  const anonId = useMemo(() => getOrCreateGuestId(), []);
-  const handledCreateRequest = useRef<string | null>(null);
-  const handledTurnRequest = useRef<string | null>(null);
+  const anonId = useMemo(() => getOrCreateGuestId(), [])
+  const handledCreateRequest = useRef<string | null>(null)
+  const handledTurnRequest = useRef<string | null>(null)
   const room = useQuery(
     getRoomRef as FunctionReference<'query'>,
     roomId ? { roomId } : 'skip',
-  ) as LiveBattleRoom | null | undefined;
+  ) as LiveBattleRoom | null | undefined
   const createRoom = useMutation(
     createRoomRef as FunctionReference<'mutation'>,
-  ) as (args: CreateRoomArgs) => Promise<string>;
+  ) as (args: CreateRoomArgs) => Promise<string>
   const heartbeat = useMutation(
     heartbeatRef as FunctionReference<'mutation'>,
-  ) as (args: HeartbeatArgs) => Promise<string>;
+  ) as (args: HeartbeatArgs) => Promise<string>
   const submitTurn = useMutation(
     submitTurnRef as FunctionReference<'mutation'>,
-  ) as (args: SubmitTurnArgs) => Promise<{ ok: boolean; message?: string }>;
+  ) as (args: SubmitTurnArgs) => Promise<{ ok: boolean; message?: string }>
   const claimTimeout = useMutation(
     claimTimeoutRef as FunctionReference<'mutation'>,
-  ) as (args: ClaimTimeoutArgs) => Promise<{ ok: boolean }>;
+  ) as (args: ClaimTimeoutArgs) => Promise<{ ok: boolean }>
 
   useEffect(() => {
-    if (room === undefined) return;
-    onRoom(room);
-  }, [onRoom, room]);
+    if (room === undefined) return
+    onRoom(room)
+  }, [onRoom, room])
 
   useEffect(() => {
-    if (!createRequest) return;
-    if (handledCreateRequest.current === createRequest.requestId) return;
-    handledCreateRequest.current = createRequest.requestId;
+    if (!createRequest) return
+    if (handledCreateRequest.current === createRequest.requestId) return
+    handledCreateRequest.current = createRequest.requestId
 
     void createRoom({
       battleKind: createRequest.battleKind,
@@ -145,20 +146,29 @@ export function LiveBattleBridge({
       puzzleSize: createRequest.puzzleSize,
       roomId: createRequest.roomId,
       source: createRequest.source,
-      turnSeconds: createRequest.battleKind === 'turns' ? 20 : undefined,
+      turnLives:
+        createRequest.battleKind === 'turns'
+          ? createRequest.turnLives
+          : undefined,
+      turnSeconds:
+        createRequest.battleKind === 'turns'
+          ? createRequest.turnSeconds
+          : undefined,
       variantId: createRequest.variantId,
     })
-      .then((createdRoomId) => onCreateResult(createdRoomId, createRequest.requestId))
+      .then((createdRoomId) =>
+        onCreateResult(createdRoomId, createRequest.requestId),
+      )
       .catch(() => {
-        handledCreateRequest.current = null;
-        onStatus('Could not create live battle room.');
-      });
-  }, [anonId, createRequest, createRoom, onCreateResult, onStatus]);
+        handledCreateRequest.current = null
+        onStatus('Could not create live battle room.')
+      })
+  }, [anonId, createRequest, createRoom, onCreateResult, onStatus])
 
   useEffect(() => {
-    if (!turnRequest) return;
-    if (handledTurnRequest.current === turnRequest.requestId) return;
-    handledTurnRequest.current = turnRequest.requestId;
+    if (!turnRequest) return
+    if (handledTurnRequest.current === turnRequest.requestId) return
+    handledTurnRequest.current = turnRequest.requestId
     void submitTurn({
       anonId,
       completion: turnRequest.completion,
@@ -170,31 +180,25 @@ export function LiveBattleBridge({
       selectedCell: turnRequest.selectedCell,
     })
       .then((result) => {
-        onTurnRequestHandled(turnRequest.requestId);
-        if (result.message) onStatus(result.message);
+        onTurnRequestHandled(turnRequest.requestId)
+        if (result.message) onStatus(result.message)
       })
       .catch(() => {
-        handledTurnRequest.current = null;
-        onStatus('Could not submit turn.');
-      });
-  }, [
-    anonId,
-    onStatus,
-    onTurnRequestHandled,
-    submitTurn,
-    turnRequest,
-  ]);
+        handledTurnRequest.current = null
+        onStatus('Could not submit turn.')
+      })
+  }, [anonId, onStatus, onTurnRequestHandled, submitTurn, turnRequest])
 
   useEffect(() => {
-    const heartbeatRoomId = activeRoomId ?? roomId;
-    if (!heartbeatRoomId) return;
+    const heartbeatRoomId = activeRoomId ?? roomId
+    if (!heartbeatRoomId) return
     const sendHeartbeat = () => {
-      const isActiveRoom = activeRoomId === heartbeatRoomId;
+      const isActiveRoom = activeRoomId === heartbeatRoomId
       const status = isActiveRoom
         ? currentRecord.status === 'completed'
           ? 'finished'
           : 'solving'
-        : 'ready';
+        : 'ready'
       void heartbeat({
         anonId,
         completion: isActiveRoom ? currentRecord.completion : 0,
@@ -205,14 +209,18 @@ export function LiveBattleBridge({
         roomId: heartbeatRoomId,
         selectedCell: isActiveRoom ? selectedCell : undefined,
         status,
-      }).catch(() => {
-        onStatus('Could not update live battle presence.');
-      });
-    };
+      }).catch((error: unknown) => {
+        onStatus(
+          error instanceof Error
+            ? error.message
+            : 'Could not update live battle presence.',
+        )
+      })
+    }
 
-    sendHeartbeat();
-    const timer = window.setInterval(sendHeartbeat, 2500);
-    return () => window.clearInterval(timer);
+    sendHeartbeat()
+    const timer = window.setInterval(sendHeartbeat, 2500)
+    return () => window.clearInterval(timer)
   }, [
     activeRoomId,
     anonId,
@@ -223,23 +231,24 @@ export function LiveBattleBridge({
     playerName,
     roomId,
     selectedCell,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!room || room.battleKind !== 'turns' || room.status === 'finished') return;
-    if (!room.turnEndsAt || !room.turnAnonId) return;
+    if (!room || room.battleKind !== 'turns' || room.status === 'finished')
+      return
+    if (!room.turnEndsAt || !room.turnAnonId) return
 
     const claimIfExpired = () => {
-      if (!room.turnEndsAt || room.turnEndsAt > Date.now()) return;
+      if (!room.turnEndsAt || room.turnEndsAt > Date.now()) return
       void claimTimeout({ anonId, roomId: room.roomId }).catch(() => {
-        onStatus('Could not advance timed out turn.');
-      });
-    };
+        onStatus('Could not advance timed out turn.')
+      })
+    }
 
-    claimIfExpired();
-    const timer = window.setInterval(claimIfExpired, 1000);
-    return () => window.clearInterval(timer);
-  }, [anonId, claimTimeout, onStatus, room]);
+    claimIfExpired()
+    const timer = window.setInterval(claimIfExpired, 1000)
+    return () => window.clearInterval(timer)
+  }, [anonId, claimTimeout, onStatus, room])
 
-  return null;
+  return null
 }

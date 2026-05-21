@@ -28,13 +28,21 @@ export const submitScore = mutation({
       .unique();
 
     if (existing) {
-      if (elapsedMs >= existing.elapsedMs) return existing._id;
+      const playerNameChanged =
+        existing.anonId === args.anonId && shouldUseSubmittedName(existing.player, player);
+      const nextPlayer = playerNameChanged ? player : existing.player;
+      if (elapsedMs >= existing.elapsedMs) {
+        if (playerNameChanged) {
+          await ctx.db.patch(existing._id, { player: nextPlayer });
+        }
+        return existing._id;
+      }
       await ctx.db.patch(existing._id, {
         completedAt: args.completedAt,
         difficulty: args.difficulty,
         elapsedMs,
         leaderboardKey,
-        player,
+        player: nextPlayer,
         playMode,
         puzzleSize,
         source: args.source,
@@ -116,6 +124,17 @@ export const top = query({
 function cleanName(value: string) {
   const trimmed = value.trim().slice(0, 32);
   return trimmed || 'anonymous';
+}
+
+function shouldUseSubmittedName(current: string, next: string) {
+  if (current === next) return false;
+  if (isAnonymousName(next)) return false;
+  return isAnonymousName(current) || current !== next;
+}
+
+function isAnonymousName(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized === '' || normalized === 'anonymous';
 }
 
 function cleanPuzzleSize(value: string | undefined) {
