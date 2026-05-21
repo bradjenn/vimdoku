@@ -169,7 +169,7 @@ type PageRoute =
   | 'profile'
 type GameLibraryFilter = 'all' | 'in-progress' | 'completed'
 type ChallengePuzzleSource = 'daily' | 'generated' | 'current'
-type ChallengeSetupKind = ChallengeKind | 'live-race' | 'live-turns'
+type ChallengeSetupKind = ChallengeKind | 'live-race' | 'live-turns' | 'coop'
 type ThemeId = (typeof CODE_THEMES)[number]['id']
 type CommandSuggestion = {
   command: string
@@ -794,6 +794,13 @@ function App() {
       : null
   const isTurnBattlePlay =
     isLiveBattlePlay && activeLiveBattleRoom?.battleKind === 'turns'
+  const isCoopPlay =
+    isLiveBattlePlay && activeLiveBattleRoom?.battleKind === 'coop'
+  const isCompetitiveBattlePlay =
+    isLiveBattlePlay &&
+    Boolean(activeLiveBattleRoom) &&
+    activeLiveBattleRoom?.battleKind !== 'coop'
+  const showSidebarTools = !isCompetitiveBattlePlay
   const isMyTurnBattleTurn =
     !isTurnBattlePlay || activeLiveBattleRoom?.turnAnonId === guestId
   const showBoard = activePage === 'play' || isLiveBattlePlay
@@ -992,6 +999,33 @@ function App() {
       variantId,
     ],
   )
+  const liveRaceFinished = Boolean(
+    isLiveBattlePlay &&
+      activeLiveBattleRoom?.battleKind === 'race' &&
+      activeLiveBattleRoom.status === 'finished' &&
+      activeLiveBattleRoom.winnerAnonId,
+  )
+  const liveRaceWinner = liveRaceFinished
+    ? (activeLiveBattleRoom?.presence.find(
+        (player) => player.anonId === activeLiveBattleRoom.winnerAnonId,
+      ) ?? null)
+    : null
+  const liveRaceOpponent = liveRaceFinished
+    ? (activeLiveBattleRoom?.presence.find(
+        (player) => player.anonId !== guestId,
+      ) ?? null)
+    : null
+  const liveRaceWon = Boolean(
+    liveRaceFinished &&
+      activeLiveBattleRoom?.winnerAnonId === guestId &&
+      currentRecord.status === 'completed',
+  )
+  const liveRaceLost = Boolean(
+    liveRaceFinished &&
+      activeLiveBattleRoom?.winnerAnonId !== guestId &&
+      currentRecord.status !== 'completed',
+  )
+  const boardObscured = timerPaused || liveRaceLost
   const needsSolvedNamePrompt =
     scoreEnabled &&
     (!hasCustomPlayerName || solvedNamePromptGameId === currentRecord.id)
@@ -1139,6 +1173,12 @@ function App() {
   )
 
   const resumeTimerFromActivity = useCallback(() => {
+    if (liveRaceLost) {
+      setStatusLine(
+        `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+      )
+      return
+    }
     if (!timerPaused || isSolved) return
     setTimerPaused(false)
     setTimerPauseReason(null)
@@ -1151,9 +1191,22 @@ function App() {
           ? 'activity resumed an auto-paused puzzle'
           : undefined,
     })
-  }, [isSolved, recordSolveEvent, timerPauseReason, timerPaused])
+  }, [
+    isSolved,
+    liveRaceLost,
+    liveRaceWinner?.player,
+    recordSolveEvent,
+    timerPauseReason,
+    timerPaused,
+  ])
 
   const toggleTimerPaused = useCallback(() => {
+    if (liveRaceLost) {
+      setStatusLine(
+        `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+      )
+      return
+    }
     if (!timerEnabled) {
       setStatusLine('Zen mode does not track time.')
       return
@@ -1178,7 +1231,15 @@ function App() {
       return next
     })
     setStatusLine(timerPaused ? 'Timer resumed.' : 'Timer paused.')
-  }, [isSolved, pauseEnabled, recordSolveEvent, timerEnabled, timerPaused])
+  }, [
+    isSolved,
+    liveRaceLost,
+    liveRaceWinner?.player,
+    pauseEnabled,
+    recordSolveEvent,
+    timerEnabled,
+    timerPaused,
+  ])
 
   useEffect(() => {
     if (previousPageRef.current !== activePage && showBoard) {
@@ -1572,6 +1633,12 @@ function App() {
 
   const setCell = useCallback(
     (value: number) => {
+      if (liveRaceLost) {
+        setStatusLine(
+          `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+        )
+        return
+      }
       const targets = [...activeCells].filter((index) => !givens[index])
       if (targets.length === 0) return
       resumeTimerFromActivity()
@@ -1680,6 +1747,8 @@ function App() {
       grid,
       isMyTurnBattleTurn,
       isTurnBattlePlay,
+      liveRaceLost,
+      liveRaceWinner?.player,
       playerName,
       pushHistory,
       puzzleSolution,
@@ -1692,6 +1761,12 @@ function App() {
   )
 
   const clearCellsCompletely = useCallback(() => {
+    if (liveRaceLost) {
+      setStatusLine(
+        `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+      )
+      return
+    }
     const targets = [...activeCells].filter((index) => !givens[index])
     if (targets.length === 0) return
     resumeTimerFromActivity()
@@ -1729,6 +1804,8 @@ function App() {
   }, [
     activeCells,
     givens,
+    liveRaceLost,
+    liveRaceWinner?.player,
     pushHistory,
     recordSolveEvent,
     resumeTimerFromActivity,
@@ -1736,6 +1813,12 @@ function App() {
 
   const toggleNote = useCallback(
     (value: number) => {
+      if (liveRaceLost) {
+        setStatusLine(
+          `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+        )
+        return
+      }
       if (!notesEnabled) {
         setStatusLine('Notes are disabled in speedrun.')
         return
@@ -1777,6 +1860,8 @@ function App() {
       activeCells,
       givens,
       grid,
+      liveRaceLost,
+      liveRaceWinner?.player,
       notes,
       notesEnabled,
       pushHistory,
@@ -1787,6 +1872,12 @@ function App() {
 
   const toggleCornerMark = useCallback(
     (value: number) => {
+      if (liveRaceLost) {
+        setStatusLine(
+          `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+        )
+        return
+      }
       if (!notesEnabled) {
         setStatusLine('Marks are disabled in speedrun.')
         return
@@ -1829,6 +1920,8 @@ function App() {
       cornerMarks,
       givens,
       grid,
+      liveRaceLost,
+      liveRaceWinner?.player,
       notesEnabled,
       pushHistory,
       recordSolveEvent,
@@ -1838,6 +1931,12 @@ function App() {
 
   const applyColor = useCallback(
     (colorIndex: number | null) => {
+      if (liveRaceLost) {
+        setStatusLine(
+          `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+        )
+        return
+      }
       resumeTimerFromActivity()
       const targets = [...activeCells]
       if (colorIndex !== null) setActiveColor(colorIndex)
@@ -1864,10 +1963,23 @@ function App() {
         value: colorIndex === null ? undefined : colorIndex + 1,
       })
     },
-    [activeCells, pushHistory, recordSolveEvent, resumeTimerFromActivity],
+    [
+      activeCells,
+      liveRaceLost,
+      liveRaceWinner?.player,
+      pushHistory,
+      recordSolveEvent,
+      resumeTimerFromActivity,
+    ],
   )
 
   const clearNotesAcrossBlock = useCallback(() => {
+    if (liveRaceLost) {
+      setStatusLine(
+        `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+      )
+      return
+    }
     if (!notesEnabled) return
     const targets = [...activeCells]
     resumeTimerFromActivity()
@@ -1886,6 +1998,8 @@ function App() {
     setStatusLine(`Cleared notes in ${targets.length} cells.`)
   }, [
     activeCells,
+    liveRaceLost,
+    liveRaceWinner?.player,
     notesEnabled,
     pushHistory,
     recordSolveEvent,
@@ -1893,6 +2007,12 @@ function App() {
   ])
 
   const clearCornerMarksAcrossSelection = useCallback(() => {
+    if (liveRaceLost) {
+      setStatusLine(
+        `Race over. ${liveRaceWinner?.player ?? 'Your opponent'} completed first.`,
+      )
+      return
+    }
     const targets = [...activeCells]
     resumeTimerFromActivity()
     pushHistory()
@@ -1908,7 +2028,14 @@ function App() {
       label: `cleared corner notes`,
     })
     setStatusLine(`Cleared corners in ${targets.length} cells.`)
-  }, [activeCells, pushHistory, recordSolveEvent, resumeTimerFromActivity])
+  }, [
+    activeCells,
+    liveRaceLost,
+    liveRaceWinner?.player,
+    pushHistory,
+    recordSolveEvent,
+    resumeTimerFromActivity,
+  ])
 
   const undo = useCallback(() => {
     if (!history.length) {
@@ -2777,6 +2904,8 @@ function App() {
       setLiveBattleStatus(
         battleKind === 'turns'
           ? 'Creating turn battle room...'
+          : battleKind === 'coop'
+            ? 'Creating co-op room...'
           : 'Creating live battle room...',
       )
       setChallengeSetupOpen(false)
@@ -2881,8 +3010,16 @@ function App() {
 
   const startLiveBattle = useCallback(
     (room: LiveBattleRoom) => {
-      const label = room.battleKind === 'turns' ? 'turn battle' : 'live race'
-      const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize)
+      const label =
+        room.battleKind === 'turns'
+          ? 'turn battle'
+          : room.battleKind === 'coop'
+            ? 'co-op'
+            : 'live race'
+      const puzzleGrid = parseGrid(
+        room.battleKind === 'coop' ? (room.sharedGrid ?? room.puzzle) : room.puzzle,
+        room.puzzleSize,
+      )
       startNewPuzzle(
         puzzleGrid,
         `Joined ${label} ${room.roomId}.`,
@@ -2896,11 +3033,21 @@ function App() {
       setLiveBattleStatus(
         room.battleKind === 'turns'
           ? 'Turn battle joined. Wait for your turn.'
+          : room.battleKind === 'coop'
+            ? 'Co-op joined. Shared grid is syncing.'
           : 'Live race joined. Presence is updating.',
       )
     },
     [startNewPuzzle],
   )
+
+  useEffect(() => {
+    if (!isCoopPlay || !activeLiveBattleRoom?.sharedGrid) return
+    const currentGrid = gridToString(grid, activeSize)
+    if (activeLiveBattleRoom.sharedGrid === currentGrid) return
+    setGrid(parseGrid(activeLiveBattleRoom.sharedGrid, activeSize))
+    setStatusLine('Co-op grid synced.')
+  }, [activeLiveBattleRoom?.sharedGrid, activeSize, grid, isCoopPlay])
 
   useEffect(() => {
     if (!routeLiveBattleId || !liveBattleRoom) return
@@ -2952,8 +3099,8 @@ function App() {
     setLiveBattleStatus(message)
     setStatusLine(message)
     if (!won && currentRecord.status !== 'completed') {
-      setTimerPaused(true)
-      setTimerPauseReason('auto')
+      setTimerPaused(false)
+      setTimerPauseReason(null)
     }
   }, [activeLiveBattleRoom, currentRecord.status, guestId])
 
@@ -3923,6 +4070,7 @@ function App() {
           <LiveBattleBridge
             activeRoomId={activeLiveBattleId}
             createRequest={liveBattleCreateRequest}
+            currentGrid={gridToString(grid, activeSize)}
             currentMistakes={challengeMistakes}
             currentRecord={currentRecord}
             onCreateResult={handleLiveBattleCreated}
@@ -4165,6 +4313,11 @@ function App() {
                         'turn battle',
                         'take turns with lives and a clock',
                       ],
+                      [
+                        'coop',
+                        'co-op',
+                        'solve one shared grid together',
+                      ],
                     ] as [ChallengeSetupKind, string, string][]
                   ).map(([kind, label, description]) => (
                     <button
@@ -4360,7 +4513,7 @@ function App() {
 
               <div
                 className={`relative grid min-h-0 flex-1 place-items-center overflow-hidden px-2 py-2 sm:px-5 sm:py-3 lg:px-8 lg:py-4 ${
-                  timerPaused ? 'cursor-not-allowed' : ''
+                  boardObscured ? 'cursor-not-allowed' : ''
                 }`}
                 style={battleImpactStyle}
               >
@@ -4371,9 +4524,13 @@ function App() {
                 />
                 <div
                   className={`w-full max-w-[min(68dvh,calc(100dvh-220px),820px,100%)] transition duration-200 sm:max-w-[min(76vh,calc(100vh-176px),820px,100%)] ${
-                    timerPaused ? 'scale-[0.98] blur-md brightness-50' : ''
+                    timerPaused
+                      ? 'scale-[0.98] blur-md brightness-50'
+                      : liveRaceLost
+                        ? 'scale-[0.98] brightness-50'
+                        : ''
                   }`}
-                  aria-hidden={timerPaused}
+                  aria-hidden={boardObscured}
                 >
                   <section
                     className="board-settle grid aspect-square border-4 border-[var(--grid-line)] bg-[var(--grid-line)]"
@@ -4478,17 +4635,23 @@ function App() {
                     })}
                   </section>
                 </div>
-                {timerPaused && (
+                {boardObscured && (
                   <div className="absolute inset-0 z-20 grid place-items-center bg-black/30 px-4">
-                    <button
-                      type="button"
-                      onClick={toggleTimerPaused}
-                      className="border border-[var(--accent)] bg-[var(--status-bg)] px-5 py-4 font-mono text-sm font-black uppercase tracking-[0.18em] text-[var(--accent)] shadow-[0_0_0_1px_var(--app-bg)] transition hover:bg-[var(--accent)] hover:text-[var(--app-bg)]"
-                    >
-                      {timerPauseReason === 'auto'
-                        ? 'auto-paused · resume'
-                        : 'timer paused · resume'}
-                    </button>
+                    {liveRaceLost ? (
+                      <RaceLostOverlay
+                        winnerName={liveRaceWinner?.player ?? 'your opponent'}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={toggleTimerPaused}
+                        className="border border-[var(--accent)] bg-[var(--status-bg)] px-5 py-4 font-mono text-sm font-black uppercase tracking-[0.18em] text-[var(--accent)] shadow-[0_0_0_1px_var(--app-bg)] transition hover:bg-[var(--accent)] hover:text-[var(--app-bg)]"
+                      >
+                        {timerPauseReason === 'auto'
+                          ? 'auto-paused · resume'
+                          : 'timer paused · resume'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -4640,6 +4803,15 @@ function App() {
                     />
                   </Panel>
                 )}
+                {isCompetitiveBattlePlay && (
+                  <Panel title="battle">
+                    <BattleSidebarPanel
+                      currentAnonId={guestId}
+                      liveRaceLost={liveRaceLost}
+                      room={activeLiveBattleRoom}
+                    />
+                  </Panel>
+                )}
                 <Panel title="timer">
                   <div className="space-y-3 font-mono">
                     <div className="flex items-center justify-between gap-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
@@ -4652,10 +4824,12 @@ function App() {
                     </div>
                     <button
                       type="button"
-                      disabled={!timerEnabled || !pauseEnabled || isSolved}
+                      disabled={
+                        !timerEnabled || !pauseEnabled || isSolved || liveRaceLost
+                      }
                       onClick={toggleTimerPaused}
                       className={`flex w-full items-center justify-center gap-2 border px-3 py-2.5 text-xs font-black uppercase tracking-[0.16em] transition active:translate-y-px ${
-                        !timerEnabled || !pauseEnabled || isSolved
+                        !timerEnabled || !pauseEnabled || isSolved || liveRaceLost
                           ? 'cursor-not-allowed border-[var(--border)] bg-[var(--button-bg)] text-[var(--muted)] opacity-50'
                           : timerPaused
                             ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--app-bg)]'
@@ -4670,28 +4844,30 @@ function App() {
                     </p>
                   </div>
                 </Panel>
-                <Panel
-                  collapsed={!toolsPanelOpen}
-                  onToggle={() => setToolsPanelOpen((current) => !current)}
-                  title="tools"
-                >
-                  <ToolModeBar
-                    activeColor={activeColor}
-                    colors={CELL_COLORS}
-                    layout="panel"
-                    onColorChange={(index) => {
-                      setActiveColor(index)
-                      setToolMode('color')
-                      applyColor(index)
-                    }}
-                    onColorClear={() => {
-                      setToolMode('color')
-                      applyColor(null)
-                    }}
-                    onModeChange={chooseToolMode}
-                    toolMode={toolMode}
-                  />
-                </Panel>
+                {showSidebarTools && (
+                  <Panel
+                    collapsed={!toolsPanelOpen}
+                    onToggle={() => setToolsPanelOpen((current) => !current)}
+                    title="tools"
+                  >
+                    <ToolModeBar
+                      activeColor={activeColor}
+                      colors={CELL_COLORS}
+                      layout="panel"
+                      onColorChange={(index) => {
+                        setActiveColor(index)
+                        setToolMode('color')
+                        applyColor(index)
+                      }}
+                      onColorClear={() => {
+                        setToolMode('color')
+                        applyColor(null)
+                      }}
+                      onModeChange={chooseToolMode}
+                      toolMode={toolMode}
+                    />
+                  </Panel>
+                )}
               </div>
             </aside>
 
@@ -5435,8 +5611,9 @@ function App() {
           hintUses={hintUses}
           mistakes={challengeMistakes}
           needsName={needsSolvedNamePrompt}
+          opponentName={liveRaceWon ? liveRaceOpponent?.player : undefined}
+          outcome={liveRaceWon ? 'race-win' : 'solved'}
           pauseCount={manualPauseCount}
-          solveEvents={solveEvents}
           onNameChange={updatePlayerName}
           onNameConfirm={() => {
             if (!isCustomPlayerName(playerName)) {
@@ -5740,6 +5917,75 @@ function ToolModeBar({
   )
 }
 
+function RaceLostOverlay({ winnerName }: { winnerName: string }) {
+  return (
+    <div className="relative overflow-hidden border border-[var(--danger)] bg-[var(--status-bg)] px-6 py-5 text-center font-mono shadow-[0_0_0_1px_var(--app-bg)]">
+      <CelebrationStrip tone="lost" />
+      <div className="relative">
+        <p className="text-[0.65rem] font-black uppercase tracking-[0.28em] text-[var(--muted)]">
+          race result
+        </p>
+        <p className="mt-2 text-3xl font-black uppercase tracking-[0.18em] text-[var(--danger)]">
+          you lost
+        </p>
+        <p className="mt-3 text-xs uppercase tracking-[0.16em] text-[var(--app-text)]">
+          {winnerName} finished first
+        </p>
+        <p className="mt-1 text-[0.65rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+          board locked · start another run from the menu
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function CelebrationStrip({ tone }: { tone: 'solved' | 'win' | 'lost' }) {
+  const cells =
+    tone === 'lost'
+      ? [
+          ['lost', 'LOST'],
+          ['try', 'TRY'],
+          ['again', 'AGAIN'],
+          ['next', 'NEXT'],
+          ['run', 'RUN'],
+        ]
+      : tone === 'win'
+        ? [
+            ['win', 'WIN'],
+            ['gg', 'GG'],
+            ['fast', 'FAST'],
+            ['clear', 'CLEAR'],
+            ['vim', 'VIM'],
+          ]
+        : [
+            ['done', 'DONE'],
+            ['clear', 'CLEAR'],
+            ['nice', 'NICE'],
+            ['solved', 'SOLVED'],
+            ['vim', 'VIM'],
+          ]
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 grid grid-cols-5 opacity-20"
+    >
+      {cells.map(([key, cell]) => (
+        <span
+          key={`${tone}-${key}`}
+          className={`grid place-items-center border-r border-[var(--border)] text-[0.62rem] font-black uppercase tracking-[0.2em] ${
+            tone === 'lost'
+              ? 'text-[var(--danger)]'
+              : 'text-[var(--accent)]'
+          }`}
+        >
+          {cell}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function SolvedModal({
   completion,
   difficulty,
@@ -5747,8 +5993,9 @@ function SolvedModal({
   hintUses,
   mistakes,
   needsName,
+  opponentName,
+  outcome = 'solved',
   pauseCount,
-  solveEvents,
   onLeaderboards,
   onNewGame,
   onNameChange,
@@ -5764,8 +6011,9 @@ function SolvedModal({
   hintUses: number
   mistakes: number
   needsName: boolean
+  opponentName?: string
+  outcome?: 'solved' | 'race-win'
   pauseCount: number
-  solveEvents: SolveEvent[]
   onLeaderboards: () => void
   onNewGame: () => void
   onNameChange: (value: string) => void
@@ -5783,33 +6031,7 @@ function SolvedModal({
   ]
   const playerNameValue =
     needsName && !isCustomPlayerName(playerName) ? '' : playerName
-  const reviewStats = solveReviewStats(solveEvents)
-  const [eventCursor, setEventCursor] = useState(
-    Math.max(0, solveEvents.length - 1),
-  )
-  const selectedEvent = solveEvents[eventCursor] ?? null
-
-  useEffect(() => {
-    setEventCursor(Math.max(0, solveEvents.length - 1))
-  }, [solveEvents.length])
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return
-      if (!['j', 'k', 'ArrowDown', 'ArrowUp'].includes(event.key)) return
-      event.preventDefault()
-      setEventCursor((current) => {
-        if (solveEvents.length === 0) return 0
-        if (event.key === 'j' || event.key === 'ArrowDown') {
-          return Math.min(solveEvents.length - 1, current + 1)
-        }
-        return Math.max(0, current - 1)
-      })
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [solveEvents.length])
+  const isRaceWin = outcome === 'race-win'
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: This backdrop returns to review when clicking outside the solved dialog.
@@ -5821,18 +6043,23 @@ function SolvedModal({
       }}
     >
       <section className="w-full max-w-4xl border border-[var(--accent)] bg-[var(--panel-bg)]">
-        <div className="flex flex-col items-center gap-3 border-b border-[var(--border)] px-6 py-8">
+        <div className="relative overflow-hidden border-b border-[var(--border)] px-6 py-8">
+          <CelebrationStrip tone={isRaceWin ? 'win' : 'solved'} />
+          <div className="relative flex flex-col items-center gap-3">
           <span className="text-5xl leading-none text-[var(--accent)]">✓</span>
           <h2 className="text-xs font-black uppercase tracking-[0.34em] text-[var(--app-text)]">
-            puzzle solved
+            {isRaceWin ? 'race won' : 'puzzle solved'}
           </h2>
           <p className="text-4xl font-black text-[var(--accent)]">
             {formatDuration(elapsedMs)}
           </p>
           <p className="text-[0.7rem] uppercase tracking-[0.16em] text-[var(--muted)]">
-            {source}
+            {isRaceWin
+              ? `you beat ${opponentName ?? 'your opponent'}`
+              : source}
             {difficulty ? ` · ${difficulty}` : ''}
           </p>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 border-b border-[var(--border)] bg-[var(--input-bg)] p-3 sm:grid-cols-4">
           <SolvedMetric label="filled" value={String(completion)} />
@@ -5871,105 +6098,6 @@ function SolvedModal({
             </button>
           </div>
         )}
-        <div className="grid border-b border-[var(--border)] lg:grid-cols-[240px_minmax(0,1fr)]">
-          <div className="border-b border-[var(--border)] bg-[var(--status-bg)] p-3 lg:border-r lg:border-b-0">
-            <p className="text-[0.65rem] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
-              solve review
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <SolvedMetric
-                label="entries"
-                value={String(reviewStats.entries)}
-              />
-              <SolvedMetric label="notes" value={String(reviewStats.notes)} />
-              <SolvedMetric label="clears" value={String(reviewStats.clears)} />
-              <SolvedMetric label="first" value={reviewStats.firstEntry} />
-            </div>
-            <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)]">
-              j/k steps through the replay buffer. It tracks play actions and
-              review events from this solve.
-            </p>
-          </div>
-          <div className="min-h-0 bg-[var(--input-bg)] p-3">
-            {solveEvents.length > 0 ? (
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-                <div className="max-h-48 overflow-y-auto border border-[var(--border)] bg-[var(--panel-bg)]">
-                  {solveEvents.map((event, index) => (
-                    <button
-                      type="button"
-                      key={event.id}
-                      onClick={() => setEventCursor(index)}
-                      className={`grid w-full grid-cols-[64px_minmax(0,1fr)] gap-3 border-b border-[var(--border)] px-3 py-2 text-left text-xs last:border-b-0 ${
-                        index === eventCursor
-                          ? 'bg-[var(--accent)] text-[var(--app-bg)]'
-                          : 'text-[var(--app-text)] hover:bg-[var(--panel-soft)]'
-                      }`}
-                    >
-                      <span className="font-black tabular-nums">
-                        {formatDuration(event.atMs)}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-black uppercase tracking-[0.12em]">
-                          {eventKindLabel(event.kind)} · {event.label}
-                        </span>
-                        {event.detail && (
-                          <span
-                            className={`block truncate ${
-                              index === eventCursor
-                                ? 'text-[var(--app-bg)]'
-                                : 'text-[var(--muted)]'
-                            }`}
-                          >
-                            {event.detail}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <div className="border border-[var(--border)] bg-[var(--status-bg)] p-3">
-                  <p className="text-[0.62rem] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
-                    replay point
-                  </p>
-                  {selectedEvent ? (
-                    <div className="mt-3 space-y-2 text-xs">
-                      <p className="text-lg font-black text-[var(--app-text)]">
-                        {formatDuration(selectedEvent.atMs)}
-                      </p>
-                      <p className="uppercase tracking-[0.14em] text-[var(--app-text)]">
-                        {selectedEvent.label}
-                      </p>
-                      <p className="text-[var(--muted)]">
-                        {selectedEvent.detail ??
-                          eventKindLabel(selectedEvent.kind)}
-                      </p>
-                      {selectedEvent.cells &&
-                        selectedEvent.cells.length > 0 && (
-                          <p className="text-[var(--muted)]">
-                            cells{' '}
-                            {selectedEvent.cells
-                              .slice(0, 8)
-                              .map((cell) => cell + 1)
-                              .join(', ')}
-                            {selectedEvent.cells.length > 8 ? '...' : ''}
-                          </p>
-                        )}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-xs text-[var(--muted)]">
-                      No recorded solve actions for this puzzle yet.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="border border-[var(--border)] bg-[var(--panel-bg)] p-3 text-sm text-[var(--muted)]">
-                This solve has no recorded timeline yet. New solves will build a
-                replay buffer as you play.
-              </p>
-            )}
-          </div>
-        </div>
         <div className="flex flex-col p-2 sm:grid sm:grid-cols-2">
           {actions.map(([key, label, run]) => (
             <button
@@ -6004,35 +6132,6 @@ function SolvedMetric({ label, value }: { label: string; value: string }) {
       </p>
     </div>
   )
-}
-
-function solveReviewStats(events: SolveEvent[]) {
-  const entries = events.filter((event) => event.kind === 'entry').length
-  const notes = events.filter(
-    (event) => event.kind === 'note' || event.kind === 'corner',
-  ).length
-  const clears = events.filter((event) => event.kind === 'clear').length
-  const firstEntry = events.find((event) => event.kind === 'entry')
-
-  return {
-    clears,
-    entries,
-    firstEntry: firstEntry ? formatDuration(firstEntry.atMs) : '--',
-    notes,
-  }
-}
-
-function eventKindLabel(kind: SolveEventKind) {
-  if (kind === 'entry') return 'put'
-  if (kind === 'note') return 'note'
-  if (kind === 'corner') return 'mark'
-  if (kind === 'color') return 'paint'
-  if (kind === 'hint') return 'hint'
-  if (kind === 'pause') return 'pause'
-  if (kind === 'resume') return 'resume'
-  if (kind === 'check') return 'check'
-  if (kind === 'reset') return 'reset'
-  return 'clear'
 }
 
 function NewGameSection({
@@ -7589,7 +7688,9 @@ function LeaderboardsDetail({
               key={record.id}
               rank={index + 1}
               primary={cleanLeaderboardSource(record.source, scope)}
-              secondary={formatGameDate(record.completedAt ?? record.updatedAt)}
+              secondary={formatLeaderboardDate(
+                record.completedAt ?? record.updatedAt,
+              )}
               time={formatDuration(record.elapsedMs)}
             />
           ))}
@@ -8349,7 +8450,12 @@ function LiveBattleRoomPanel({
 
   const puzzleGrid = parseGrid(room.puzzle, room.puzzleSize)
   const isActiveRoom = activeRoomId === room.roomId
-  const roomLabel = room.battleKind === 'turns' ? 'turn battle' : 'live race'
+  const roomLabel =
+    room.battleKind === 'turns'
+      ? 'turn battle'
+      : room.battleKind === 'coop'
+        ? 'co-op'
+        : 'live race'
   const cellCount = boardConfigFor(room.puzzleSize).cellCount
   const now = nowMs
   const me =
@@ -8379,6 +8485,8 @@ function LiveBattleRoomPanel({
       ? winner?.anonId === currentAnonId
         ? 'you won'
         : 'race finished'
+      : room.battleKind === 'coop' && room.status === 'finished'
+        ? 'co-op solved'
       : isCurrentSolved
         ? 'finished'
         : isActiveRoom
@@ -8402,6 +8510,8 @@ function LiveBattleRoomPanel({
               [
               {room.battleKind === 'turns'
                 ? 'turn-battle-room'
+                : room.battleKind === 'coop'
+                  ? 'coop-room'
                 : 'live-race-room'}
               ]
             </p>
@@ -8454,6 +8564,8 @@ function LiveBattleRoomPanel({
                 value={
                   room.battleKind === 'turns'
                     ? `turns / ${room.turnSeconds}s / ${room.turnLives} lives`
+                    : room.battleKind === 'coop'
+                      ? 'shared grid'
                     : '2-player race'
                 }
               />
@@ -8495,6 +8607,8 @@ function LiveBattleRoomPanel({
             <p className="text-sm leading-relaxed text-[var(--muted)]">
               {room.battleKind === 'race'
                 ? 'This race has two seats. Once both players are present, a short countdown starts and the first completed grid wins.'
+                : room.battleKind === 'coop'
+                  ? 'Everyone in this room edits the same grid. Entries sync through live presence so you can solve together.'
                 : 'This is a live room. You should appear in presence as ready within a few seconds. Open the invite in another device, another browser, or an incognito window to see a second player.'}
             </p>
           </div>
@@ -8588,6 +8702,117 @@ function LiveBattleRoomPanel({
   )
 }
 
+function BattleSidebarPanel({
+  currentAnonId,
+  liveRaceLost,
+  room,
+}: {
+  currentAnonId: string
+  liveRaceLost: boolean
+  room: LiveBattleRoom | null
+}) {
+  if (!room) {
+    return (
+      <p className="font-mono text-xs leading-relaxed text-[var(--muted)]">
+        Waiting for battle state...
+      </p>
+    )
+  }
+
+  const winner = room.winnerAnonId
+    ? room.presence.find((player) => player.anonId === room.winnerAnonId)
+    : null
+  const currentTurn = room.turnAnonId
+    ? room.presence.find((player) => player.anonId === room.turnAnonId)
+    : null
+  const isMyTurn = room.turnAnonId === currentAnonId
+
+  const headline =
+    room.battleKind === 'race'
+      ? room.status === 'finished'
+        ? liveRaceLost
+          ? 'you lost'
+          : winner?.anonId === currentAnonId
+            ? 'you won'
+            : 'race finished'
+        : room.raceStartsAt
+          ? 'countdown running'
+          : 'waiting for rival'
+      : room.status === 'finished'
+        ? 'battle finished'
+        : isMyTurn
+          ? 'your turn'
+          : currentTurn
+            ? `${currentTurn.player}'s turn`
+            : 'waiting for turn'
+
+  return (
+    <div className="space-y-3 font-mono">
+      <div
+        className={`border px-3 py-3 ${
+          liveRaceLost
+            ? 'border-[var(--danger)] bg-[var(--status-bg)]'
+            : 'border-[var(--border)] bg-[var(--status-bg)]'
+        }`}
+      >
+        <p
+          className={`text-xs font-black uppercase tracking-[0.16em] ${
+            liveRaceLost ? 'text-[var(--danger)]' : 'text-[var(--accent)]'
+          }`}
+        >
+          {headline}
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
+          {room.battleKind === 'race'
+            ? room.status === 'finished'
+              ? `${winner?.player ?? 'Someone'} finished first. The race board is final.`
+              : 'First completed grid wins. Mouse tools stay hidden so the room stays focused.'
+            : 'Enter one correct digit when your turn is active. Mistakes cost lives.'}
+        </p>
+      </div>
+
+      <dl className="space-y-1 text-xs">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+            mode
+          </dt>
+          <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+            {room.battleKind === 'turns' ? 'turn battle' : 'race'}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+            players
+          </dt>
+          <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+            {room.presence.length}
+          </dd>
+        </div>
+        {room.battleKind === 'turns' && (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                turn
+              </dt>
+              <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                {currentTurn?.player ?? '--'}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="uppercase tracking-[0.14em] text-[var(--muted)]">
+                lives
+              </dt>
+              <dd className="font-bold uppercase tracking-[0.12em] text-[var(--app-text)]">
+                {room.turnLives}
+              </dd>
+            </div>
+          </>
+        )}
+      </dl>
+    </div>
+  )
+}
+
 function LiveBattlePresencePanel({
   cellCount,
   currentAnonId,
@@ -8630,10 +8855,16 @@ function LiveBattlePresencePanel({
           ? winner.anonId === currentAnonId
             ? 'race finished · you won'
             : `race finished · ${winner.player} won`
+          : room.status === 'finished' && room.battleKind === 'coop'
+            ? 'co-op solved'
           : room.battleKind === 'turns'
             ? currentTurn
               ? `${currentTurn.anonId === currentAnonId ? 'your' : currentTurn.player} turn · ${Math.ceil(remainingMs / 1000)}s`
               : 'waiting to assign turn'
+            : room.battleKind === 'coop'
+              ? opponents.length === 0
+                ? 'waiting for collaborators'
+                : `${opponents.length} collaborator${opponents.length === 1 ? '' : 's'}`
             : room.status === 'waiting' && room.raceStartsAt
               ? `race starts in ${Math.max(1, Math.ceil(raceCountdownMs / 1000))}s`
               : opponents.length === 0
@@ -9479,6 +9710,9 @@ function cleanLeaderboardSource(source: string, scope: LeaderboardScope) {
       .replace(new RegExp(`\\b${escapedMode}\\b`, 'gi'), '')
       .replace(new RegExp(`\\b${escapedVariant}\\b`, 'gi'), '')
       .replace(new RegExp(`\\b${escapedDifficulty}\\b`, 'gi'), '')
+      .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_, year, month, day) =>
+        formatLeaderboardDate(`${year}-${month}-${day}`),
+      )
       .replace(/\s*\/\s*/g, ' / ')
       .replace(/\s{2,}/g, ' ')
       .replace(/\s+·\s+/g, ' · ')
@@ -9489,6 +9723,35 @@ function cleanLeaderboardSource(source: string, scope: LeaderboardScope) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function formatLeaderboardDate(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const date = match
+    ? new Date(
+        Date.UTC(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3]),
+        ),
+      )
+    : new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const day = date.getUTCDate()
+  const month = date.toLocaleString(undefined, {
+    month: 'short',
+    timeZone: 'UTC',
+  })
+  const year = String(date.getUTCFullYear()).slice(-2)
+  return `${day}${ordinalSuffix(day)} ${month} ${year}`
+}
+
+function ordinalSuffix(day: number) {
+  if (day % 100 >= 11 && day % 100 <= 13) return 'th'
+  if (day % 10 === 1) return 'st'
+  if (day % 10 === 2) return 'nd'
+  if (day % 10 === 3) return 'rd'
+  return 'th'
 }
 
 function publicFriendCodeFromPath(pathname: string) {
@@ -9546,7 +9809,12 @@ function toolModeLabel(mode: ToolMode) {
 }
 
 function isLiveChallengeSetup(kind: ChallengeSetupKind) {
-  return kind === 'race' || kind === 'live-race' || kind === 'live-turns'
+  return (
+    kind === 'race' ||
+    kind === 'live-race' ||
+    kind === 'live-turns' ||
+    kind === 'coop'
+  )
 }
 
 function asyncChallengeKindFromSetup(kind: ChallengeSetupKind): ChallengeKind {
@@ -9554,11 +9822,13 @@ function asyncChallengeKindFromSetup(kind: ChallengeSetupKind): ChallengeKind {
 }
 
 function liveBattleKindFromSetup(kind: ChallengeSetupKind): LiveBattleKind {
+  if (kind === 'coop') return 'coop'
   return kind === 'live-turns' ? 'turns' : 'race'
 }
 
 function challengeSetupLabel(kind: ChallengeSetupKind) {
   if (kind === 'streak') return 'streak battle'
+  if (kind === 'coop') return 'co-op'
   if (kind === 'live-race') return 'live race'
   if (kind === 'live-turns') return 'turn battle'
   return 'race'
@@ -9571,6 +9841,8 @@ function challengeSetupDescription(kind: ChallengeSetupKind) {
     return 'A shared room where players race the same puzzle with presence.'
   if (kind === 'live-turns')
     return 'A shared room where players alternate entries against a turn clock.'
+  if (kind === 'coop')
+    return 'A shared room where everyone works on the same synced grid.'
   return 'Two-player live race with presence and a synchronized start.'
 }
 

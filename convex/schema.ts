@@ -98,7 +98,9 @@ export default defineSchema({
     .index('by_challengeId_and_updatedAt', ['challengeId', 'updatedAt']),
 
   liveBattles: defineTable({
-    battleKind: v.optional(v.union(v.literal('race'), v.literal('turns'))),
+    battleKind: v.optional(
+      v.union(v.literal('race'), v.literal('turns'), v.literal('coop')),
+    ),
     createdAt: v.string(),
     creatorAnonId: v.string(),
     creatorName: v.string(),
@@ -108,6 +110,7 @@ export default defineSchema({
     puzzleSize: v.optional(v.string()),
     raceStartsAt: v.optional(v.number()),
     roomId: v.string(),
+    sharedGrid: v.optional(v.string()),
     source: v.string(),
     status: v.union(
       v.literal('waiting'),

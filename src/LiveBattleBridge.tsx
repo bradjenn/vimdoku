@@ -11,7 +11,7 @@ import type {
 import type { GameRecord } from './storage'
 
 type CreateRoomArgs = {
-  battleKind?: 'race' | 'turns'
+  battleKind?: 'race' | 'turns' | 'coop'
   creatorAnonId: string
   creatorName: string
   difficulty?: string
@@ -34,6 +34,7 @@ type HeartbeatArgs = {
   recordId?: string
   roomId: string
   selectedCell?: number
+  sharedGrid?: string
   status: 'online' | 'ready' | 'solving' | 'finished'
 }
 
@@ -82,6 +83,7 @@ const claimTimeoutRef = makeFunctionReference<
 export function LiveBattleBridge({
   activeRoomId,
   createRequest,
+  currentGrid,
   currentMistakes,
   currentRecord,
   onCreateResult,
@@ -95,6 +97,7 @@ export function LiveBattleBridge({
 }: {
   activeRoomId: string | null
   createRequest: LiveBattleCreateRequest | null
+  currentGrid: string
   currentMistakes: number
   currentRecord: GameRecord
   onCreateResult: (roomId: string, requestId: string) => void
@@ -208,6 +211,8 @@ export function LiveBattleBridge({
         recordId: isActiveRoom ? currentRecord.id : undefined,
         roomId: heartbeatRoomId,
         selectedCell: isActiveRoom ? selectedCell : undefined,
+        sharedGrid:
+          isActiveRoom && room?.battleKind === 'coop' ? currentGrid : undefined,
         status,
       }).catch((error: unknown) => {
         onStatus(
@@ -224,12 +229,14 @@ export function LiveBattleBridge({
   }, [
     activeRoomId,
     anonId,
+    currentGrid,
     currentMistakes,
     currentRecord,
     heartbeat,
     onStatus,
     playerName,
     roomId,
+    room?.battleKind,
     selectedCell,
   ])
 

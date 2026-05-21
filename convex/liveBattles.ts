@@ -6,7 +6,9 @@ import { v } from 'convex/values'
 
 export const createRoom = mutation({
   args: {
-    battleKind: v.optional(v.union(v.literal('race'), v.literal('turns'))),
+    battleKind: v.optional(
+      v.union(v.literal('race'), v.literal('turns'), v.literal('coop')),
+    ),
     creatorAnonId: v.string(),
     creatorName: v.string(),
     difficulty: v.optional(v.string()),
@@ -58,9 +60,11 @@ export const createRoom = mutation({
       puzzle: cleanPuzzle(args.puzzle, puzzleSize),
       puzzleSize,
       roomId,
+      sharedGrid:
+        battleKind === 'coop' ? cleanPuzzle(args.puzzle, puzzleSize) : undefined,
       source,
       status: 'waiting',
-      title: `${battleKind === 'turns' ? 'Turn battle' : 'Live race'} ${titleParts}`,
+      title: `${battleKind === 'turns' ? 'Turn battle' : battleKind === 'coop' ? 'Co-op' : 'Live race'} ${titleParts}`,
       turnLives,
       turnNumber: 0,
       turnSeconds,
@@ -113,6 +117,7 @@ export const getRoom = query({
       puzzleSize: room.puzzleSize ?? '9x9',
       raceStartsAt: room.raceStartsAt,
       roomId: room.roomId,
+      sharedGrid: room.sharedGrid,
       source: room.source,
       status: room.status,
       title: room.title,
@@ -138,6 +143,7 @@ export const heartbeat = mutation({
     recordId: v.optional(v.string()),
     roomId: v.string(),
     selectedCell: v.optional(v.number()),
+    sharedGrid: v.optional(v.string()),
     status: v.union(
       v.literal('online'),
       v.literal('ready'),
@@ -159,7 +165,7 @@ export const heartbeat = mutation({
       .withIndex('by_roomId', (q) => q.eq('roomId', roomId))
       .collect()
     const existing = roomPresence.find((row) => row.anonId === anonId) ?? null
-    if (!existing && room.battleKind !== 'turns' && roomPresence.length >= 2) {
+    if (!existing && room.battleKind === 'race' && roomPresence.length >= 2) {
       throw new Error('Live race is full.')
     }
     const nowIso = new Date().toISOString()
@@ -180,6 +186,10 @@ export const heartbeat = mutation({
       status: args.status,
       updatedAt: nowIso,
     }
+    const nextSharedGrid =
+      room.battleKind === 'coop' && args.sharedGrid
+        ? cleanPuzzle(args.sharedGrid, room.puzzleSize ?? '9x9')
+        : undefined
 
     if (existing) {
       await ctx.db.patch(existing._id, nextPresence)
@@ -203,12 +213,12 @@ export const heartbeat = mutation({
         row.status === 'finished',
     )
     const shouldScheduleRace =
-      room.battleKind !== 'turns' &&
+      room.battleKind === 'race' &&
       room.status === 'waiting' &&
       !room.raceStartsAt &&
       readyRacePlayers.length >= 2
     const raceCountdownDone =
-      room.battleKind !== 'turns' &&
+      room.battleKind === 'race' &&
       room.status === 'waiting' &&
       typeof room.raceStartsAt === 'number' &&
       room.raceStartsAt <= Date.now()
@@ -217,7 +227,8 @@ export const heartbeat = mutation({
         ? 'finished'
         : room.status === 'waiting' &&
             (raceCountdownDone ||
-              (room.battleKind === 'turns' && args.status === 'solving'))
+              (room.battleKind === 'turns' && args.status === 'solving') ||
+              (room.battleKind === 'coop' && args.status === 'solving'))
           ? 'live'
           : room.status
     if (
@@ -227,6 +238,7 @@ export const heartbeat = mutation({
     ) {
       const patch: {
         raceStartsAt?: number
+        sharedGrid?: string
         status: 'waiting' | 'live' | 'finished'
         turnAnonId?: string
         turnEndsAt?: number
@@ -234,11 +246,12 @@ export const heartbeat = mutation({
         turnStartedAt?: number
         winnerAnonId?: string
       } = { status: nextStatus }
+      if (nextSharedGrid) patch.sharedGrid = nextSharedGrid
       if (shouldScheduleRace) {
         patch.raceStartsAt = Date.now() + 5000
       }
       if (
-        room.battleKind !== 'turns' &&
+        room.battleKind === 'race' &&
         args.status === 'finished' &&
         room.status !== 'finished'
       ) {
@@ -277,6 +290,8 @@ export const heartbeat = mutation({
         }
       }
       await ctx.db.patch(room._id, patch)
+    } else if (nextSharedGrid && nextSharedGrid !== room.sharedGrid) {
+      await ctx.db.patch(room._id, { sharedGrid: nextSharedGrid })
     }
 
     return roomId
@@ -586,7 +601,8 @@ function cleanVariantId(value: string | undefined) {
 }
 
 function cleanBattleKind(value: string | undefined) {
-  return value === 'turns' ? 'turns' : 'race'
+  if (value === 'turns' || value === 'coop') return value
+  return 'race'
 }
 
 function cleanTurnSeconds(value: number | undefined) {

@@ -17,7 +17,7 @@ export type LiveBattlePresence = {
   updatedAt: string
 }
 
-export type LiveBattleKind = 'race' | 'turns'
+export type LiveBattleKind = 'race' | 'turns' | 'coop'
 
 export type LiveBattleRoom = {
   battleKind: LiveBattleKind
@@ -30,6 +30,7 @@ export type LiveBattleRoom = {
   puzzleSize: PuzzleSize
   raceStartsAt?: number
   roomId: string
+  sharedGrid?: string
   source: string
   status: 'waiting' | 'live' | 'finished'
   title: string
@@ -83,7 +84,7 @@ export function makeLiveBattleId(kind: LiveBattleKind = 'race') {
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
       : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-  return `${kind === 'turns' ? 'turn' : 'live'}-${entropy.toLowerCase()}`
+  return `${kind === 'turns' ? 'turn' : kind === 'coop' ? 'coop' : 'live'}-${entropy.toLowerCase()}`
 }
 
 export function liveBattleGameId(roomId: string) {
@@ -96,7 +97,12 @@ export function liveBattleIdFromGameId(gameId: string) {
 }
 
 export function createLiveBattleGameMeta(room: LiveBattleRoom): GameMeta {
-  const label = room.battleKind === 'turns' ? 'turn battle' : 'live race'
+  const label =
+    room.battleKind === 'turns'
+      ? 'turn battle'
+      : room.battleKind === 'coop'
+        ? 'co-op'
+        : 'live race'
   return {
     difficulty: room.difficulty,
     id: liveBattleGameId(room.roomId),
