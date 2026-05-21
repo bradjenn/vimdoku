@@ -7417,10 +7417,14 @@ function LeaderboardsIndex({
           <span className="text-[var(--accent)]">{indexSize}</span>
           <span className="mx-1.5 text-[var(--border)]">·</span>
           <span className="text-[var(--app-text)]">{modeLabel(indexMode)}</span>
-          <span className="mx-1.5 text-[var(--border)]">·</span>
-          <span className="text-[var(--app-text)]">
-            {VARIANTS[indexVariant].label}
-          </span>
+          {indexVariant !== 'classic' && (
+            <>
+              <span className="mx-1.5 text-[var(--border)]">·</span>
+              <span className="text-[var(--app-text)]">
+                {leaderboardVariantLabel(indexVariant)}
+              </span>
+            </>
+          )}
         </p>
         <div className="grid w-full gap-2 sm:grid-cols-3 xl:w-[520px]">
           <ChallengeSelectField
@@ -7464,7 +7468,7 @@ function LeaderboardsIndex({
               })
             }
             options={(Object.keys(VARIANTS) as VariantId[]).map((value) => ({
-              label: VARIANTS[value].label,
+              label: leaderboardVariantLabel(value),
               value,
             }))}
           />
@@ -7498,7 +7502,7 @@ function LeaderboardsIndex({
                   <>
                     <span className="text-[var(--border)]">·</span>
                     <span className="text-[var(--muted)]">
-                      {VARIANTS[combo.variant].label}
+                      {leaderboardVariantLabel(combo.variant)}
                     </span>
                   </>
                 )}
@@ -9452,11 +9456,15 @@ function leaderboardScopeLabel(scope: LeaderboardScope) {
   return [
     scope.size,
     modeLabel(scope.mode),
-    scope.variant === 'classic' ? null : VARIANTS[scope.variant].label,
+    scope.variant === 'classic' ? null : leaderboardVariantLabel(scope.variant),
     scope.difficulty,
   ]
     .filter(Boolean)
     .join(' / ')
+}
+
+function leaderboardVariantLabel(variant: VariantId) {
+  return variant === 'classic' ? 'Standard' : VARIANTS[variant].label
 }
 
 function cleanLeaderboardSource(source: string, scope: LeaderboardScope) {
