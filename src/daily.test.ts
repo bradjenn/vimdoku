@@ -105,6 +105,7 @@ describe('daily metadata', () => {
 
   it('shifts dates and formats readable labels', () => {
     expect(shiftDateKey('2026-05-18', -1)).toBe('2026-05-17');
+    expect(formatDailyDate('2026-05-22')).toBe('22nd May 2026');
     expect(formatDailyDate('not-a-date')).toBe('not-a-date');
   });
 });

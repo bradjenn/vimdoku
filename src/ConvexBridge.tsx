@@ -228,6 +228,7 @@ export function ConvexBridge({
     if (!cloudSyncEnabled) return;
     if (!scoreSubmissionsEnabled) return;
     if (currentRecord.status !== 'completed') return;
+    if (currentRecord.elapsedMs <= 0) return;
     if (scoreRecordId !== currentRecord.id) return;
     if (submittedIds.current.has(currentRecord.id)) return;
     submittedIds.current.add(currentRecord.id);

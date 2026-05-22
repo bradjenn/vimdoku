@@ -26,6 +26,8 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useMutation, useQuery } from 'convex/react'
 import { makeFunctionReference } from 'convex/server'
 import type { FunctionReference } from 'convex/server'
+import { Toaster, toast } from 'sonner'
+import 'sonner/dist/styles.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import Tesseract from 'tesseract.js'
@@ -65,6 +67,7 @@ import {
   shiftDateKey,
   todayDateKey,
 } from './daily'
+import { formatHumanDate } from './dates'
 import {
   createGameMeta,
   createGameRecord,
@@ -132,7 +135,6 @@ import { checkGrid } from './checks'
 import {
   boxSelection,
   columnSelection,
-  nextEmptyCell,
   rectangularSelection,
   rowSelection,
 } from './selection'
@@ -714,6 +716,7 @@ function App() {
   const [highlightDigit, setHighlightDigit] = useState<number | null>(null)
   const [themeId, setThemeId] = useState<ThemeId>(() => loadTheme())
   const [menuModal, setMenuModal] = useState<MenuModal>(null)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
   const [gamePickerOpen, setGamePickerOpen] = useState(false)
   const [gameQuery, setGameQuery] = useState('')
   const [gameLibraryQuery, setGameLibraryQuery] = useState('')
@@ -945,8 +948,23 @@ function App() {
 
   const openModalRoute = useCallback((modal: RouteModal) => {
     setGamePickerOpen(false)
+    setAuthModalOpen(false)
     if (modal === 'commands') setCommandMode(null)
     setMenuModal(modal)
+  }, [])
+
+  const openAuthModal = useCallback(() => {
+    setGamePickerOpen(false)
+    setGameQuery('')
+    setGameCursor(0)
+    setMenuModal(null)
+    setCommandMode(null)
+    if (!hasConvexBackend()) {
+      setStatusLine('Account sync is unavailable in this build.')
+      return
+    }
+    setAuthModalOpen(true)
+    setStatusLine('Opened account dialog.')
   }, [])
 
   const chooseToolMode = useCallback((mode: ToolMode) => {
@@ -1012,7 +1030,8 @@ function App() {
       }
       onClick={() => {
         closeMenuModal()
-        goToProfile()
+        if (cloudProfile?.authSubject) goToProfile()
+        else openAuthModal()
       }}
       className={`relative grid h-9 w-9 place-items-center border bg-[var(--button-bg)] transition active:translate-y-px ${
         activePage === 'profile'
@@ -1055,6 +1074,7 @@ function App() {
     isSolved &&
     showBoard &&
     !activeMenuModal &&
+    !authModalOpen &&
     !commandMode &&
     !gamePickerOpen &&
     !review &&
@@ -1178,7 +1198,10 @@ function App() {
             leaderboardVariant,
           ),
         )
-        .filter((score) => score.difficulty === leaderboardDifficulty),
+        .filter(
+          (score) =>
+            score.difficulty === leaderboardDifficulty && score.elapsedMs > 0,
+        ),
     [
       globalScores,
       leaderboardDifficulty,
@@ -1431,7 +1454,7 @@ function App() {
   useEffect(() => {
     if (
       !storageReady ||
-      activePage !== 'play' ||
+      !showBoard ||
       !timerEnabled ||
       !pauseEnabled ||
       isSolved
@@ -1482,10 +1505,10 @@ function App() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [
-    activePage,
     isSolved,
     pauseEnabled,
     recordSolveEvent,
+    showBoard,
     storageReady,
     timerEnabled,
     timerPaused,
@@ -1516,8 +1539,9 @@ function App() {
   useEffect(() => {
     if (
       !storageReady ||
-      activePage !== 'play' ||
+      !showBoard ||
       activeMenuModal ||
+      authModalOpen ||
       commandMode ||
       gamePickerOpen ||
       !timerEnabled ||
@@ -1540,11 +1564,12 @@ function App() {
     return () => window.clearInterval(timer)
   }, [
     activeMenuModal,
-    activePage,
+    authModalOpen,
     commandMode,
     gamePickerOpen,
     isSolved,
     review,
+    showBoard,
     storageReady,
     timerEnabled,
     timerPaused,
@@ -1826,10 +1851,6 @@ function App() {
         )
       }
       setHint(null)
-      if (activeSize === '6x6' && value !== 0 && targets.length === 1) {
-        const nextEmpty = nextEmptyCell(nextGrid, givens, selected)
-        if (nextEmpty !== null) setSelected(nextEmpty)
-      }
     },
     [
       activeChallengeKind,
@@ -1850,7 +1871,6 @@ function App() {
       puzzleSolution,
       recordSolveEvent,
       resumeTimerFromActivity,
-      selected,
       solved,
       triggerBattleImpact,
     ],
@@ -3557,56 +3577,6 @@ function App() {
   )
 
   useEffect(() => {
-    if (!showDashboard) return
-
-    function onDashboardKeyDown(event: KeyboardEvent) {
-      const key = event.key.toLowerCase()
-      if (key === 'escape') {
-        event.preventDefault()
-        goToPlay()
-        return
-      }
-      if (key === 'enter') {
-        event.preventDefault()
-        startGeneratedPuzzle(
-          dashboardDifficulty,
-          true,
-          dashboardSize,
-          dashboardMode,
-        )
-        return
-      }
-      if (key === '1' || key === '2' || key === '3') {
-        event.preventDefault()
-        setDashboardDifficulty(
-          key === '1' ? 'easy' : key === '2' ? 'medium' : 'hard',
-        )
-        return
-      }
-      if (key === '6' || key === '9') {
-        event.preventDefault()
-        setDashboardSize(key === '6' ? '6x6' : '9x9')
-        return
-      }
-      if (DASHBOARD_ACTIONS.some(([actionKey]) => actionKey === key)) {
-        event.preventDefault()
-        dashboardSelect(key)
-      }
-    }
-
-    window.addEventListener('keydown', onDashboardKeyDown)
-    return () => window.removeEventListener('keydown', onDashboardKeyDown)
-  }, [
-    dashboardDifficulty,
-    dashboardMode,
-    dashboardSize,
-    dashboardSelect,
-    goToPlay,
-    showDashboard,
-    startGeneratedPuzzle,
-  ])
-
-  useEffect(() => {
     if (!showSolved) return
 
     function onSolvedKeyDown(event: KeyboardEvent) {
@@ -3643,6 +3613,7 @@ function App() {
     function onKeyDown(event: KeyboardEvent) {
       if (review) return
       if (showSolved) return
+      if (authModalOpen) return
       if (
         showBoard &&
         !activeMenuModal &&
@@ -4002,6 +3973,7 @@ function App() {
     jumpToDigit,
     jumpToNextEmpty,
     activeMenuModal,
+    authModalOpen,
     moveBox,
     moveSelection,
     notesEnabled,
@@ -4122,6 +4094,42 @@ function App() {
         aria-hidden="true"
         className="crt-overlay pointer-events-none fixed inset-0 z-[8]"
       />
+      <Toaster
+        closeButton
+        duration={5200}
+        position="top-right"
+        toastOptions={{
+          actionButtonStyle: {
+            background: 'var(--accent)',
+            borderRadius: 0,
+            color: 'var(--app-bg)',
+            fontFamily:
+              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            fontSize: '0.68rem',
+            fontWeight: 900,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+          },
+          classNames: {
+            closeButton:
+              'border border-[var(--border)] bg-[var(--button-bg)] text-[var(--app-text)] hover:border-[var(--accent)]',
+            description:
+              'font-mono text-[0.7rem] uppercase tracking-[0.12em] text-[var(--muted)]',
+            title:
+              'font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-text)]',
+          },
+          style: {
+            background: 'var(--panel-bg)',
+            border: '1px solid var(--border)',
+            borderRadius: 0,
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45)',
+            color: 'var(--app-text)',
+            fontFamily:
+              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          },
+        }}
+        visibleToasts={3}
+      />
       {hasConvexBackend() && (
         <>
           <ConvexBridge
@@ -4216,7 +4224,7 @@ function App() {
             )
           }
           onSelect={dashboardSelect}
-          onSignIn={goToProfile}
+          onSignIn={openAuthModal}
           puzzleSize={dashboardSize}
         />
       )}
@@ -4534,6 +4542,7 @@ function App() {
               cloudStats={cloudStats}
               guestId={playerId}
               localStats={localProfileStats}
+              onOpenAuth={openAuthModal}
               onChallengeFriend={(friend) => {
                 navigateToPage('challenge')
                 openChallengeSetup('race', friend)
@@ -5334,6 +5343,22 @@ function App() {
             turnLives={challengeTurnLives}
             turnSeconds={challengeTurnSeconds}
             variant={challengeVariant}
+          />
+        </TuiModal>
+      )}
+
+      {authModalOpen && hasConvexBackend() && (
+        <TuiModal
+          footer="esc closes · guest progress is claimed after sign in"
+          narrow
+          onClose={() => setAuthModalOpen(false)}
+          title="account"
+        >
+          <AuthControls
+            onSuccess={() => {
+              setAuthModalOpen(false)
+              setStatusLine('Account linked.')
+            }}
           />
         </TuiModal>
       )}
@@ -6801,30 +6826,6 @@ function DashboardPage({
             a vim-first sudoku
           </p>
 
-          {!accountLinked && (
-            <button
-              type="button"
-              onClick={onSignIn}
-              className="mt-5 grid w-full gap-2 border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
-            >
-              <span className="grid h-9 w-9 place-items-center border border-[var(--accent)] text-[var(--accent)]">
-                <UserRound size={16} />
-              </span>
-              <span className="min-w-0">
-                <span className="block font-mono text-xs font-black uppercase tracking-[0.18em] text-[var(--app-text)]">
-                  claim your profile
-                </span>
-                <span className="mt-1 block text-sm leading-relaxed text-[var(--muted)]">
-                  Save streaks across devices, receive challenge notifications,
-                  and keep friends attached to one account.
-                </span>
-              </span>
-              <span className="font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
-                sign in
-              </span>
-            </button>
-          )}
-
           <div className="mt-6 grid gap-2 sm:grid-cols-3">
             <StreakTile
               label="daily streak"
@@ -6842,7 +6843,7 @@ function DashboardPage({
             />
           </div>
 
-          <div className="mt-9 grid gap-4 md:grid-cols-2 md:items-start">
+          <div className="mt-9 grid gap-4 md:grid-cols-2 md:items-stretch">
             <div className="relative border border-[var(--border)] bg-[var(--panel-bg)] p-3 md:order-2">
               <span className="absolute -top-[7px] left-3 bg-[var(--app-bg)] px-1.5 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
                 today
@@ -6912,43 +6913,54 @@ function DashboardPage({
                 <SudokuMotif puzzleSize={puzzleSize} />
               </button>
               <p className="mt-3 text-center text-[0.7rem] uppercase tracking-[0.14em] text-[var(--muted)]">
-                <span className="text-[var(--accent)]">↵</span> play{' '}
-                {modeLabel(mode)} {difficulty} daily
+                play {modeLabel(mode)} {difficulty} daily
               </p>
             </div>
 
-            <div className="relative border border-[var(--border)] bg-[var(--panel-bg)] md:order-1">
-              <span className="absolute -top-[7px] left-3 bg-[var(--app-bg)] px-1.5 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
-                menu
-              </span>
-              {DASHBOARD_ACTIONS.map(([actionKey, actionLabel]) => (
+            <div className="flex flex-col gap-4 md:order-1">
+              {!accountLinked && (
                 <button
                   type="button"
-                  key={actionKey}
-                  onClick={() => onSelect(actionKey)}
-                  className="group grid w-full grid-cols-[32px_24px_minmax(0,1fr)] items-center border-b border-[var(--border)] px-3 py-2.5 text-left last:border-b-0 hover:bg-[var(--panel-soft)]"
+                  onClick={onSignIn}
+                  className="grid gap-2 border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
                 >
-                  <span className="text-center text-xs font-bold text-[var(--accent)]">
-                    {actionKey}
+                  <span className="grid h-9 w-9 place-items-center border border-[var(--accent)] text-[var(--accent)]">
+                    <UserRound size={16} />
                   </span>
-                  <span className="text-[var(--border)]">→</span>
-                  <span className="truncate text-sm lowercase tracking-[0.08em] text-[var(--app-text)] group-hover:text-[var(--accent)]">
-                    {actionLabel}
+                  <span className="min-w-0">
+                    <span className="block font-mono text-xs font-black uppercase tracking-[0.18em] text-[var(--app-text)]">
+                      claim your profile
+                    </span>
+                    <span className="mt-1 block text-sm leading-relaxed text-[var(--muted)]">
+                      Save streaks across devices, receive challenge
+                      notifications, and keep friends attached to one account.
+                    </span>
+                  </span>
+                  <span className="font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+                    sign in
                   </span>
                 </button>
-              ))}
+              )}
+              <div className="relative flex flex-1 flex-col border border-[var(--border)] bg-[var(--panel-bg)]">
+                <span className="absolute -top-[7px] left-3 bg-[var(--app-bg)] px-1.5 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
+                  menu
+                </span>
+                {DASHBOARD_ACTIONS.map(([actionKey, actionLabel]) => (
+                  <button
+                    type="button"
+                    key={actionKey}
+                    onClick={() => onSelect(actionKey)}
+                    className="group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border)] px-3 py-3 text-left last:border-b-0 hover:bg-[var(--panel-soft)]"
+                  >
+                    <span className="truncate text-sm lowercase tracking-[0.08em] text-[var(--app-text)] group-hover:text-[var(--accent)]">
+                      {actionLabel}
+                    </span>
+                    <span className="text-[var(--border)]">→</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-
-          <p className="mt-5 text-xs text-[var(--muted)]">
-            <span className="text-[var(--accent)]">1-3</span> switch difficulty
-            <span className="mx-2 text-[var(--border)]">·</span>
-            <span className="text-[var(--accent)]">6/9</span> grid
-            <span className="mx-2 text-[var(--border)]">·</span>
-            <span className="text-[var(--accent)]">↵</span> play
-            <span className="mx-2 text-[var(--border)]">·</span>
-            <span className="text-[var(--accent)]">esc</span> skip
-          </p>
         </div>
       </div>
     </section>
@@ -7114,6 +7126,8 @@ function NotificationsButton({
   recipientAnonId: string
 }) {
   const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const seenNotificationIdsRef = useRef<Set<string> | null>(null)
   const rows = useQuery(listNotificationsRef as FunctionReference<'query'>, {
     limit: 12,
     recipientAnonId,
@@ -7134,17 +7148,68 @@ function NotificationsButton({
   const notifications = rows ?? []
   const hasUnread = (unreadCount ?? 0) > 0
 
-  async function openNotification(row: NotificationRow) {
-    await markRead({
-      notificationId: row._id,
-      recipientAnonId,
-    }).catch(() => undefined)
-    setOpen(false)
-    if (row.challengeId) onOpenChallenge(row.challengeId)
-  }
+  const openNotification = useCallback(
+    async (row: NotificationRow) => {
+      await markRead({
+        notificationId: row._id,
+        recipientAnonId,
+      }).catch(() => undefined)
+      setOpen(false)
+      if (row.challengeId) onOpenChallenge(row.challengeId)
+    },
+    [markRead, onOpenChallenge, recipientAnonId],
+  )
+
+  useEffect(() => {
+    if (!open) return
+
+    function onPointerDown(event: PointerEvent) {
+      if (rootRef.current?.contains(event.target as Node)) return
+      setOpen(false)
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!rows) return
+
+    const currentIds = new Set(rows.map((row) => row._id))
+    if (!seenNotificationIdsRef.current) {
+      seenNotificationIdsRef.current = currentIds
+      return
+    }
+
+    const newUnread = rows.filter(
+      (row) => !row.readAt && !seenNotificationIdsRef.current?.has(row._id),
+    )
+    seenNotificationIdsRef.current = currentIds
+
+    for (const row of newUnread.slice(0, 3)) {
+      toast(row.body, {
+        action: row.challengeId
+          ? {
+              label: 'open',
+              onClick: () => void openNotification(row),
+            }
+          : undefined,
+        description: row.title,
+        id: row._id,
+      })
+    }
+  }, [openNotification, rows])
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         aria-label="Notifications"
@@ -7827,6 +7892,7 @@ function Leaderboards({
 type LeaderboardComboEntry = {
   id: string
   player: string
+  recordId: string
   source: string
   difficulty?: string
   elapsedMs: number
@@ -7879,6 +7945,7 @@ function LeaderboardsIndex({
           .map((record) => ({
             id: `local-${record.id}`,
             player: localPlayer,
+            recordId: record.id,
             source: record.source,
             difficulty: record.difficulty,
             elapsedMs: record.elapsedMs,
@@ -7891,18 +7958,22 @@ function LeaderboardsIndex({
                 indexSize,
                 indexMode,
                 indexVariant,
-              ) && score.difficulty === difficulty,
+              ) &&
+              score.difficulty === difficulty &&
+              score.elapsedMs > 0,
           )
           .map((score) => ({
             id: `global-${score.id}`,
             player: score.player,
+            recordId: score.id,
             source: score.source,
             difficulty: score.difficulty,
             elapsedMs: score.elapsedMs,
           }))
-        const top = [...localTop, ...globalTop]
-          .sort((a, b) => a.elapsedMs - b.elapsedMs)
-          .slice(0, 10)
+        const top = dedupeLeaderboardComboEntries([...localTop, ...globalTop]).slice(
+          0,
+          10,
+        )
         return { scope, top }
       }),
     [
@@ -8052,6 +8123,25 @@ function LeaderboardsIndex({
       </div>
     </div>
   )
+}
+
+function compareLeaderboardComboEntries(
+  a: LeaderboardComboEntry,
+  b: LeaderboardComboEntry,
+) {
+  if (a.elapsedMs !== b.elapsedMs) return a.elapsedMs - b.elapsedMs
+  return a.id.localeCompare(b.id)
+}
+
+function dedupeLeaderboardComboEntries(entries: LeaderboardComboEntry[]) {
+  const bestByRecordId = new Map<string, LeaderboardComboEntry>()
+  for (const entry of entries) {
+    const existing = bestByRecordId.get(entry.recordId)
+    if (!existing || compareLeaderboardComboEntries(entry, existing) < 0) {
+      bestByRecordId.set(entry.recordId, entry)
+    }
+  }
+  return [...bestByRecordId.values()].sort(compareLeaderboardComboEntries)
 }
 
 function LeaderboardsDetail({
@@ -9381,6 +9471,7 @@ function ProfilePanel({
   localStats,
   onChallengeFriend,
   onNameChange,
+  onOpenAuth,
   onViewFriendProfile,
   playerName,
 }: {
@@ -9390,10 +9481,10 @@ function ProfilePanel({
   localStats: ProfileStats
   onChallengeFriend: (friend: FriendSummary) => void
   onNameChange: (value: string) => void
+  onOpenAuth: () => void
   onViewFriendProfile: (friend: FriendSummary) => void
   playerName: string
 }) {
-  const isCloud = Boolean(cloudStats)
   const syncedCompleted = cloudStats?.completedCount ?? 0
   const completedCount = Math.max(localStats.completedCount, syncedCompleted)
   const joined = cloudProfile?.createdAt
@@ -9422,18 +9513,18 @@ function ProfilePanel({
               onChange={(event) => onNameChange(event.target.value)}
             />
           </label>
-          {hasConvexBackend() && <AuthControls />}
           <ProfileMeta label="player id" value={shortGuestId(guestId)} />
           <ProfileMeta
             label="friend code"
             value={cloudProfile?.friendCode ?? 'sign in to claim'}
           />
           <ProfileMeta label="joined" value={joined} />
-          <ProfileMeta
-            label="sync"
-            value={isCloud ? 'convex live' : 'local first'}
-            accent={isCloud}
-          />
+          {hasConvexBackend() && (
+            <AuthStatusControl
+              isLinked={Boolean(cloudProfile?.authSubject)}
+              onOpenAuth={onOpenAuth}
+            />
+          )}
         </div>
       </section>
 
@@ -9464,10 +9555,6 @@ function ProfilePanel({
                 : '--'
             }
           />
-          <ProfileStat
-            label="synced"
-            value={`${syncedCompleted}/${completedCount}`}
-          />
         </div>
         <div className="border-t border-[var(--border)] p-4 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
           daily:{' '}
@@ -9481,11 +9568,6 @@ function ProfilePanel({
               ? formatGameDate(localStats.lastCompletedAt)
               : 'none yet'}
           </span>
-          {cloudStats && syncedCompleted < completedCount && (
-            <span className="ml-3 text-[var(--accent)]">
-              syncing {syncedCompleted}/{completedCount} completions
-            </span>
-          )}
         </div>
       </section>
 
@@ -9544,7 +9626,77 @@ function PublicProfileOffline({ onBack }: { onBack: () => void }) {
   )
 }
 
-function AuthControls() {
+function AuthStatusControl({
+  isLinked,
+  onOpenAuth,
+}: {
+  isLinked: boolean
+  onOpenAuth: () => void
+}) {
+  const { isAuthenticated, isLoading } = useConvexAuth()
+  const { signOut } = useAuthActions()
+  const [status, setStatus] = useState('')
+
+  async function handleSignOut() {
+    setStatus('signing out...')
+    try {
+      await signOut()
+      setStatus('signed out')
+    } catch {
+      setStatus('could not sign out')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
+        auth loading
+      </div>
+    )
+  }
+
+  if (isAuthenticated || isLinked) {
+    return (
+      <div className="space-y-2 border border-[var(--border)] bg-[var(--panel-bg)] p-3 font-mono">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+            account linked
+          </span>
+          <button
+            type="button"
+            className="border border-[var(--border)] bg-[var(--button-bg)] px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-[var(--app-text)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            onClick={() => void handleSignOut()}
+          >
+            sign out
+          </button>
+        </div>
+        {status && (
+          <p className="text-[0.68rem] uppercase tracking-[0.12em] text-[var(--muted)]">
+            {status}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpenAuth}
+      className="group w-full border border-[var(--accent)] bg-[var(--button-bg)] p-3 text-left font-mono transition hover:bg-[var(--panel-soft)] active:translate-y-px"
+    >
+      <span className="block text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+        sign in / create account
+      </span>
+      <span className="mt-1 block text-xs leading-relaxed text-[var(--muted)] group-hover:text-[var(--app-text)]">
+        Open the account terminal to claim this profile, friends, streaks, and
+        notifications.
+      </span>
+    </button>
+  )
+}
+
+function AuthControls({ onSuccess }: { onSuccess?: () => void }) {
   const { isAuthenticated, isLoading } = useConvexAuth()
   const { signIn, signOut } = useAuthActions()
   const [flow, setFlow] = useState<'signIn' | 'signUp'>('signIn')
@@ -9568,6 +9720,7 @@ function AuthControls() {
       })
       setPassword('')
       setStatus(flow === 'signUp' ? 'account linked' : 'signed in')
+      onSuccess?.()
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'auth failed')
     }
@@ -10254,32 +10407,7 @@ function escapeRegExp(value: string) {
 }
 
 function formatLeaderboardDate(value: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  const date = match
-    ? new Date(
-        Date.UTC(
-          Number(match[1]),
-          Number(match[2]) - 1,
-          Number(match[3]),
-        ),
-      )
-    : new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  const day = date.getUTCDate()
-  const month = date.toLocaleString(undefined, {
-    month: 'short',
-    timeZone: 'UTC',
-  })
-  const year = String(date.getUTCFullYear()).slice(-2)
-  return `${day}${ordinalSuffix(day)} ${month} ${year}`
-}
-
-function ordinalSuffix(day: number) {
-  if (day % 100 >= 11 && day % 100 <= 13) return 'th'
-  if (day % 10 === 1) return 'st'
-  if (day % 10 === 2) return 'nd'
-  if (day % 10 === 3) return 'rd'
-  return 'th'
+  return formatHumanDate(value, value)
 }
 
 function publicFriendCodeFromPath(pathname: string) {
@@ -10615,14 +10743,7 @@ function countCompletionStreak(values: string[]) {
 }
 
 function formatGameDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'unknown'
-  return new Intl.DateTimeFormat(undefined, {
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: 'short',
-  }).format(date)
+  return formatHumanDate(value, 'unknown')
 }
 
 function formatDuration(value: number) {

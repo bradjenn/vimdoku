@@ -17,21 +17,25 @@ export const submitScore = mutation({
   },
   handler: async (ctx, args) => {
     const elapsedMs = Math.max(0, Math.floor(args.elapsedMs));
+    if (elapsedMs <= 0) {
+      throw new Error('Leaderboard scores must have a positive solve time.');
+    }
     const player = cleanName(args.player);
     const puzzleSize = cleanPuzzleSize(args.puzzleSize);
     const playMode = cleanPlayMode(args.playMode);
     const variantId = cleanVariantId(args.variantId);
     const leaderboardKey = makeLeaderboardKey(puzzleSize, playMode, variantId);
-    const existing = await ctx.db
+    const existingRows = await ctx.db
       .query('scores')
       .withIndex('by_recordId', (q) => q.eq('recordId', args.recordId))
-      .unique();
+      .collect();
+    const existing = bestScoreRow(existingRows);
 
     if (existing) {
       const playerNameChanged =
         existing.anonId === args.anonId && shouldUseSubmittedName(existing.player, player);
       const nextPlayer = playerNameChanged ? player : existing.player;
-      if (elapsedMs >= existing.elapsedMs) {
+      if (existing.elapsedMs > 0 && elapsedMs >= existing.elapsedMs) {
         if (playerNameChanged) {
           await ctx.db.patch(existing._id, { player: nextPlayer });
         }
@@ -79,12 +83,13 @@ export const top = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const queryLimit = Math.min(400, limit * 4);
     const scores = args.puzzle
       ? await ctx.db
           .query('scores')
           .withIndex('by_puzzle_elapsedMs', (q) => q.eq('puzzle', args.puzzle ?? ''))
           .order('asc')
-          .take(limit)
+          .take(queryLimit)
       : (
           await Promise.all(
             leaderboardKeysFor(
@@ -98,28 +103,55 @@ export const top = query({
                   q.eq('leaderboardKey', leaderboardKey),
                 )
                 .order('asc')
-                .take(limit),
+                .take(queryLimit),
             ),
           )
         )
           .flat()
-          .sort((a, b) => a.elapsedMs - b.elapsedMs)
-          .slice(0, limit);
+          .filter((score) => score.elapsedMs > 0)
+          .sort(compareScores)
 
-    return scores.map((score) => ({
-      completedAt: score.completedAt,
-      difficulty: score.difficulty,
-      elapsedMs: score.elapsedMs,
-      id: score.recordId,
-      player: score.player,
-      playMode: score.playMode ?? 'classic',
-      puzzle: score.puzzle,
-      puzzleSize: score.puzzleSize ?? '9x9',
-      source: score.source,
-      variantId: cleanVariantId(score.variantId),
-    }));
+    return dedupeScoreRows(scores)
+      .slice(0, limit)
+      .map((score) => ({
+        completedAt: score.completedAt,
+        difficulty: score.difficulty,
+        elapsedMs: score.elapsedMs,
+        id: score.recordId,
+        player: score.player,
+        playMode: score.playMode ?? 'classic',
+        puzzle: score.puzzle,
+        puzzleSize: score.puzzleSize ?? '9x9',
+        source: score.source,
+        variantId: cleanVariantId(score.variantId),
+      }));
   },
 });
+
+function compareScores(
+  a: { elapsedMs: number; completedAt: string },
+  b: { elapsedMs: number; completedAt: string },
+) {
+  if (a.elapsedMs !== b.elapsedMs) return a.elapsedMs - b.elapsedMs;
+  return b.completedAt.localeCompare(a.completedAt);
+}
+
+function bestScoreRow<T extends { elapsedMs: number; completedAt: string }>(rows: T[]) {
+  return rows.filter((row) => row.elapsedMs > 0).sort(compareScores)[0] ?? null;
+}
+
+function dedupeScoreRows<T extends { recordId: string; elapsedMs: number; completedAt: string }>(
+  rows: T[],
+) {
+  const bestByRecordId = new Map<string, T>();
+  for (const row of rows) {
+    const existing = bestByRecordId.get(row.recordId);
+    if (!existing || compareScores(row, existing) < 0) {
+      bestByRecordId.set(row.recordId, row);
+    }
+  }
+  return [...bestByRecordId.values()].sort(compareScores);
+}
 
 function cleanName(value: string) {
   const trimmed = value.trim().slice(0, 32);

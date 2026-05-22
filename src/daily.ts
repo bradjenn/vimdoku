@@ -1,4 +1,5 @@
 import { modeLabel, type PlayMode } from './playModes';
+import { formatHumanDate } from './dates';
 import {
   boardConfigFor,
   puzzleSizeFromGrid,
@@ -177,13 +178,7 @@ export function shiftDateKey(dateKey: string, offsetDays: number) {
 }
 
 export function formatDailyDate(dateKey: string) {
-  const date = new Date(`${dateKey}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateKey;
-  return new Intl.DateTimeFormat(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
+  return formatHumanDate(dateKey, dateKey);
 }
 
 export function isValidDateKey(dateKey: string) {

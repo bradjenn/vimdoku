@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react'
 import { makeFunctionReference } from 'convex/server'
 import type { FunctionReference } from 'convex/server'
 import { challengeKindLabel, type ChallengeKind } from './challenges'
+import { formatHumanDate } from './dates'
 import { modeLabel, type PlayMode } from './playModes'
 import type { PuzzleDifficulty, PuzzleSize } from './sudoku'
 
@@ -865,11 +866,5 @@ function formatDuration(ms: number) {
 }
 
 function formatDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date)
+  return formatHumanDate(value, value)
 }

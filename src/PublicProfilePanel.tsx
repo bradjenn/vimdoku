@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import type { FunctionReference } from 'convex/server';
+import { formatHumanDate } from './dates';
 
 export type PublicProfile = {
   anonId: string;
@@ -279,7 +280,7 @@ export function PublicProfilePanel({
         </header>
         {profile.recentCompleted.length === 0 ? (
           <p className="p-4 text-sm leading-relaxed text-[var(--muted)]">
-            No completed puzzles have synced yet.
+            No completed puzzles yet.
           </p>
         ) : (
           <div className="divide-y divide-[var(--border)]">
@@ -411,11 +412,5 @@ function formatPublicSolveTime(game: PublicProfileCompletion) {
 }
 
 function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
+  return formatHumanDate(value, value);
 }

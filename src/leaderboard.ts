@@ -57,6 +57,7 @@ export async function fetchGlobalLeaderboard(
 
 export async function submitGlobalScore(record: GameRecord) {
   if (!LEADERBOARD_ENDPOINT || record.status !== 'completed') return;
+  if (record.elapsedMs <= 0) return;
 
   await fetch(LEADERBOARD_ENDPOINT, {
     body: JSON.stringify({
@@ -78,10 +79,12 @@ export async function submitGlobalScore(record: GameRecord) {
 
 function normalizeEntry(entry: LeaderboardEntry): LeaderboardEntry | null {
   if (!entry.id || !entry.puzzle || !Number.isFinite(entry.elapsedMs)) return null;
+  const elapsedMs = Math.floor(entry.elapsedMs);
+  if (elapsedMs <= 0) return null;
   return {
     completedAt: String(entry.completedAt ?? ''),
     difficulty: entry.difficulty ? String(entry.difficulty) : undefined,
-    elapsedMs: Math.max(0, Math.floor(entry.elapsedMs)),
+    elapsedMs,
     id: String(entry.id),
     player: String(entry.player || 'anonymous'),
     playMode: sanitizePlayMode(entry.playMode),

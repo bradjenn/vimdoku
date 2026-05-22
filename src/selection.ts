@@ -1,12 +1,4 @@
-import { boardConfigFor, type Grid, type PuzzleSize } from './sudoku';
-
-export function nextEmptyCell(grid: Grid, givens: boolean[], fromIndex: number) {
-  for (let offset = 1; offset <= grid.length; offset += 1) {
-    const index = (fromIndex + offset) % grid.length;
-    if (!givens[index] && grid[index] === 0) return index;
-  }
-  return null;
-}
+import { boardConfigFor, type PuzzleSize } from './sudoku';
 
 export function rectangularSelection(
   anchor: number,
