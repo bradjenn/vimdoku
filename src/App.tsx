@@ -1003,6 +1003,39 @@ function App() {
         }}
       />
     ) : null
+  const headerProfile = (
+    <button
+      type="button"
+      aria-label="Profile"
+      title={
+        cloudProfile?.authSubject ? `Profile: ${playerName}` : 'Profile / sign in'
+      }
+      onClick={() => {
+        closeMenuModal()
+        goToProfile()
+      }}
+      className={`relative grid h-9 w-9 place-items-center border bg-[var(--button-bg)] transition active:translate-y-px ${
+        activePage === 'profile'
+          ? 'border-[var(--accent)] text-[var(--accent)]'
+          : cloudProfile?.authSubject
+            ? 'border-[var(--border)] text-[var(--app-text)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+            : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+      }`}
+    >
+      <UserRound size={16} />
+      {!cloudProfile?.authSubject && (
+        <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center border border-[var(--app-bg)] bg-[var(--accent)] font-mono text-[0.58rem] font-black text-[var(--app-bg)]">
+          +
+        </span>
+      )}
+    </button>
+  )
+  const headerActions = (
+    <>
+      {headerNotifications}
+      {headerProfile}
+    </>
+  )
 
   const conflicts = useMemo(
     () => findConflicts(grid, activeSize),
@@ -4166,10 +4199,11 @@ function App() {
       )}
       {showDashboard && (
         <DashboardPage
+          accountLinked={Boolean(cloudProfile?.authSubject)}
           difficulty={dashboardDifficulty}
           localStats={localProfileStats}
           mode={dashboardMode}
-          notifications={headerNotifications}
+          notifications={headerActions}
           onModeChange={setDashboardMode}
           onSizeChange={setDashboardSize}
           onDifficultyChange={setDashboardDifficulty}
@@ -4182,13 +4216,14 @@ function App() {
             )
           }
           onSelect={dashboardSelect}
+          onSignIn={goToProfile}
           puzzleSize={dashboardSize}
         />
       )}
 
       {activePage === 'games' && (
         <AppPageFrame
-          extraActions={headerNotifications}
+          extraActions={headerActions}
           onOpenMenu={() => openModalRoute('menu')}
           title="puzzle log"
         >
@@ -4210,7 +4245,7 @@ function App() {
 
       {activePage === 'new' && (
         <AppPageFrame
-          extraActions={headerNotifications}
+          extraActions={headerActions}
           onOpenMenu={() => openModalRoute('menu')}
           title="new game"
         >
@@ -4276,7 +4311,7 @@ function App() {
 
       {activePage === 'leaderboards' && (
         <AppPageFrame
-          extraActions={headerNotifications}
+          extraActions={headerActions}
           onOpenMenu={() => openModalRoute('menu')}
           title="leaderboards"
         >
@@ -4297,7 +4332,7 @@ function App() {
 
       {activePage === 'challenge' && (
         <AppPageFrame
-          extraActions={headerNotifications}
+          extraActions={headerActions}
           onOpenMenu={() => openModalRoute('menu')}
           title="challenge"
         >
@@ -4444,7 +4479,7 @@ function App() {
 
       {activePage === 'live-battle' && !isLiveBattlePlay && (
         <AppPageFrame
-          extraActions={headerNotifications}
+          extraActions={headerActions}
           onOpenMenu={() => openModalRoute('menu')}
           title="live battle"
         >
@@ -4471,7 +4506,7 @@ function App() {
 
       {activePage === 'profile' && (
         <AppPageFrame
-          extraActions={headerNotifications}
+          extraActions={headerActions}
           onOpenMenu={() => openModalRoute('menu')}
           title={publicFriendCode ? 'player profile' : 'profile'}
         >
@@ -4521,7 +4556,7 @@ function App() {
             title={`${labelCell(selected, activeSize)} · ${completion}/${activeCellCount}`}
             extraActions={
               <>
-                {headerNotifications}
+                {headerActions}
                 <button
                   type="button"
                   aria-label="Rules"
@@ -6724,6 +6759,7 @@ function DailyMeta({
 }
 
 function DashboardPage({
+  accountLinked,
   difficulty,
   localStats,
   mode,
@@ -6732,9 +6768,11 @@ function DashboardPage({
   onModeChange,
   onPlay,
   onSelect,
+  onSignIn,
   onSizeChange,
   puzzleSize,
 }: {
+  accountLinked: boolean
   difficulty: PuzzleDifficulty
   localStats: ProfileStats
   mode: PlayMode
@@ -6743,39 +6781,11 @@ function DashboardPage({
   onModeChange: (mode: PlayMode) => void
   onPlay: () => void
   onSelect: (key: string) => void
+  onSignIn: () => void
   onSizeChange: (puzzleSize: PuzzleSize) => void
   puzzleSize: PuzzleSize
 }) {
   const dailyDifficulties: PuzzleDifficulty[] = ['easy', 'medium', 'hard']
-  // Generation is CPU-heavy — run it after first paint so the splash is instant.
-  const [dailyGrids, setDailyGrids] = useState<Record<string, Grid> | null>(
-    null,
-  )
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDailyGrids({
-        easy: generatePuzzle(
-          'easy',
-          dailySeed('easy', 'vimdoku', todayDateKey(), puzzleSize, mode),
-          puzzleSize,
-        ),
-        medium: generatePuzzle(
-          'medium',
-          dailySeed('medium', 'vimdoku', todayDateKey(), puzzleSize, mode),
-          puzzleSize,
-        ),
-        hard: generatePuzzle(
-          'hard',
-          dailySeed('hard', 'vimdoku', todayDateKey(), puzzleSize, mode),
-          puzzleSize,
-        ),
-      })
-    }, 0)
-    return () => clearTimeout(timer)
-  }, [mode, puzzleSize])
-
-  const grid = dailyGrids?.[difficulty] ?? emptyGrid(puzzleSize)
 
   return (
     <section className="flex min-h-screen flex-col bg-[var(--app-bg)] font-mono lg:h-screen lg:overflow-y-auto">
@@ -6791,6 +6801,30 @@ function DashboardPage({
             a vim-first sudoku
           </p>
 
+          {!accountLinked && (
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="mt-5 grid w-full gap-2 border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+            >
+              <span className="grid h-9 w-9 place-items-center border border-[var(--accent)] text-[var(--accent)]">
+                <UserRound size={16} />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-mono text-xs font-black uppercase tracking-[0.18em] text-[var(--app-text)]">
+                  claim your profile
+                </span>
+                <span className="mt-1 block text-sm leading-relaxed text-[var(--muted)]">
+                  Save streaks across devices, receive challenge notifications,
+                  and keep friends attached to one account.
+                </span>
+              </span>
+              <span className="font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--accent)]">
+                sign in
+              </span>
+            </button>
+          )}
+
           <div className="mt-6 grid gap-2 sm:grid-cols-3">
             <StreakTile
               label="daily streak"
@@ -6802,8 +6836,8 @@ function DashboardPage({
               value={String(localStats.bestDailyStreak)}
             />
             <StreakTile
-              label="today"
-              value={localStats.completedToday ? 'done' : 'open'}
+              label="daily"
+              value={localStats.completedToday ? 'complete' : 'available'}
               accent={!localStats.completedToday}
             />
           </div>
@@ -6875,10 +6909,7 @@ function DashboardPage({
                 onClick={onPlay}
                 className="group mt-3 block w-full border border-[var(--border)] bg-[var(--input-bg)] p-3 transition hover:border-[var(--accent)] hover:bg-[var(--panel-soft)]"
               >
-                <PuzzlePreview
-                  grid={grid}
-                  givens={grid.map((value) => value !== 0)}
-                />
+                <SudokuMotif puzzleSize={puzzleSize} />
               </button>
               <p className="mt-3 text-center text-[0.7rem] uppercase tracking-[0.14em] text-[var(--muted)]">
                 <span className="text-[var(--accent)]">↵</span> play{' '}
@@ -6945,6 +6976,57 @@ function StreakTile({
       >
         {value}
       </p>
+    </div>
+  )
+}
+
+function SudokuMotif({ puzzleSize }: { puzzleSize: PuzzleSize }) {
+  const config = boardConfigFor(puzzleSize)
+  const cells = Array.from({ length: config.cellCount }, (_, index) => index)
+
+  return (
+    <div className="relative overflow-hidden border border-[var(--grid-line)] bg-[var(--grid-line)]">
+      <div
+        className="grid aspect-square"
+        style={{
+          gridTemplateColumns: `repeat(${config.size}, minmax(0, 1fr))`,
+        }}
+        aria-hidden="true"
+      >
+        {cells.map((index) => {
+          const row = Math.floor(index / config.size)
+          const col = index % config.size
+          const boxTint =
+            Math.floor(row / config.boxRows) + Math.floor(col / config.boxCols)
+          const isCursor =
+            row === Math.floor(config.size / 2) && col === Math.floor(config.size / 2)
+          const isGuide = row === 1 || col === config.size - 2
+
+          return (
+            <span
+              key={index}
+              className={`min-h-8 border border-[var(--border)] ${
+                isCursor
+                  ? 'bg-[var(--accent)]'
+                  : isGuide
+                    ? 'bg-[var(--panel-soft)]'
+                    : boxTint % 2 === 0
+                      ? 'bg-[var(--cell-bg)]'
+                      : 'bg-[var(--input-bg)]'
+              }`}
+            >
+              {isCursor && (
+                <span className="grid h-full place-items-center font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)]">
+                  hjkl
+                </span>
+              )}
+            </span>
+          )
+        })}
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 font-mono text-[0.65rem] uppercase tracking-[0.16em] text-[var(--muted)]">
+        no preview · puzzle hidden until start
+      </div>
     </div>
   )
 }
@@ -9388,9 +9470,9 @@ function ProfilePanel({
           />
         </div>
         <div className="border-t border-[var(--border)] p-4 font-mono text-xs uppercase tracking-[0.14em] text-[var(--muted)]">
-          today:{' '}
+          daily:{' '}
           <span className="text-[var(--app-text)]">
-            {localStats.completedToday ? 'completed' : 'open'}
+            {localStats.completedToday ? 'complete' : 'available'}
           </span>
           <span className="mx-2 text-[var(--border)]">·</span>
           last completion:{' '}
@@ -9538,6 +9620,16 @@ function AuthControls() {
       className="space-y-2 border border-[var(--border)] bg-[var(--panel-bg)] p-3 font-mono"
       onSubmit={(event) => void submitAuth(event)}
     >
+      <div className="border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2">
+        <p className="text-[0.65rem] font-black uppercase tracking-[0.18em] text-[var(--accent)]">
+          {flow === 'signUp' ? 'create account' : 'sign in'}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+          {flow === 'signUp'
+            ? 'Creates a Vimdoku account and claims this browser profile, including its friend code, streaks, games, and challenge identity.'
+            : 'Restores your claimed profile, friends, streaks, notifications, and challenge history on this device.'}
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
