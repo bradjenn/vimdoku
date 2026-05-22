@@ -28,6 +28,11 @@ export type CloudStats = {
   syncedGames: number;
 };
 
+// Ownership boundary:
+// - IndexedDB owns active and in-progress play so the board stays instant/offline.
+// - Convex owns signed-in completed history plus social/shared surfaces.
+// This bridge only uploads completed game records; the active draft remains local.
+
 type SubmitScoreArgs = {
   anonId: string;
   completedAt: string;
@@ -198,9 +203,9 @@ export function ConvexBridge({
 
   useEffect(() => {
     if (!cloudSyncEnabled) return;
+    if (currentRecord.status !== 'completed') return;
     const now = Date.now();
-    const isFinal = currentRecord.status === 'completed';
-    if (!isFinal && now - lastGameSyncAt.current < 15000) return;
+    if (now - lastGameSyncAt.current < 15000) return;
     lastGameSyncAt.current = now;
 
     void upsertGame(toGameArgs(currentRecord, anonId)).catch(() => {
@@ -211,7 +216,11 @@ export function ConvexBridge({
   useEffect(() => {
     if (!cloudSyncEnabled) return;
     const recordsToSync = gameRecords
-      .filter((record) => !syncedGameIds.current.has(syncKey(record)))
+      .filter(
+        (record) =>
+          record.status === 'completed' &&
+          !syncedGameIds.current.has(syncKey(record)),
+      )
       .slice(0, 8);
     if (recordsToSync.length === 0) return;
 

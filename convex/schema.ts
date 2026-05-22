@@ -184,4 +184,22 @@ export default defineSchema({
       'createdAt',
     ])
     .index('by_recipientAnonId_and_readAt', ['recipientAnonId', 'readAt']),
+
+  pushSubscriptions: defineTable({
+    anonId: v.string(),
+    auth: v.string(),
+    authSubject: v.string(),
+    createdAt: v.string(),
+    enabled: v.boolean(),
+    endpoint: v.string(),
+    lastSentDateKey: v.optional(v.string()),
+    p256dh: v.string(),
+    reminderHour: v.number(),
+    timezone: v.string(),
+    updatedAt: v.string(),
+    userAgent: v.optional(v.string()),
+  })
+    .index('by_authSubject', ['authSubject'])
+    .index('by_enabled', ['enabled'])
+    .index('by_endpoint', ['endpoint']),
 })

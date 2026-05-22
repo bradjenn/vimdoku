@@ -10,6 +10,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
       includeAssets: [
         'apple-touch-icon.png',
         'favicon.svg',
@@ -49,9 +56,8 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{css,html,ico,js,png,svg,webmanifest,woff2}'],
-        navigateFallback: '/index.html',
       },
     }),
   ],

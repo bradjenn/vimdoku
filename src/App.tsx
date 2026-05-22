@@ -127,6 +127,12 @@ import {
   type CloudProfile,
   type CloudStats,
 } from './ConvexBridge'
+import {
+  pushRemindersSupported,
+  subscribeToDailyReminder,
+  unsubscribeFromDailyReminder,
+  type DailyReminderSubscription,
+} from './pushReminders'
 import { hasConvexBackend } from './convexClient'
 import { getOrCreateGuestId, shortGuestId } from './identity'
 import { PublicProfilePanel } from './PublicProfilePanel'
@@ -224,6 +230,11 @@ type NotificationRow = {
   type: 'challenge'
 }
 
+type PushReminderSettings = {
+  enabled: boolean
+  publicKey: string
+}
+
 const listNotificationsRef = makeFunctionReference<
   'query',
   { limit?: number; recipientAnonId: string },
@@ -247,6 +258,24 @@ const markAllNotificationsReadRef = makeFunctionReference<
   { recipientAnonId: string },
   number
 >('notifications:markAllRead')
+
+const pushReminderSettingsRef = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  PushReminderSettings
+>('pushSubscriptions:settings')
+
+const upsertPushReminderRef = makeFunctionReference<
+  'mutation',
+  DailyReminderSubscription,
+  string
+>('pushSubscriptions:upsert')
+
+const disablePushReminderRef = makeFunctionReference<
+  'mutation',
+  Record<string, never>,
+  number
+>('pushSubscriptions:disable')
 
 // Single source of truth for the Space-leader menu — drives both the
 // which-key popup and the keydown resolution below.
@@ -5536,6 +5565,10 @@ function App() {
                   />
                 </label>
               </section>
+              <DailyReminderControl
+                accountLinked={Boolean(cloudProfile?.authSubject)}
+                onSignIn={openAuthModal}
+              />
             </div>
           )}
 
@@ -7282,6 +7315,143 @@ function NotificationsButton({
         </div>
       )}
     </div>
+  )
+}
+
+function DailyReminderControl({
+  accountLinked,
+  onSignIn,
+}: {
+  accountLinked: boolean
+  onSignIn: () => void
+}) {
+  const { isAuthenticated } = useConvexAuth()
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const supported = pushRemindersSupported()
+  const canUseAccount = hasConvexBackend() && isAuthenticated && accountLinked
+  const settings = useQuery(
+    pushReminderSettingsRef as FunctionReference<'query'>,
+    canUseAccount ? {} : 'skip',
+  ) as PushReminderSettings | undefined
+  const upsertReminder = useMutation(
+    upsertPushReminderRef as FunctionReference<'mutation'>,
+  ) as (args: DailyReminderSubscription) => Promise<string>
+  const disableReminder = useMutation(
+    disablePushReminderRef as FunctionReference<'mutation'>,
+  ) as (args: Record<string, never>) => Promise<number>
+  const enabled = Boolean(settings?.enabled)
+  const publicKey = settings?.publicKey ?? ''
+  const configured = Boolean(publicKey)
+  const loadingSettings = canUseAccount && settings === undefined
+
+  async function enableReminder() {
+    if (!canUseAccount) {
+      onSignIn()
+      return
+    }
+    if (!configured) {
+      setMessage('Push keys are not configured on Convex yet.')
+      toast.error('Push reminders need VAPID keys.')
+      return
+    }
+
+    setBusy(true)
+    setMessage('')
+    try {
+      const subscription = await subscribeToDailyReminder(publicKey)
+      await upsertReminder(subscription)
+      setMessage('Daily reminder enabled for 09:00 local time.')
+      toast.success('Daily reminder enabled.')
+    } catch (error) {
+      const text =
+        error instanceof Error ? error.message : 'Could not enable reminders.'
+      setMessage(text)
+      toast.error(text)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function disableDailyReminder() {
+    setBusy(true)
+    setMessage('')
+    try {
+      await unsubscribeFromDailyReminder()
+      await disableReminder({})
+      setMessage('Daily reminder disabled.')
+      toast.success('Daily reminder disabled.')
+    } catch (error) {
+      const text =
+        error instanceof Error ? error.message : 'Could not disable reminders.'
+      setMessage(text)
+      toast.error(text)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="border border-[var(--border)] bg-[var(--input-bg)] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--accent)]">
+            daily reminder
+          </p>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--muted)]">
+            Sends one browser notification if today&apos;s daily puzzle is still
+            incomplete around 09:00 local time.
+          </p>
+        </div>
+        <span
+          className={`shrink-0 border px-2 py-1 font-mono text-[0.62rem] font-black uppercase tracking-[0.14em] ${
+            enabled
+              ? 'border-[var(--accent)] text-[var(--accent)]'
+              : 'border-[var(--border)] text-[var(--muted)]'
+          }`}
+        >
+          {enabled ? 'on' : 'off'}
+        </span>
+      </div>
+
+      {!supported && (
+        <p className="mt-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-sm text-[var(--muted)]">
+          This browser does not support installable push reminders.
+        </p>
+      )}
+      {supported && !canUseAccount && (
+        <p className="mt-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-sm text-[var(--muted)]">
+          Sign in to keep reminder settings attached to your profile.
+        </p>
+      )}
+      {message && (
+        <p className="mt-3 border border-[var(--border)] bg-[var(--status-bg)] px-3 py-2 text-sm text-[var(--muted)]">
+          {message}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {enabled ? (
+          <button
+            type="button"
+            disabled={busy || !supported || loadingSettings}
+            className="border border-[var(--border)] bg-[var(--button-bg)] px-4 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-text)] transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => void disableDailyReminder()}
+          >
+            disable
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy || !supported || loadingSettings}
+            className="border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 font-mono text-xs font-black uppercase tracking-[0.16em] text-[var(--app-bg)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => void enableReminder()}
+          >
+            {loadingSettings ? 'loading' : canUseAccount ? 'enable' : 'sign in'}
+          </button>
+        )}
+      </div>
+    </section>
   )
 }
 

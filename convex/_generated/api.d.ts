@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as challenges from "../challenges.js";
+import type * as crons from "../crons.js";
 import type * as friends from "../friends.js";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
@@ -17,6 +18,8 @@ import type * as leaderboards from "../leaderboards.js";
 import type * as liveBattles from "../liveBattles.js";
 import type * as notifications from "../notifications.js";
 import type * as profiles from "../profiles.js";
+import type * as pushActions from "../pushActions.js";
+import type * as pushSubscriptions from "../pushSubscriptions.js";
 
 import type {
   ApiFromModules,
@@ -27,6 +30,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   challenges: typeof challenges;
+  crons: typeof crons;
   friends: typeof friends;
   games: typeof games;
   http: typeof http;
@@ -34,6 +38,8 @@ declare const fullApi: ApiFromModules<{
   liveBattles: typeof liveBattles;
   notifications: typeof notifications;
   profiles: typeof profiles;
+  pushActions: typeof pushActions;
+  pushSubscriptions: typeof pushSubscriptions;
 }>;
 
 /**
